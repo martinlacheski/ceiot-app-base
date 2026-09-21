@@ -62,10 +62,10 @@ RETIRED_EXECUTABLE_PATHS = (
     "tests/api/mercadopago/test_webhook_handler_qr.py",
 )
 
-REQUIRED_HISTORICAL_MODEL_PATHS = (
-    "app/api/mercadopago/models.py",
-    "app/api/mercadopago/location_catalog/models.py",
-)
+# SCHEMA1 (see odd/tasks/environmental-iot-cleanup.md) superseded the earlier
+# retained-history policy with explicit user authorization to fully remove the
+# legacy Mercado Pago schema, including these historical models -- they are no
+# longer expected to remain.
 
 
 def _tree(path: Path) -> ast.Module:
@@ -377,7 +377,7 @@ async def test_sensor_telemetry_persists_runtime_and_sensor_fields(
 ) -> None:
     await handlers.process_sensor_message_pub(
         "iot/devices/SYNTHETIC-1000/telemetry",
-        '{"temp_water": 21.5, "water_state": true, "power_supply_state": true, '
+        '{"temperature": 21.5, "humidity": 55.0, "power_supply_state": true, '
         '"mac_address": "AA:BB:CC:DD:EE:FF", "firmware_version": "test-fw", '
         '"wifi_ip": "192.0.2.10", "wifi_rssi": -48, "wifi_ssid": "test-net", '
         '"reset_reason": "synthetic", "uptime": 120}',
@@ -405,8 +405,8 @@ async def test_sensor_telemetry_persists_runtime_and_sensor_fields(
     assert len(readings) == 1
     assert readings[0]["device_serial"] == "SYNTHETIC-1000"
     assert readings[0]["device_id"] == "synthetic-device-id"
-    assert readings[0]["temp_water"] == 21.5
-    assert readings[0]["water_state"] is True
+    assert readings[0]["temperature_c"] == 21.5
+    assert readings[0]["relative_humidity_pct"] == 55.0
     assert readings[0]["power_supply_state"] is True
     assert readings[0]["uptime"] == 120
 
@@ -424,7 +424,13 @@ async def test_generic_runtime_report_records_keep_active(
     operations = isolated_handler_boundaries["operations"]
     assert len(operations) == 1
     assert operations[0]["operation_type"] == handlers.DeviceOperationType.KEEP_ACTIVE
-    assert isolated_handler_boundaries["sensor_readings"] == []
+    # A pure health ping still records a reading with honest nulls on the
+    # environmental fields it didn't report (C9's missing-data contract).
+    readings = isolated_handler_boundaries["sensor_readings"]
+    assert len(readings) == 1
+    assert readings[0]["temperature_c"] is None
+    assert readings[0]["relative_humidity_pct"] is None
+    assert readings[0]["pressure_hpa"] is None
 
 
 @pytest.mark.asyncio
@@ -489,8 +495,8 @@ def test_requirements_retire_mercadopago_sdk_pin() -> None:
     assert "mercadopago" not in requirement_names
 
 
-def test_executable_payment_files_are_removed_but_models_and_runtime_remain() -> None:
+def test_executable_payment_files_are_removed_and_runtime_remains() -> None:
     unexpected = [path for path in RETIRED_EXECUTABLE_PATHS if (BACKEND_ROOT / path).exists()]
     assert unexpected == []
     assert RUNTIME_PATH.is_file()
-    assert all((BACKEND_ROOT / path).is_file() for path in REQUIRED_HISTORICAL_MODEL_PATHS)
+    assert not (BACKEND_ROOT / "app/api/mercadopago").exists()

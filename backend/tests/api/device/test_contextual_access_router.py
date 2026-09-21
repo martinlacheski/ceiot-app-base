@@ -1,6 +1,5 @@
 import uuid
 from datetime import timedelta
-from decimal import Decimal
 from contextlib import asynccontextmanager
 
 import pytest
@@ -158,17 +157,15 @@ def seed_context_graph(session: Session):
             guest_user_id=guest.id,
             scope_type=ScopeType.ENVIRONMENT,
             scope_id=environment.id,
-            commission_rate=Decimal("0.1200"),
         )
     )
     session.add(
         DeviceOperation(
             device_id=device.id,
             device_serial=device.serial,
-            operation_type=DeviceOperationType.DISPENSE,
+            operation_type=DeviceOperationType.SENSOR_DATA,
             status=DeviceOperationStatus.SUCCESS,
             payload={"ok": True},
-            merchant_order_id="order-device-context",
             time=utc_now(),
         )
     )
@@ -223,9 +220,6 @@ def test_guest_can_read_device_and_operations_but_cannot_manage(client: TestClie
     assert list_response.json()["items"][0]["id"] == str(seed["device"].id)
     assert get_response.status_code == 200
     assert get_response.json()["id"] == str(seed["device"].id)
-    assert "amount" not in get_response.json()
-    assert "dvemCommissionRate" not in get_response.json()
-    assert "guestCommissionRate" not in get_response.json()
     assert operations_response.status_code == 200
     operations = operations_response.json()
     assert operations["total"] == 1
@@ -233,19 +227,6 @@ def test_guest_can_read_device_and_operations_but_cannot_manage(client: TestClie
     assert operations["per_page"] == 1
     assert operations["pages"] == 1
     assert len(operations["items"]) == 1
-    operation = operations["items"][0]
-    assert {
-        "merchant_order_id",
-        "payment_id",
-        "provider_payment_id",
-        "qr_order_id",
-        "payment_amount",
-        "payment_method",
-        "payment_type_id",
-        "payment_status",
-        "payment_status_detail",
-        "payment_date",
-    }.isdisjoint(operation)
     assert update_response.status_code == 403
     assert unpair_response.status_code == 403
     assert delete_response.status_code == 403
@@ -265,9 +246,6 @@ def test_device_context_lists_inherited_environment_guest(client: TestClient, se
     assert response.json()["guests"][0]["guestUserId"] == str(seed["guest"].id)
     assert response.json()["guests"][0]["email"] == seed["guest"].email
     assert response.json()["guests"][0]["sourceScope"] == ScopeType.ENVIRONMENT.value
-    assert "commissionRate" not in response.json()["guests"][0]
-    assert "effectiveDvemRate" not in response.json()
-    assert "effectiveGuestRate" not in response.json()
 
 
 def test_guest_only_sees_device_operations_after_access_start(
@@ -290,10 +268,9 @@ def test_guest_only_sees_device_operations_after_access_start(
         DeviceOperation(
             device_id=seed["device"].id,
             device_serial=seed["device"].serial,
-            operation_type=DeviceOperationType.DISPENSE,
+            operation_type=DeviceOperationType.SENSOR_DATA,
             status=DeviceOperationStatus.SUCCESS,
             payload={"after": True},
-            merchant_order_id="order-device-context-after",
             time=access_start,
         )
     )
@@ -307,7 +284,6 @@ def test_guest_only_sees_device_operations_after_access_start(
 
     assert response.status_code == 200
     assert response.json()["total"] == 1
-    assert "merchant_order_id" not in response.json()["items"][0]
 
 
 def test_environment_guest_can_see_invited_environment_list(
@@ -430,7 +406,6 @@ def test_device_guest_can_see_parent_environment_list(
             guest_user_id=seed["guest"].id,
             scope_type=ScopeType.DEVICE,
             scope_id=seed["device"].id,
-            commission_rate=Decimal("0.1200"),
         )
     )
     session.commit()
@@ -500,15 +475,12 @@ def test_owner_can_manage_device_guest_relations_without_financial_fields(
     create_response = client.post(
         f"/api/devices/{seed['device'].id}/guests",
         headers={"Authorization": f"Bearer {token}"},
-        json={
-            "guestUserId": str(seed["direct_guest"].id),
-            "commissionRate": "0.1500",
-        },
+        json={"guestUserId": str(seed["direct_guest"].id)},
     )
     update_response = client.patch(
         f"/api/devices/{seed['device'].id}/guests/{seed['direct_guest'].id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"commissionRate": "0.1800", "accessStartsAt": "2026-06-01"},
+        json={"accessStartsAt": "2026-06-01"},
     )
     delete_response = client.delete(
         f"/api/devices/{seed['device'].id}/guests/{seed['direct_guest'].id}",
@@ -517,9 +489,7 @@ def test_owner_can_manage_device_guest_relations_without_financial_fields(
 
     assert create_response.status_code == 201
     assert create_response.json()["scopeType"] == ScopeType.DEVICE.value
-    assert "commissionRate" not in create_response.json()
     assert update_response.status_code == 200
-    assert "commissionRate" not in update_response.json()
     assert update_response.json()["accessStartsAt"] == "2026-06-01T00:00:00"
     relation = session.exec(
         select(ScopedGuestRelation).where(
@@ -528,10 +498,9 @@ def test_owner_can_manage_device_guest_relations_without_financial_fields(
             ScopedGuestRelation.guest_user_id == seed["direct_guest"].id,
         )
     ).one()
-    assert relation.commission_rate == Decimal("0")
     assert delete_response.status_code == 200
-    assert "commissionRate" not in delete_response.json()
     assert delete_response.json()["isActive"] is False
+    assert relation.is_active is False
 
 
 def test_admin_can_deactivate_device_guest_relation(client: TestClient, session: Session):
@@ -542,7 +511,6 @@ def test_admin_can_deactivate_device_guest_relation(client: TestClient, session:
             guest_user_id=seed["guest"].id,
             scope_type=ScopeType.DEVICE,
             scope_id=seed["device"].id,
-            commission_rate=Decimal("0.1500"),
         )
     )
     session.commit()
@@ -571,17 +539,11 @@ def test_owner_pairs_device_without_commercial_configuration(
 
     monkeypatch.setattr("app.api.device.router.system_session", fake_system_session)
     seed = seed_context_graph(session)
-    seed["environment"].dvem_commission_rate = Decimal("0.0700")
-    seed["environment"].guest_commission_rate = Decimal("0.0900")
     unpaired_device = Device(
         serial="IOT-DDDD-0005",
         name="Unpaired Device",
         status=DeviceStatus.NEW,
-        amount=Decimal("321.00"),
-        dvem_commission_rate=Decimal("0.0300"),
-        guest_commission_rate=Decimal("0.0400"),
     )
-    session.add(seed["environment"])
     session.add(unpaired_device)
     session.commit()
     token = make_token(seed["owner"].id)
@@ -602,12 +564,6 @@ def test_owner_pairs_device_without_commercial_configuration(
     assert response.json()["description"] == "Servicio Agua"
     assert response.json()["environmentId"] == str(seed["environment"].id)
     assert "dispenserData" not in response.json()
-    assert "amount" not in response.json()
-    assert "dvemCommissionRate" not in response.json()
-    assert "guestCommissionRate" not in response.json()
-    assert unpaired_device.amount == Decimal("321.00")
-    assert unpaired_device.dvem_commission_rate == Decimal("0.0300")
-    assert unpaired_device.guest_commission_rate == Decimal("0.0400")
 
 
 def test_admin_can_pair_without_amount(
@@ -737,21 +693,18 @@ def test_unpair_device_cleans_up_only_device_scoped_guest_access(
         guest_user_id=seed["guest"].id,
         scope_type=ScopeType.DEVICE,
         scope_id=seed["device"].id,
-        commission_rate=Decimal("0.1500"),
     )
     device_invitation = ScopedGuestInvitation(
         owner_user_id=seed["owner"].id,
         email="future-device-cleanup@example.com",
         scope_type=ScopeType.DEVICE,
         scope_id=seed["device"].id,
-        commission_rate=Decimal("0.1600"),
     )
     environment_invitation = ScopedGuestInvitation(
         owner_user_id=seed["owner"].id,
         email="future-environment-keep@example.com",
         scope_type=ScopeType.ENVIRONMENT,
         scope_id=seed["environment"].id,
-        commission_rate=Decimal("0.1700"),
     )
     session.add(device_relation)
     session.add(device_invitation)
@@ -800,10 +753,7 @@ def test_guest_cannot_manage_device_guest_relations(client: TestClient, session:
     response = client.post(
         f"/api/devices/{seed['device'].id}/guests",
         headers={"Authorization": f"Bearer {token}"},
-        json={
-            "guestUserId": str(seed["owner"].id),
-            "commissionRate": "0.1000",
-        },
+        json={"guestUserId": str(seed["owner"].id)},
     )
 
     assert response.status_code == 403
@@ -832,7 +782,6 @@ def test_owner_can_invite_device_guest_by_email_without_registered_user(
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": "future-device-guest@example.com",
-            "commissionRate": "0.1550",
             "accessStartsAt": "2026-05-27",
         },
     )
@@ -846,7 +795,6 @@ def test_owner_can_invite_device_guest_by_email_without_registered_user(
     assert response.status_code == 201
     assert response.json()["scopeType"] == ScopeType.DEVICE.value
     assert response.json()["email"] == "future-device-guest@example.com"
-    assert "commissionRate" not in response.json()
     assert response.json()["accessStartsAt"] == "2026-05-27T00:00:00"
     assert response.json()["status"] == "pending"
     assert EmailServiceSpy.sent == [
@@ -872,7 +820,6 @@ def test_owner_can_revoke_pending_device_guest_invitation(client: TestClient, se
         email="future-device-guest@example.com",
         scope_type=ScopeType.DEVICE,
         scope_id=seed["device"].id,
-        commission_rate=Decimal("0.1550"),
     )
     session.add(invitation)
     session.commit()
@@ -903,7 +850,6 @@ def test_guest_cannot_revoke_pending_device_guest_invitation(client: TestClient,
         email="future-device-guest@example.com",
         scope_type=ScopeType.DEVICE,
         scope_id=seed["device"].id,
-        commission_rate=Decimal("0.1550"),
     )
     session.add(invitation)
     session.commit()
@@ -954,7 +900,6 @@ def test_owner_gets_404_when_revoking_non_device_scoped_invitation_through_devic
         email="future-env-guest@example.com",
         scope_type=ScopeType.ENVIRONMENT,
         scope_id=seed["environment"].id,
-        commission_rate=Decimal("0.1550"),
     )
     session.add(invitation)
     session.commit()

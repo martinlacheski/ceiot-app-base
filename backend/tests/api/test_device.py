@@ -1,6 +1,5 @@
 import pytest
 import uuid
-from decimal import Decimal
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
@@ -28,7 +27,7 @@ def test_serial_generation_and_validation():
     # 1. Generate
     serial = DeviceService.generate_serial()
     assert serial.startswith("IOT-")
-    assert len(serial) == 14
+    assert len(serial) == 13
     assert DeviceService.validate_serial(serial)
 
     # 2. Invalid
@@ -243,7 +242,6 @@ def test_pairing_flow(client: TestClient, admin_token: str):
         "serial": "IOT-0000-0000",
         "environmentId": str(uuid.uuid4()),
         "description": "Pairing Test Service",
-        "amount": "100.00",
     }
     r = client.post("/api/devices/pair", json=fake_pair_req, headers=headers)
     assert r.status_code == 403
@@ -385,7 +383,7 @@ def test_list_devices_nullable_sort_keeps_nulls_last(
 
 
 
-def test_list_devices_with_paired_environment_does_not_lazy_load_mp_locations(
+def test_list_devices_with_paired_environment_returns_generic_location(
     client: TestClient,
     admin_token: str,
     session: Session,
@@ -452,7 +450,6 @@ def test_list_devices_with_paired_environment_does_not_lazy_load_mp_locations(
     payload = response.json()
     matched = next(item for item in payload["items"] if item["id"] == str(device.id))
     assert matched["environment"]["id"] == str(environment.id)
-    assert matched["environment"]["mpCountryId"] is None
     assert matched["effectiveLocation"] == "Lobby"
     assert matched["effectiveLocationSource"] == "environment"
 

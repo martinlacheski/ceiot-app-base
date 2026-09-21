@@ -10,6 +10,19 @@ from app.core.db import system_session
 
 logger = logging.getLogger(__name__)
 
+_SENSOR_READING_KEYS = ("power_supply_state", "temperature", "humidity", "pressure")
+_RUNTIME_HEALTH_KEYS = (
+    "uptime",
+    "firmware_version",
+    "reset_reason",
+    "heap_free",
+    "wifi_rssi",
+    "wifi_ssid",
+    "wifi_ip",
+    "last_error",
+)
+_RETIRED_COMMANDS = {"DISPENSE_ACK", "DISPENSE"}
+
 
 def _clean_mac_address(value) -> str | None:
     if not isinstance(value, str):
@@ -176,6 +189,10 @@ async def process_sensor_message_pub(topic: str, payload: str):
         data = json.loads(payload)
         logger.info(f"💾 Datos de sensor recibidos: {data}")
 
+        if data.get("command") in _RETIRED_COMMANDS:
+            logger.info(f"🛑 Comando retirado ignorado: {data.get('command')}")
+            return
+
         async with system_session() as session:
             repo = DeviceRepository(session)
             op_service = DeviceOperationService(session)
@@ -187,7 +204,12 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 if device:
                     await _persist_device_runtime_report(repo, device, data)
 
-            op_type = DeviceOperationType.SENSOR_DATA
+            has_sensor_data = any(key in data for key in _SENSOR_READING_KEYS)
+            op_type = (
+                DeviceOperationType.SENSOR_DATA
+                if has_sensor_data
+                else DeviceOperationType.KEEP_ACTIVE
+            )
 
             # Guardar operación
             await op_service.create_operation(
@@ -196,24 +218,9 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 status=DeviceOperationStatus.SUCCESS,
             )
 
-            # Si tiene datos de sensores, guardar en SensorReading
-            if any(
-                key in data
-                for key in (
-                    "power_supply_state",
-                    "temperature",
-                    "humidity",
-                    "pressure",
-                    "uptime",
-                    "firmware_version",
-                    "reset_reason",
-                    "heap_free",
-                    "wifi_rssi",
-                    "wifi_ssid",
-                    "wifi_ip",
-                    "last_error",
-                )
-            ):
+            # Toda telemetría reconocida genera una lectura, con nulls honestos
+            # en los campos de medición ambiental que no vinieron en el payload.
+            if has_sensor_data or any(key in data for key in _RUNTIME_HEALTH_KEYS):
                 from app.api.sensor.repository import SensorRepository
                 from app.api.sensor.service import SensorService
 

@@ -6,7 +6,6 @@ import inspect
 import sys
 from pathlib import Path
 
-from app.api.settings.models import AppSettings, AppSettingsRead, AppSettingsUpdate
 from app.main import app
 
 
@@ -26,10 +25,6 @@ _RETAINED_ROUTES = {
     ("/api/auth/login", "POST"),
     ("/api/devices", "GET"),
     ("/api/environment/", "GET"),
-}
-_QR_EXPIRATION_FIELDS = {
-    "mp_qr_expiration_minutes",
-    "mpQrExpirationMinutes",
 }
 
 
@@ -78,37 +73,6 @@ def test_normal_app_composition_has_no_retired_mp_routes() -> None:
         "Retired payment path family remains mounted: "
         f"{retired_public_paths}"
     )
-
-
-def test_public_settings_dtos_omit_qr_expiration_fields() -> None:
-    exposed_fields = {
-        field_name
-        for model in (AppSettingsRead, AppSettingsUpdate)
-        for field_name in model.model_fields
-    }
-    exposed_aliases = {
-        field.alias
-        for model in (AppSettingsRead, AppSettingsUpdate)
-        for field in model.model_fields.values()
-        if field.alias is not None
-    }
-    exposed_qr_fields = sorted(
-        _QR_EXPIRATION_FIELDS.intersection(exposed_fields | exposed_aliases)
-    )
-
-    assert exposed_qr_fields == [], (
-        f"Public settings fields still expose QR expiration: {exposed_qr_fields}"
-    )
-
-
-def test_orm_settings_retain_qr_expiration_column_and_default() -> None:
-    field = AppSettings.model_fields["mp_qr_expiration_minutes"]
-    column = AppSettings.__table__.c.mp_qr_expiration_minutes
-
-    assert field.default == 10, "ORM QR expiration field default changed."
-    assert column.nullable is False, "ORM QR expiration column became nullable."
-    assert column.default is not None, "ORM QR expiration column default is missing."
-    assert column.default.arg == 10, "ORM QR expiration column default changed."
 
 
 def test_generic_auth_environment_and_device_routes_remain_mounted() -> None:
