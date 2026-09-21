@@ -8,7 +8,9 @@ import {
 } from "@/app/components/devices/deviceTelemetry";
 import { PageHeader } from "@/app/components/PageHeader";
 import { deviceService } from "@/app/services/device.service";
+import { sensorReadingService } from "@/app/services/sensorReading.service";
 import { useAuthStore } from "@/auth/store/auth.store";
+import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,6 +30,34 @@ export default function DeviceDetailPage() {
   } = useQuery({
     queryKey: ["device", "detail", id],
     queryFn: () => deviceService.getById(id!),
+    enabled: Boolean(id),
+    refetchInterval: 5000,
+  });
+  const {
+    data: latestReadings,
+    isLoading: latestReadingsLoading,
+    isError: latestReadingsError,
+  } = useQuery({
+    queryKey: ["sensor-readings", "latest", id],
+    queryFn: () => sensorReadingService.getLatest(id!, 1),
+    enabled: Boolean(id),
+    refetchInterval: 5000,
+  });
+  const {
+    data: historyReadings,
+    isLoading: historyReadingsLoading,
+    isError: historyReadingsError,
+  } = useQuery({
+    queryKey: ["sensor-readings", "history", id, "24h"],
+    queryFn: () => {
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+      return sensorReadingService.getHistory(
+        id!,
+        start.toISOString(),
+        end.toISOString(),
+      );
+    },
     enabled: Boolean(id),
     refetchInterval: 5000,
   });
@@ -79,6 +109,12 @@ export default function DeviceDetailPage() {
           </div>
         </CardContent>
       </Card>
+      <EnvironmentalReadingsSection
+        latest={latestReadings}
+        history={historyReadings}
+        isLoading={latestReadingsLoading || historyReadingsLoading}
+        isError={latestReadingsError || historyReadingsError}
+      />
       <DeviceGuestManagementCard deviceId={id} isOwner={isOwner} />
     </div>
   );

@@ -1,8 +1,39 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { Device } from "@/app/types/device.types";
 
 import { DeviceDetailDialog } from "./DeviceDetailDialog";
-import type { Device } from "@/app/types/device.types";
+
+const mocks = vi.hoisted(() => ({
+  getHistory: vi.fn(),
+  getLatest: vi.fn(),
+  useQuery: vi.fn(),
+}));
+
+const queryState = vi.hoisted(() => ({
+  history: undefined as unknown,
+  latest: undefined as unknown,
+}));
+
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: mocks.useQuery,
+}));
+
+vi.mock("@/app/services/sensorReading.service", () => ({
+  sensorReadingService: {
+    getHistory: mocks.getHistory,
+    getLatest: mocks.getLatest,
+  },
+}));
+
+vi.mock("@/components/dashboard/charts/EnvironmentalReadingsChart", () => ({
+  EnvironmentalReadingsChart: ({
+    readings,
+  }: {
+    readings: Array<unknown>;
+  }) => <div data-testid="environmental-chart">{readings.length} puntos</div>,
+}));
 
 const device: Device = {
   id: "device-1",
@@ -16,20 +47,125 @@ const device: Device = {
   brokerConnected: false,
 };
 
+const reading = {
+  id: "reading-1",
+  time: "2026-09-21T12:30:00Z",
+  deviceId: "device-1",
+  deviceSerial: "IOT-0000-0001",
+  deviceType: "environmental",
+  temperatureC: 24.5,
+  relativeHumidityPct: 61,
+  pressureHpa: 1013.2,
+};
+
+const queryResult = (
+  data?: unknown,
+  options: { isError?: boolean; isLoading?: boolean } = {},
+) => ({
+  data,
+  isError: options.isError ?? false,
+  isLoading: options.isLoading ?? false,
+});
+
+function renderDialog() {
+  return render(
+    <DeviceDetailDialog device={device} open onOpenChange={vi.fn()} />,
+  );
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  queryState.latest = queryResult({ items: [], total: 0 });
+  queryState.history = queryResult({ items: [], total: 0 });
+  mocks.useQuery.mockImplementation(
+    (options: { queryKey: readonly unknown[] }) => {
+      if (options.queryKey[1] === "latest") return queryState.latest;
+      if (options.queryKey[1] === "history") return queryState.history;
+      throw new Error(`Unexpected query key: ${String(options.queryKey)}`);
+    },
+  );
+});
+
 describe("DeviceDetailDialog", () => {
   it("shows generic device identity without commercial data", () => {
-    render(
-      <DeviceDetailDialog
-        device={device}
-        open
-        onOpenChange={vi.fn()}
-      />,
-    );
+    renderDialog();
 
     expect(screen.getByText("Sensor Norte")).toBeInTheDocument();
     expect(screen.getByText("IOT-0000-0001")).toBeInTheDocument();
     expect(screen.queryByText(/dispensador/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Importe:")).not.toBeInTheDocument();
     expect(screen.queryByText(/^\$\s/)).not.toBeInTheDocument();
+  });
+
+  it("queries both environmental endpoints every 5 seconds while open", () => {
+    renderDialog();
+
+    const environmentalQueries = mocks.useQuery.mock.calls.map(
+      ([options]) => options,
+    );
+    expect(environmentalQueries).toHaveLength(2);
+    expect(environmentalQueries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          queryKey: ["sensor-readings", "latest", "device-1"],
+          enabled: true,
+          refetchInterval: 5000,
+        }),
+        expect.objectContaining({
+          queryKey: ["sensor-readings", "history", "device-1", "24h"],
+          enabled: true,
+          refetchInterval: 5000,
+        }),
+      ]),
+    );
+  });
+
+  it("shows the environmental loading state", () => {
+    queryState.latest = queryResult(undefined, { isLoading: true });
+    queryState.history = queryResult(undefined, { isLoading: true });
+
+    renderDialog();
+
+    expect(
+      screen.getByText("Cargando lecturas ambientales…"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the environmental error state", () => {
+    queryState.history = queryResult(undefined, { isError: true });
+
+    renderDialog();
+
+    expect(
+      screen.getByText("No se pudieron cargar las lecturas ambientales."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows an honest empty state", () => {
+    renderDialog();
+
+    expect(
+      screen.getByText("Aún no hay lecturas ambientales."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/\d+(?:[.,]\d+)?\s*°C/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\d+(?:[.,]\d+)?\s*hPa/)).not.toBeInTheDocument();
+  });
+
+  it("shows current values, timestamp, and history consistently", () => {
+    queryState.latest = queryResult({ items: [reading], total: 1 });
+    queryState.history = queryResult({ items: [reading], total: 1 });
+
+    renderDialog();
+
+    expect(screen.getByText(/24[.,]5\s*°C/)).toBeInTheDocument();
+    expect(screen.getByText(/61\s*%/)).toBeInTheDocument();
+    expect(screen.getByText(/1013[.,]2\s*hPa/)).toBeInTheDocument();
+    expect(screen.getByText(/Última lectura:/)).toBeInTheDocument();
+    expect(
+      document.querySelector('time[datetime="2026-09-21T12:30:00Z"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("environmental-chart")).toHaveTextContent(
+      "1 puntos",
+    );
   });
 });

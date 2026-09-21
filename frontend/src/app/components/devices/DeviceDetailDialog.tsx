@@ -1,10 +1,14 @@
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
+import { sensorReadingService } from "@/app/services/sensorReading.service";
+import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import {
@@ -28,6 +32,36 @@ export function DeviceDetailDialog({
   open,
   onOpenChange,
 }: DeviceDetailDialogProps) {
+  const deviceId = device?.id;
+  const {
+    data: latestReadings,
+    isLoading: latestReadingsLoading,
+    isError: latestReadingsError,
+  } = useQuery({
+    queryKey: ["sensor-readings", "latest", deviceId],
+    queryFn: () => sensorReadingService.getLatest(deviceId!, 1),
+    enabled: Boolean(deviceId) && open,
+    refetchInterval: 5000,
+  });
+  const {
+    data: historyReadings,
+    isLoading: historyReadingsLoading,
+    isError: historyReadingsError,
+  } = useQuery({
+    queryKey: ["sensor-readings", "history", deviceId, "24h"],
+    queryFn: () => {
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+      return sensorReadingService.getHistory(
+        deviceId!,
+        start.toISOString(),
+        end.toISOString(),
+      );
+    },
+    enabled: Boolean(deviceId) && open,
+    refetchInterval: 5000,
+  });
+
   if (!device) return null;
 
   const DEVICE_STATUS_LABELS: Record<string, string> = {
@@ -48,6 +82,9 @@ export function DeviceDetailDialog({
               {device.isActive ? "ACTIVO" : "INACTIVO"}
             </Badge>
           </div>
+          <DialogDescription className="sr-only">
+            Información del dispositivo y sus lecturas ambientales recientes.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-6 py-4">
@@ -154,6 +191,13 @@ export function DeviceDetailDialog({
             </div>
 
           </div>
+
+          <EnvironmentalReadingsSection
+            latest={latestReadings}
+            history={historyReadings}
+            isLoading={latestReadingsLoading || historyReadingsLoading}
+            isError={latestReadingsError || historyReadingsError}
+          />
 
           {/* Timestamps */}
           <div className="flex justify-between text-xs text-muted-foreground pt-4 border-t">
