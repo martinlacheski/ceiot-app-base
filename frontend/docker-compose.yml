@@ -12,7 +12,6 @@ services:
         VITE_GCP_API_KEY: ${VITE_GCP_API_KEY:?}
         VITE_TOKEN_REFRESH: ${VITE_TOKEN_REFRESH:?}
         VITE_SESSION_TIMEOUT: ${VITE_SESSION_TIMEOUT:?}
-        VITE_MP_REDIRECT_URI: ${VITE_MP_REDIRECT_URI:?}
     ports:
       - 127.0.0.1:${VITE_FRONTEND_PORT:?VITE_FRONTEND_PORT is required}:80
     healthcheck:

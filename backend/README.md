@@ -41,9 +41,9 @@ Base sólida y modular para proyectos backend con FastAPI, SQLModel y Alembic.
     ```
 
 4.  **Configurar variables de entorno**:
-    Copia el archivo `.env.template` a `.env` y ajusta los valores:
+    Copia el archivo `.env.example` a `.env` y ajusta los valores:
     ```bash
-    cp .env.template .env
+    cp .env.example .env
     ```
 
 ## Administrador inicial

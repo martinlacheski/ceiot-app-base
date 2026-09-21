@@ -32,7 +32,6 @@ VITE_LANDING_URL=http://localhost:14322
 VITE_GCP_API_KEY=dummy-map-key
 VITE_TOKEN_REFRESH=15
 VITE_SESSION_TIMEOUT=30
-VITE_MP_REDIRECT_URI=http://localhost:15174/callback
 """,
     "landing": """\
 LANDING_PORT=14322
@@ -229,6 +228,7 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertEqual(frontend_args["VITE_API_URL"], "http://localhost:18001/api")
         self.assertEqual(frontend_args["VITE_APP_LOGIN_URL"], "http://localhost:15174")
         self.assertEqual(frontend_args["VITE_LANDING_URL"], "http://localhost:14322")
+        self.assertFalse(any(key.startswith("VITE_MP_") for key in frontend_args))
 
         landing_args = services["landing"]["build"]["args"]
         self.assertEqual(landing_args["PUBLIC_API_BASE_URL"], "http://localhost:18001/api")

@@ -64,11 +64,6 @@ vi.mock("@/store/confirm.store", () => ({
   showConfirmDialog: vi.fn((_: string, confirm: () => unknown) => confirm()),
 }));
 
-vi.mock("@/admin/actions/financial.actions", () => ({
-  getIdentificationTypesAction: vi.fn().mockResolvedValue([]),
-  getTaxTypesAction: vi.fn().mockResolvedValue({ items: [] }),
-}));
-
 vi.mock("@/admin/actions/user.actions", () => ({
   checkEmailAvailabilityAction: vi.fn().mockResolvedValue(true),
   checkIdentificationAvailabilityAction: vi.fn().mockResolvedValue(true),

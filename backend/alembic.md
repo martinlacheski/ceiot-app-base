@@ -27,14 +27,14 @@ from sqlalchemy import create_engine, engine_from_config
 from sqlmodel import SQLModel
 
 # Importamos los modelos
-from app.api.auth.model import User
-from app.api.person.model import Person
+from app.api.auth.models import User
+from app.api.device.models import Device
 
 # Cargamos las variables de entorno
 load_dotenv()
 
 # Obtenemos la URL de la base de datos
-DATABASE_URL = os.getenv("DATABASE_URL")
+ALEMBIC_DATABASE_URL = os.getenv("ALEMBIC_DATABASE_URL")
 
 # Obtenemos el metadata de la base de datos
 target_metadata = SQLModel.metadata
@@ -55,7 +55,7 @@ def run_migrations_offline() -> None:
     """
     # url = config.get_main_option("sqlalchemy.url")
     # Obtenemos la URL de la base de datos de las variables de entorno
-    url = DATABASE_URL
+    url = ALEMBIC_DATABASE_URL
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -84,7 +84,7 @@ def run_migrations_online() -> None:
 
     # Creamos el engine de la base de datos
     connectable = create_engine(
-        DATABASE_URL,
+        ALEMBIC_DATABASE_URL,
         poolclass=pool.NullPool,
         future=True,  # Usamos el futuro de SQLAlchemy
     )

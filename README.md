@@ -77,10 +77,11 @@ Para que la landing en <http://localhost:14321> llame al contacto público, el o
 ## Base de datos en desarrollo
 
 El proyecto raíz crea un volumen con nombre para PostgreSQL si todavía no existe.
-En modo `DEV`, el backend usa `create_all` de SQLModel para crear las tablas e
-inicializa el administrador de desarrollo. No ejecuta migraciones de Alembic,
-no las marca como aplicadas y no configura políticas RLS. Cambiá de inmediato
-la contraseña predeterminada `admin`, que es sólo para desarrollo.
+El esquema se administra exclusivamente con Alembic: ejecutá `alembic upgrade head`
+antes de iniciar el backend contra una base vacía. El arranque sólo crea un
+administrador cuando todavía no existe ninguno y el operador configuró
+`BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL` y
+`BOOTSTRAP_ADMIN_PASSWORD`; nunca reemplaza administradores existentes.
 
 ## Detener los servicios
 

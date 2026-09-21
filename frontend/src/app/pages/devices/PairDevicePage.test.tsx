@@ -83,8 +83,8 @@ vi.mock("@/components/custom/SearchableSelect", () => ({
 }));
 
 // EnvironmentForm depends on Google Maps (@vis.gl/react-google-maps) and
-// several location/mercadopago queries — stubbed out here since the "+
-// Nuevo establecimiento" dialog and its full form are covered by
+// several location queries, so it is stubbed here; the "Nuevo establecimiento"
+// dialog and its full form are covered by
 // EnvironmentForm.test.tsx / CreateEnvironmentPage.test.tsx already.
 vi.mock("@/app/components/environments/EnvironmentForm", () => ({
   EnvironmentForm: () => <div data-testid="environment-form-stub" />,
