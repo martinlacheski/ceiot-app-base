@@ -1,0 +1,11 @@
+---
+import HomePage from "../../components/HomePage.astro";
+import { getLandingContent, LOCALES } from "../../i18n/content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const content = getLandingContent(LOCALES.PT_BR);
+---
+
+<BaseLayout content={content}>
+  <HomePage content={content} />
+</BaseLayout>

@@ -1,0 +1,107 @@
+---
+interface Props {
+  labels: {
+    toggle: string;
+    light: string;
+    dark: string;
+  };
+}
+
+const { labels } = Astro.props;
+---
+
+<button
+  class="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/80 text-muted-foreground transition hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring dark:border-transparent"
+  type="button"
+  data-theme-toggle
+  aria-label={labels.toggle}
+  data-label-light={labels.light}
+  data-label-dark={labels.dark}
+>
+  <span class="text-lg leading-none" aria-hidden="true" data-theme-icon>☾</span>
+</button>
+
+<script>
+  const THEME = {
+    DARK: "dark",
+    LIGHT: "light",
+  };
+
+  const STORAGE_KEY = "environmental-iot-theme";
+  const getMediaQuery = () => {
+    try {
+      return typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const mediaQuery = getMediaQuery();
+
+  const getStoredTheme = () => {
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      return stored === THEME.DARK || stored === THEME.LIGHT ? stored : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const resolveTheme = (theme) => {
+    if (theme) {
+      return theme;
+    }
+
+    return mediaQuery?.matches ? THEME.DARK : THEME.LIGHT;
+  };
+
+  const applyTheme = (theme) => {
+    const resolvedTheme = resolveTheme(theme);
+    document.documentElement.classList.toggle(THEME.DARK, resolvedTheme === THEME.DARK);
+    document.documentElement.dataset.theme = resolvedTheme;
+    document.documentElement.style.colorScheme = resolvedTheme;
+    return resolvedTheme;
+  };
+
+  const updateButton = (button, resolvedTheme) => {
+    const icon = button.querySelector("[data-theme-icon]");
+    const nextTheme = resolvedTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK;
+    const nextLabel = nextTheme === THEME.DARK ? button.dataset.labelDark : button.dataset.labelLight;
+
+    button.setAttribute("aria-label", nextLabel || button.getAttribute("aria-label") || "");
+
+    if (icon) {
+      icon.textContent = resolvedTheme === THEME.DARK ? "☀" : "☾";
+    }
+  };
+
+  document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+    updateButton(button, applyTheme(getStoredTheme()));
+
+    button.addEventListener("click", () => {
+      const currentTheme = document.documentElement.classList.contains(THEME.DARK) ? THEME.DARK : THEME.LIGHT;
+      const nextTheme = currentTheme === THEME.DARK ? THEME.LIGHT : THEME.DARK;
+
+      try {
+        window.localStorage.setItem(STORAGE_KEY, nextTheme);
+      } catch {
+        // Ignore blocked storage and still apply the explicit in-memory theme.
+      }
+
+      updateButton(button, applyTheme(nextTheme));
+    });
+  });
+
+  mediaQuery?.addEventListener("change", () => {
+    if (getStoredTheme()) {
+      return;
+    }
+
+    const resolvedTheme = applyTheme(null);
+    document.querySelectorAll("[data-theme-toggle]").forEach((button) => {
+      updateButton(button, resolvedTheme);
+    });
+  });
+</script>

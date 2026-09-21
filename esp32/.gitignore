@@ -1,0 +1,17 @@
+# Build artifacts
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+*.pyc
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

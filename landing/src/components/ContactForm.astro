@@ -1,0 +1,115 @@
+---
+import type { ContactContent } from "../i18n/content";
+
+interface Props {
+  content: ContactContent;
+  endpoint?: string;
+}
+
+const { content, endpoint } = Astro.props;
+const available = Boolean(endpoint);
+---
+
+<section id="contact" class="section-shell scroll-mt-20 fade-in-section">
+  <div class="section-container py-16 md:py-24">
+    <div class="grid gap-10 lg:grid-cols-[minmax(0,0.8fr)_minmax(320px,1.2fr)] lg:items-start">
+      <div class="flex max-w-xl flex-col gap-4">
+        <p class="eyebrow">{content.eyebrow}</p>
+        <h2 class="section-title">{content.heading}</h2>
+        <p class="section-copy">{content.description}</p>
+      </div>
+
+      <form
+        class="surface-card grid gap-6 p-7"
+        data-contact-form
+        data-contact-available={String(available)}
+        data-contact-endpoint={endpoint}
+        data-copy-sending={content.sending}
+        data-copy-success={content.success}
+        data-copy-validation-error={content.validationError}
+        data-copy-throttled={content.throttled}
+        data-copy-unavailable={content.unavailable}
+        data-copy-service-error={content.serviceError}
+        data-copy-generic-error={content.genericError}
+        data-copy-network-error={content.networkError}
+        aria-describedby="contact-status"
+      >
+        <div class="grid gap-2">
+          <label class="font-semibold" for="contact-name">{content.nameLabel}</label>
+          <input
+            class="rounded-xl border border-border bg-background px-4 py-3"
+            id="contact-name"
+            name="name"
+            type="text"
+            autocomplete="name"
+            required
+            minlength="4"
+            maxlength="120"
+            aria-describedby="contact-name-help contact-status"
+          />
+          <p class="text-sm text-muted-foreground" id="contact-name-help">{content.nameHelp}</p>
+        </div>
+
+        <div class="grid gap-2">
+          <label class="font-semibold" for="contact-email">{content.emailLabel}</label>
+          <input
+            class="rounded-xl border border-border bg-background px-4 py-3"
+            id="contact-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+            aria-describedby="contact-email-help contact-status"
+          />
+          <p class="text-sm text-muted-foreground" id="contact-email-help">{content.emailHelp}</p>
+        </div>
+
+        <div class="grid gap-2">
+          <label class="font-semibold" for="contact-message">{content.messageLabel}</label>
+          <textarea
+            class="min-h-36 rounded-xl border border-border bg-background px-4 py-3"
+            id="contact-message"
+            name="message"
+            required
+            minlength="10"
+            maxlength="2000"
+            aria-describedby="contact-message-help contact-status"
+          ></textarea>
+          <p class="text-sm text-muted-foreground" id="contact-message-help">{content.messageHelp}</p>
+        </div>
+
+        <div class="sr-only" aria-hidden="true">
+          <label for="contact-website">{content.websiteLabel}</label>
+          <input id="contact-website" name="website" type="text" autocomplete="off" tabindex="-1" />
+        </div>
+
+        <div class="flex flex-col items-start gap-3">
+          <button class="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50" type="submit" disabled>
+            {content.submit}
+          </button>
+          <p id="contact-status" data-contact-status role="status" aria-live="polite" class="min-h-6 text-sm text-muted-foreground">
+            {!available ? content.unavailable : ""}
+          </p>
+          <noscript><p class="text-sm text-muted-foreground">{content.noScript}</p></noscript>
+        </div>
+      </form>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { setupContactForm } from "../contact/submitContactForm";
+
+  document.querySelectorAll<HTMLFormElement>("[data-contact-form]").forEach((form) => {
+    setupContactForm(form, form.dataset.contactEndpoint || undefined, {
+      sending: form.dataset.copySending ?? "",
+      success: form.dataset.copySuccess ?? "",
+      validationError: form.dataset.copyValidationError ?? "",
+      throttled: form.dataset.copyThrottled ?? "",
+      unavailable: form.dataset.copyUnavailable ?? "",
+      serviceError: form.dataset.copyServiceError ?? "",
+      genericError: form.dataset.copyGenericError ?? "",
+      networkError: form.dataset.copyNetworkError ?? "",
+    });
+  });
+</script>

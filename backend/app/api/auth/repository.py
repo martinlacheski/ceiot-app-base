@@ -1,0 +1,144 @@
+
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select, or_, col
+from app.api.auth.models import User, UserUpdate
+from typing import Optional
+from datetime import datetime
+import uuid
+from sqlalchemy import asc, desc, func
+
+from app.core.sorting import SortSpec
+
+
+# Repositorio de usuarios
+class UserRepository:
+
+    # Inicialización de la sesión de la base de datos
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+
+    # Crea un nuevo usuario
+    async def create(self, user: User) -> User:
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    # Obtiene un usuario por su ID
+    async def get_by_id(self, user_id: uuid.UUID) -> User | None:
+        query = select(User).where(User.id == user_id)
+        result = await self.db.exec(query)
+        return result.first()
+
+    # Obtiene un usuario por su correo electrónico
+    async def get_by_email(self, email: str) -> User | None:
+        query = select(User).where(User.email == email)
+        result = await self.db.exec(query)
+        return result.first()
+
+    # Obtiene un usuario por su nombre de usuario
+    async def get_by_username(self, username: str) -> User | None:
+        query = select(User).where(User.username == username)
+        result = await self.db.exec(query)
+        return result.first()
+
+    # Obtiene un usuario por su número de identificación
+    async def get_by_identification_number(self, identification_number: str) -> User | None:
+        query = select(User).where(
+            User.identification_number == identification_number)
+        result = await self.db.exec(query)
+        return result.first()
+
+    async def get_all(
+        self,
+        page: int = 1,
+        per_page: int = 10,
+        is_active: Optional[bool] = None,
+        is_admin: Optional[bool] = None,
+        search: Optional[str] = None,
+        sort: SortSpec = (),
+    ) -> dict:
+        query = select(User)
+
+        # Filtering
+        if is_active is not None:
+            query = query.where(User.is_active == is_active)
+        if is_admin is not None:
+            query = query.where(User.is_admin == is_admin)
+        if search:
+            search_pattern = f"%{search}%"
+            query = query.where(
+                or_(
+                    col(User.username).ilike(search_pattern),
+                    col(User.email).ilike(search_pattern),
+                    col(User.first_name).ilike(search_pattern),
+                    col(User.last_name).ilike(search_pattern),
+                    col(User.identification_number).ilike(search_pattern)
+                )
+            )
+
+        sort_mapping = {
+            "username": (User.username, True, False),
+            "email": (User.email, True, False),
+            "firstName": (User.first_name, True, True),
+            "lastName": (User.last_name, True, True),
+            "identificationNumber": (User.identification_number, True, True),
+            "isActive": (User.is_active, False, False),
+            "isAdmin": (User.is_admin, False, False),
+            "createdAt": (User.created_at, False, False),
+        }
+        if sort:
+            tie_direction = sort[-1][1]
+            for field, direction in sort:
+                sort_column, case_insensitive, nullable = sort_mapping[field]
+                order_expr = func.lower(sort_column) if case_insensitive else sort_column
+                ordered = desc(order_expr) if direction == "desc" else asc(order_expr)
+                query = query.order_by(ordered.nulls_last() if nullable else ordered)
+        else:
+            query = query.order_by(desc(User.created_at))
+            tie_direction = "desc"
+
+        query = query.order_by(
+            desc(User.id) if tie_direction == "desc" else asc(User.id)
+        )
+
+        from app.services.pagination import paginate_query_async
+        return await paginate_query_async(
+            db=self.db,
+            model=User,
+            base_query=query,
+            page=page,
+            per_page=per_page
+        )
+
+    async def update(self, user_id: uuid.UUID, user_update: UserUpdate) -> Optional[User]:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return None
+
+        user_data = user_update.model_dump(exclude_unset=True)
+        # Nunca actualizar la contraseña a través de este método si viene vacía o nula
+        if "password" in user_data and not user_data["password"]:
+            del user_data["password"]
+
+        for key, value in user_data.items():
+            setattr(user, key, value)
+
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        return user
+
+    async def delete(self, user_id: uuid.UUID) -> bool:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return False
+
+        # Se realiza la eliminación lógica
+        user.is_active = False
+
+        # Se actualiza la fecha de modificación
+        self.db.add(user)
+        await self.db.commit()
+        return True

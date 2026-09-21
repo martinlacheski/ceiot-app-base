@@ -1,0 +1,23 @@
+---
+import NotFoundPage from "../../components/NotFoundPage.astro";
+import { getLandingContent, LOCALES } from "../../i18n/content";
+import { getNotFoundContent } from "../../i18n/notFound";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const content = getLandingContent(LOCALES.PT_BR);
+const notFound = getNotFoundContent(LOCALES.PT_BR);
+---
+
+<BaseLayout
+  content={content}
+  metadata={{
+    title: notFound.title,
+    description: notFound.description,
+    robots: "noindex, follow",
+    canonicalPath: "/pt-br/404/",
+    includeAlternates: false,
+    includeJsonLd: false,
+  }}
+>
+  <NotFoundPage content={content} notFound={notFound} />
+</BaseLayout>

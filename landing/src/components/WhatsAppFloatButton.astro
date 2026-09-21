@@ -1,0 +1,27 @@
+---
+import { resolveWhatsAppNumber } from "../config/publicUrls";
+
+interface Props {
+  number: string | undefined;
+  message: string;
+  label: string;
+}
+
+const { number: configuredNumber, message, label } = Astro.props;
+const number = resolveWhatsAppNumber(configuredNumber);
+const href = number ? `https://wa.me/${number}?text=${encodeURIComponent(message)}` : undefined;
+---
+
+{href && (
+  <a
+    class="fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 inline-flex size-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 transition hover:scale-105 hover:bg-[#20BD5A] focus:outline-none focus:ring-2 focus:ring-[#25D366] focus:ring-offset-2 focus:ring-offset-background sm:right-6 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))] sm:size-16"
+    href={href}
+    target="_blank"
+    rel="noopener noreferrer"
+    aria-label={label}
+  >
+    <svg viewBox="0 0 32 32" class="size-7 sm:size-8" fill="currentColor" aria-hidden="true" focusable="false">
+      <path d="M16.001 0C7.164 0 0 7.163 0 16c0 2.82.738 5.566 2.14 7.982L0 32l8.207-2.15A15.93 15.93 0 0 0 16.001 32C24.837 32 32 24.837 32 16S24.837 0 16.001 0Zm0 29.09c-2.5 0-4.94-.67-7.07-1.94l-.507-.3-4.87 1.277 1.3-4.746-.33-.487A13.06 13.06 0 0 1 2.91 16C2.91 8.782 8.782 2.91 16.001 2.91S29.09 8.782 29.09 16 23.219 29.09 16.001 29.09Zm7.17-9.78c-.393-.197-2.325-1.148-2.685-1.28-.36-.132-.622-.197-.884.197-.262.393-1.016 1.28-1.246 1.542-.23.262-.46.295-.852.098-.393-.197-1.658-.611-3.158-1.95-1.168-1.042-1.957-2.328-2.187-2.72-.23-.393-.025-.605.173-.801.177-.176.393-.46.59-.69.196-.23.262-.393.393-.655.131-.262.065-.492-.033-.69-.098-.196-.884-2.133-1.212-2.92-.32-.767-.645-.663-.884-.675-.229-.011-.491-.013-.753-.013-.262 0-.688.098-1.048.492-.36.393-1.377 1.346-1.377 3.283 0 1.937 1.41 3.808 1.606 4.07.196.262 2.774 4.237 6.72 5.943.939.405 1.671.647 2.242.828.942.3 1.8.258 2.478.156.756-.113 2.325-.95 2.653-1.868.328-.918.328-1.705.23-1.868-.098-.164-.36-.262-.753-.46Z"></path>
+    </svg>
+  </a>
+)}

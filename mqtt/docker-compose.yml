@@ -1,0 +1,34 @@
+services:
+  emqx:
+    image: emqx:5.8.0
+    restart: always
+    ports:
+      - 127.0.0.1:${MQTT_LISTENER_TCP:?MQTT_LISTENER_TCP is required}:1883
+      - 127.0.0.1:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
+      - 127.0.0.1:${MQTT_LISTENER_WS:?MQTT_LISTENER_WS is required}:8083
+    env_file:
+      - .env
+    volumes:
+      - ./data:/opt/emqx/data
+      - ./log:/opt/emqx/log
+      - ./certs:/opt/emqx/certs:ro
+    environment:
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_PASSWORD:?}
+      EMQX_LISTENERS__SSL__DEFAULT__BIND: 0.0.0.0:8883
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE: >-
+        /opt/emqx/certs/emqx.crt
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE: >-
+        /opt/emqx/certs/emqx.key
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE: >-
+        /opt/emqx/certs/ca.crt
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY: verify_peer
+      EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__FAIL_IF_NO_PEER_CERT: "true"
+      EMQX_LOAD_ENV_OVERRIDE: "true"
+    healthcheck:
+      test: [CMD, emqx, ctl, status]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app-network

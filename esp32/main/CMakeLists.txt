@@ -1,0 +1,53 @@
+# CMakeLists.txt para main component
+
+idf_component_register(
+    SRCS 
+        "main.c"
+        "config/pins_config.c"
+        "display/display_manager.c"
+        "logging/log_manager.c"
+        "led/led_manager.c"
+        "utils/watchdog.c"
+        "wifi/wifi_manager.c"
+        "cellular/cellular_manager.c"
+        "cellular/cellular_ppp_stability.c"
+        "network/network_manager.c"
+        "web/web_server.c"
+        "web/nvs_manager.c"
+        "mqtt/mqtt_manager.c"
+        "temp/temp_manager.c"
+    INCLUDE_DIRS 
+        "."
+        "config"
+        "display"
+        "logging"
+        "led"
+        "utils"
+        "wifi"
+        "cellular"
+        "network"
+        "web"
+        "mqtt"
+        "temp"
+    REQUIRES
+        "mdns"
+        "esp_event"
+        "esp_http_server"
+        "esp_netif"
+        "esp_wifi"
+        "esp_lcd"
+        "mqtt"
+        "nvs_flash"
+        "lwip"
+        "esp_timer"
+        "driver"
+        "json"
+        "esp_littlefs"
+        "led_strip"
+)
+
+littlefs_create_partition_image(
+    storage
+    "${CMAKE_CURRENT_LIST_DIR}/../cert"
+    FLASH_IN_PROJECT
+)

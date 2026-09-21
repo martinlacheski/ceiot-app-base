@@ -1,0 +1,93 @@
+---
+import { APP_LOGIN_URL, CONTACT_ENDPOINT, WHATSAPP_NUMBER } from "../config/publicUrls";
+import type { LandingContent } from "../i18n/content";
+import ContactForm from "./ContactForm.astro";
+import Footer from "./Footer.astro";
+import Navbar from "./Navbar.astro";
+import WhatsAppFloatButton from "./WhatsAppFloatButton.astro";
+
+interface Props { content: LandingContent }
+const { content } = Astro.props;
+---
+
+<Navbar content={content} showContact />
+
+<main>
+  <section id="hero" class="section-shell">
+    <div class="section-container min-h-[72vh] justify-center py-16 md:py-24">
+      <div class="grid items-center gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <div class="flex flex-col items-start gap-6">
+          <p class="eyebrow">{content.hero.badge}</p>
+          <h1 class="max-w-4xl text-5xl font-bold leading-[1.05] tracking-tighter md:text-7xl">{content.hero.heading}</h1>
+          <p class="section-copy max-w-3xl">{content.hero.description}</p>
+          <div class="flex flex-wrap gap-3">
+            <a class="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground transition hover:opacity-90" href="#variables">
+              {content.hero.primaryCta}
+            </a>
+            {APP_LOGIN_URL ? (
+              <a class="rounded-full border border-border bg-card px-6 py-3 font-semibold transition hover:border-brand-accent" href={APP_LOGIN_URL}>
+                {content.hero.appCta}
+              </a>
+            ) : (
+              <span class="rounded-full border border-border bg-muted px-6 py-3 font-semibold text-muted-foreground" aria-disabled="true" title="PUBLIC_APP_LOGIN_URL">
+                {content.hero.appCta}
+              </span>
+            )}
+          </div>
+        </div>
+        <div class="mx-auto flex aspect-square w-full max-w-md items-center justify-center rounded-[2.5rem] border border-border bg-white p-10 shadow-xl shadow-black/5">
+          <img src="/iot.png" width="512" height="511" alt={content.hero.iconAlt} class="h-full w-full object-contain" loading="eager" fetchpriority="high" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="variables" class="section-shell fade-in-section">
+    <div class="section-container py-16 md:py-24">
+      <div class="flex max-w-3xl flex-col gap-4">
+        <p class="eyebrow">{content.variables.eyebrow}</p>
+        <h2 class="section-title">{content.variables.heading}</h2>
+        <p class="section-copy">{content.variables.description}</p>
+      </div>
+      <div class="grid gap-6 md:grid-cols-3">
+        {content.metrics.map((metric) => (
+          <article class="surface-card flex min-h-64 flex-col justify-between gap-8 p-7">
+            <div class="text-5xl font-bold tracking-tight text-brand-accent">{metric.unit}</div>
+            <div class="space-y-3">
+              <h3 class="text-xl font-bold">{metric.name}</h3>
+              <p class="body-copy leading-7 text-muted-foreground">{metric.description}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <section id="base" class="section-shell fade-in-section">
+    <div class="section-container py-16 md:py-24">
+      <div class="flex max-w-3xl flex-col gap-4">
+        <p class="eyebrow">{content.foundation.eyebrow}</p>
+        <h2 class="section-title">{content.foundation.heading}</h2>
+        <p class="section-copy">{content.foundation.description}</p>
+      </div>
+      <div class="grid gap-6 lg:grid-cols-3">
+        {content.foundation.principles.map((principle, index) => (
+          <article class="surface-card p-7">
+            <span class="mb-5 inline-flex size-10 items-center justify-center rounded-full bg-secondary font-bold">{index + 1}</span>
+            <h3 class="mb-3 text-xl font-bold">{principle.title}</h3>
+            <p class="body-copy leading-7 text-muted-foreground">{principle.description}</p>
+          </article>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <ContactForm content={content.contact} endpoint={CONTACT_ENDPOINT} />
+</main>
+
+<Footer content={content} />
+<WhatsAppFloatButton
+  number={WHATSAPP_NUMBER}
+  message={content.whatsapp.message}
+  label={content.whatsapp.label}
+/>

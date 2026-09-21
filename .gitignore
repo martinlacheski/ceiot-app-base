@@ -1,0 +1,35 @@
+# Local Pi runtime state and agents
+.atl/
+.codegraph/
+odd/
+
+# Local environment and secret material
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.key
+*.pem
+*.crt
+*.csr
+mqtt/certs/
+mqtt/data/
+mqtt/log/
+backend/postgres_data/
+
+# Generated dependencies, caches, and build output
+**/node_modules/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.cache/
+**/dist/
+**/coverage/
+*.py[cod]
+*.log
+
+# Vitest reports and artifacts
+.vitest/

@@ -1,0 +1,81 @@
+---
+import "../styles/global.css";
+import type { LandingContent } from "../i18n/content";
+import { buildSeoAssetLinks } from "../seo/assets";
+import { buildAbsoluteUrl, buildAlternateLinks, buildJsonLdGraph, getAlternateOpenGraphLocales, getOpenGraphLocale } from "../seo/metadata";
+
+interface Props {
+  content: LandingContent;
+  metadata?: {
+    title?: string;
+    description?: string;
+    robots?: string;
+    canonicalPath?: string;
+    includeAlternates?: boolean;
+    includeJsonLd?: boolean;
+  };
+}
+
+const { content, metadata } = Astro.props;
+const pageTitle = metadata?.title ?? content.seo.title;
+const pageDescription = metadata?.description ?? content.seo.description;
+const canonical = buildAbsoluteUrl(metadata?.canonicalPath ?? content.path);
+const socialImage = buildAbsoluteUrl(content.seo.ogImage);
+const alternates = metadata?.includeAlternates === false ? [] : buildAlternateLinks();
+const jsonLdGraph = metadata?.includeJsonLd === false ? [] : buildJsonLdGraph(content);
+const ogLocale = getOpenGraphLocale(content.locale);
+const ogAlternateLocales = metadata?.includeAlternates === false ? [] : getAlternateOpenGraphLocales(content.locale);
+const themeInitScript = `(() => {
+  const storageKey = "environmental-iot-theme";
+  let storedTheme = null;
+  try { storedTheme = window.localStorage.getItem(storageKey); } catch {}
+  let prefersDark = false;
+  try { prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches; } catch {}
+  const theme = storedTheme === "light" || storedTheme === "dark" ? storedTheme : prefersDark ? "dark" : "light";
+  document.documentElement.classList.toggle("dark", theme === "dark");
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+})();`;
+const scrollFadeInScript = `(() => {
+  const sections = document.querySelectorAll(".fade-in-section");
+  if (!("IntersectionObserver" in window)) { sections.forEach((section) => section.classList.add("is-visible")); return; }
+  const observer = new IntersectionObserver((entries) => entries.forEach((entry) => {
+    if (entry.isIntersecting) { entry.target.classList.add("is-visible"); observer.unobserve(entry.target); }
+  }), { threshold: 0.15 });
+  sections.forEach((section) => observer.observe(section));
+})();`;
+---
+<!doctype html>
+<html lang={content.lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={pageDescription} />
+    <meta name="robots" content={metadata?.robots ?? "index, follow"} />
+    {canonical && <link rel="canonical" href={canonical} />}
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/fonts/montserrat-latin-400-600.woff2" />
+    {alternates.map((alternate) => <link rel="alternate" hreflang={alternate.hreflang} href={alternate.href} />)}
+    <meta property="og:type" content="website" />
+    {canonical && <meta property="og:url" content={canonical} />}
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={pageDescription} />
+    {socialImage && <meta property="og:image" content={socialImage} />}
+    {socialImage && <meta property="og:image:width" content="1200" />}
+    {socialImage && <meta property="og:image:height" content="630" />}
+    <meta property="og:locale" content={ogLocale} />
+    {ogAlternateLocales.map((locale) => <meta property="og:locale:alternate" content={locale} />)}
+    <meta property="og:site_name" content={content.hero.heading} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={pageDescription} />
+    {socialImage && <meta name="twitter:image" content={socialImage} />}
+    {buildSeoAssetLinks().map((link) => <link rel={link.rel} type={link.type} sizes={link.sizes} href={link.href} />)}
+    {jsonLdGraph.map((node) => <script type="application/ld+json" set:html={JSON.stringify(node)} />)}
+    <script is:inline set:html={themeInitScript}></script>
+  </head>
+  <body>
+    <slot />
+    <script is:inline set:html={scrollFadeInScript}></script>
+  </body>
+</html>

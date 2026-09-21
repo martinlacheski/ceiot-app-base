@@ -1,0 +1,32 @@
+name: iot-app-base
+
+include:
+  - path: backend/docker-compose.yml
+    project_directory: backend
+    env_file:
+      - backend/.env
+      - timescaledb/.env
+  - path: frontend/docker-compose.yml
+    project_directory: frontend
+    env_file:
+      - frontend/.env
+  - path: landing/docker-compose.yml
+    project_directory: landing
+    env_file:
+      - landing/.env
+  - path: mailpit/docker-compose.yml
+    project_directory: mailpit
+  - path: mqtt/docker-compose.yml
+    project_directory: mqtt
+    env_file:
+      - mqtt/.env
+  - path: timescaledb/docker-compose.yml
+    project_directory: timescaledb
+    env_file:
+      - timescaledb/.env
+
+networks:
+  app-network:
+
+volumes:
+  postgres-data:

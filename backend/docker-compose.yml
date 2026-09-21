@@ -1,0 +1,34 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      MQTT_CLIENT_ID: Backend-Admin
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+      DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
+        @postgresql:5432/${DB_DATABASE:?}"
+      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
+        ${DB_PASSWORD:?}@postgresql:5432/${DB_DATABASE:?}"
+    ports:
+      - 127.0.0.1:${BACKEND_PORT:?BACKEND_PORT is required}:8000
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app-network
+    restart: always

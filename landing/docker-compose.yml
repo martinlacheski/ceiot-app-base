@@ -1,0 +1,25 @@
+services:
+  landing:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PUBLIC_APP_LOGIN_URL: ${PUBLIC_APP_LOGIN_URL:?}
+        PUBLIC_WHATSAPP_NUMBER: ${PUBLIC_WHATSAPP_NUMBER:-}
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
+        PUBLIC_API_BASE_URL: ${PUBLIC_API_BASE_URL:?}
+        PUBLIC_GCP_MAPS_API_KEY: ${PUBLIC_GCP_MAPS_API_KEY:?}
+        PUBLIC_MAP_LOCATIONS_URL: ${PUBLIC_MAP_LOCATIONS_URL:?}
+    ports:
+      - 127.0.0.1:${LANDING_PORT:?LANDING_PORT is required}:80
+    healthcheck:
+      test: [CMD, wget, --quiet, --tries=1, --spider, http://127.0.0.1/]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    networks:
+      - app-network
+    restart: always

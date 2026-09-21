@@ -1,0 +1,1 @@
+from app.api.tax.identification_type.permissions import DOCUMENT_TYPES_PERMISSIONS
