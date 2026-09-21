@@ -7,6 +7,7 @@ from app.api.access.router import router as access_router
 from app.api.public.router import router as public_router
 from app.api.device.device_type.router import router as device_type_router
 from app.api.provisioning.router import router as provisioning_router
+from app.api.sensor.router import router as sensor_router
 
 router = APIRouter()
 
@@ -24,6 +25,7 @@ from app.api.device.operations.router import router as operations_router
 router.include_router(provisioning_router, prefix="/provisioning", tags=["Provisioning"])
 router.include_router(device_type_router, prefix="/devices/types", tags=["Device Types"])
 router.include_router(device_router, prefix="/devices", tags=["Devices"])
+router.include_router(sensor_router, prefix="/devices", tags=["Sensor Readings"])
 router.include_router(
     operations_router, prefix="/devices/operations", tags=["Device Operations"]
 )

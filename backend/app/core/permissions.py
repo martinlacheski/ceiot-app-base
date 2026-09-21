@@ -6,6 +6,7 @@ from app.api.tax.permissions import DOCUMENT_TYPES_PERMISSIONS
 from app.api.environment.permissions import ENVIRONMENTS_PERMISSIONS, INVITATION_PERMISSIONS
 from app.api.access.permissions import ACCESS_PERMISSIONS
 from app.api.device.permissions import DEVICES_PERMISSIONS
+from app.api.sensor.permissions import SENSOR_PERMISSIONS
 
 # Definición centralizada de permisos agregando los módulos
 PERMISSIONS_TREE = {
@@ -16,6 +17,7 @@ PERMISSIONS_TREE = {
     "INVITATIONS": INVITATION_PERMISSIONS,
     "ACCESS": ACCESS_PERMISSIONS,
     "DEVICES": DEVICES_PERMISSIONS,
+    "SENSORS": SENSOR_PERMISSIONS,
 }
 
 # Utilidad para obtener la lista plana de permisos (para validaciones y scripts)
@@ -51,4 +53,6 @@ BASIC_PERMISSIONS = [
     "device:read",
     "device:pair",
     "device:update",
+    # Sensor readings
+    "sensor:read",
 ]

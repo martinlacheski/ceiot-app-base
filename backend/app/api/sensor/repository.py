@@ -1,5 +1,7 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy import select, and_
+import uuid
+
+from sqlalchemy import and_, func, select
 from app.api.sensor.models import SensorReading
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -62,3 +64,47 @@ class SensorRepository:
             start_time,
             utc_now()
         )
+
+    async def get_latest_by_device_id(
+        self,
+        device_id: uuid.UUID,
+        limit: int = 10,
+        start_time: Optional[datetime] = None,
+    ) -> tuple[List[SensorReading], int]:
+        """Return the newest authorized readings and the full matching count."""
+        filters = [SensorReading.device_id == device_id]
+        if start_time is not None:
+            filters.append(SensorReading.time >= start_time)
+
+        result = await self.session.execute(
+            select(SensorReading)
+            .where(*filters)
+            .order_by(SensorReading.time.desc(), SensorReading.id.desc())
+            .limit(limit)
+        )
+        total_result = await self.session.execute(
+            select(func.count())
+            .select_from(SensorReading)
+            .where(*filters)
+        )
+        return list(result.scalars().all()), total_result.scalar_one()
+
+    async def get_readings_by_device_id_and_range(
+        self,
+        device_id: uuid.UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> List[SensorReading]:
+        """Return one device's readings inside an inclusive time range."""
+        result = await self.session.execute(
+            select(SensorReading)
+            .where(
+                and_(
+                    SensorReading.device_id == device_id,
+                    SensorReading.time >= start_time,
+                    SensorReading.time <= end_time,
+                )
+            )
+            .order_by(SensorReading.time.asc(), SensorReading.id.asc())
+        )
+        return list(result.scalars().all())

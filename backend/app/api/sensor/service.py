@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any
 import logging
 import math
 import uuid
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -111,3 +112,29 @@ class SensorService:
     ) -> list[SensorReading]:
         """Obtiene lecturas recientes"""
         return await self.repository.get_recent_readings(device_serial, hours)
+
+    async def get_latest_readings_by_device_id(
+        self,
+        device_id: uuid.UUID,
+        limit: int = 10,
+        start_time: Optional[datetime] = None,
+    ) -> tuple[list[SensorReading], int]:
+        """Return the latest readings for an authorized device UUID."""
+        return await self.repository.get_latest_by_device_id(
+            device_id=device_id,
+            limit=limit,
+            start_time=start_time,
+        )
+
+    async def get_readings_by_device_id_and_range(
+        self,
+        device_id: uuid.UUID,
+        start_time: datetime,
+        end_time: datetime,
+    ) -> list[SensorReading]:
+        """Return readings for an authorized device UUID and time range."""
+        return await self.repository.get_readings_by_device_id_and_range(
+            device_id=device_id,
+            start_time=start_time,
+            end_time=end_time,
+        )
