@@ -20,7 +20,6 @@ class StubSession:
         ("name", "asc", "device.name ASC, device.id ASC"),
         ("serial", "desc", "device.serial DESC, device.id ASC"),
         ("enabled", "asc", "device.enabled ASC, device.id ASC"),
-        ("brokerConnected", "desc", "device.broker_connected DESC, device.id ASC"),
     ],
 )
 async def test_get_all_applies_allowlisted_sort_before_pagination(
@@ -65,6 +64,31 @@ async def test_nullable_sorts_put_nulls_last_in_both_directions(monkeypatch, sor
     await repository.get_all(sort_by=sort_by, sort_order="desc")
 
     assert all("NULLS LAST, device.id ASC" in query for query in queries)
+
+
+@pytest.mark.asyncio
+async def test_live_presence_sort_uses_sql_before_pagination(monkeypatch):
+    captured = {}
+
+    async def capture_query(session, model, query, page, per_page):
+        captured["query"] = str(query)
+        return {"items": [], "total": 0, "pages": 0, "page": page, "per_page": per_page}
+
+    monkeypatch.setattr("app.api.device.repository.paginate_query_async", capture_query)
+    await DeviceRepository(StubSession()).get_all(
+        sort_by="brokerConnected",
+        sort_order="desc",
+        connected_serials=frozenset({"IOT-0000-0001"}),
+    )
+
+    sql = captured["query"]
+    order_by_clause = sql.split("ORDER BY", 1)[1]
+    assert "CASE WHEN" in order_by_clause
+    assert "device.serial IN" in order_by_clause
+    assert "DESC, device.id ASC" in order_by_clause
+    # The stale persisted flag is still a selected column (existing DTO
+    # shape), it just must not drive the sort itself.
+    assert "device.broker_connected" not in order_by_clause
 
 
 def test_device_sort_query_parameters_are_strict_literals():

@@ -20,7 +20,13 @@ from app.core.dependencies import (
     get_system_session,
 )
 from app.core.security import create_access_token, hash_password
+from app.core.emqx_presence import PresenceSnapshot, get_emqx_presence_client
 from app.main import app
+
+
+class UnavailablePresenceClient:
+    async def get_snapshot(self) -> PresenceSnapshot:
+        return PresenceSnapshot.unavailable()
 
 
 @compiles(JSONB, "sqlite")
@@ -92,6 +98,7 @@ def client_fixture(session: Session, async_engine):
     app.dependency_overrides[get_async_session] = get_async_session_override
     app.dependency_overrides[get_authed_session] = get_async_session_override
     app.dependency_overrides[get_system_session] = get_async_session_override
+    app.dependency_overrides[get_emqx_presence_client] = UnavailablePresenceClient
 
     @asynccontextmanager
     async def no_lifespan(app_instance):

@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, func
@@ -82,6 +82,7 @@ class DeviceRepository:
             "brokerConnected",
         ] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
+        connected_serials: frozenset[str] | None = None,
     ) -> Dict[str, Any]:
         query = select(Device).options(
             selectinload(Device.type),
@@ -167,9 +168,18 @@ class DeviceRepository:
             "enabled": Device.enabled,
             "isActive": Device.is_active,
             "lastConnection": Device.last_connection,
-            "brokerConnected": Device.broker_connected,
         }
-        sort_expression = sort_expressions[sort_by]
+        if sort_by == "brokerConnected":
+            if connected_serials is None:
+                return await paginate_query_async(
+                    self.session, Device, query.order_by(Device.id.asc()), page, per_page
+                )
+            sort_expression = case(
+                (Device.serial.in_(sorted(connected_serials)), True),
+                else_=False,
+            )
+        else:
+            sort_expression = sort_expressions[sort_by]
         direction = sort_expression.desc if sort_order == "desc" else sort_expression.asc
         ordered_expression = direction()
         if sort_by in {"model", "manufactureDate", "lastConnection"}:

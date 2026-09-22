@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     EMQX_PORT: int
     EMQX_USER: str
     EMQX_PASSWORD: str
+    EMQX_API_BASE_URL: str | None = None
+    EMQX_API_KEY: SecretStr | None = None
+    EMQX_API_SECRET: SecretStr | None = None
 
     # MQTT Backoff Config (producción)
     MQTT_RETRY_INITIAL_DELAY: int = 1  # Segundos inicial

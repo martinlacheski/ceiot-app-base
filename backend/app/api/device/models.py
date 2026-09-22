@@ -151,7 +151,7 @@ class DeviceRead(CamelModel):
     is_active: bool
     enabled: bool
     last_connection: Optional[datetime] = None
-    broker_connected: bool
+    broker_connected: Optional[bool]
     broker_connected_at: Optional[datetime] = None
     broker_disconnected_at: Optional[datetime] = None
     broker_status_updated_at: Optional[datetime] = None

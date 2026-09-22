@@ -34,8 +34,32 @@ from app.core.dependencies import (
 )
 from app.core.db import system_session
 from app.core.email import EmailService
+from app.core.emqx_presence import (
+    EmqxPresenceClient,
+    PresenceSnapshot,
+    get_emqx_presence_client,
+)
 
 router = APIRouter()
+
+
+def project_broker_presence(
+    devices: list[DeviceRead],
+    snapshot: PresenceSnapshot,
+) -> list[DeviceRead]:
+    connected = snapshot.client_ids
+    return [
+        device.model_copy(
+            update={
+                "broker_connected": (
+                    DeviceService.normalize_serial(device.serial) in connected
+                    if connected is not None
+                    else None
+                )
+            }
+        )
+        for device in devices
+    ]
 
 
 def get_access_service(session: AuthedAsyncDBSession) -> GuestAccessService:
@@ -123,6 +147,7 @@ async def check_device_serial(
 async def get_devices(
     session: AuthedAsyncDBSession,
     current_user: User = Depends(get_current_user),
+    presence_client: EmqxPresenceClient = Depends(get_emqx_presence_client),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=10000),
     search: str = Query(None),
@@ -155,6 +180,7 @@ async def get_devices(
     if "device:read_all" not in current_user.permissions:
         requesting_user_id = current_user.id
 
+    snapshot = await presence_client.get_snapshot()
     result = await repo.get_all(
         page=page,
         per_page=per_page,
@@ -171,9 +197,13 @@ async def get_devices(
         owner_id=owner_id,
         sort_by=sort_by,
         sort_order=sort_order,
+        connected_serials=snapshot.client_ids,
+    )
+    projected = project_broker_presence(
+        [DeviceRead.model_validate(item) for item in result["items"]], snapshot
     )
     result["items"] = await enrich_device_owner_metadata(
-        [DeviceRead.model_validate(item) for item in result["items"]],
+        projected,
         session,
     )
     return result
@@ -230,6 +260,7 @@ async def get_device(
     device_id: uuid.UUID,
     session: AuthedAsyncDBSession,
     current_user: User = Depends(get_current_user),
+    presence_client: EmqxPresenceClient = Depends(get_emqx_presence_client),
 ):
     repo = DeviceRepository(session)
     device = await repo.get(device_id)
@@ -239,7 +270,9 @@ async def get_device(
     if not current_user.is_admin and "device:read_all" not in current_user.permissions:
         access_service = get_access_service(session)
         await access_service.resolve_device_access(device_id, current_user)
-    return (await enrich_device_owner_metadata([DeviceRead.model_validate(device)], session))[0]
+    snapshot = await presence_client.get_snapshot()
+    projected = project_broker_presence([DeviceRead.model_validate(device)], snapshot)
+    return (await enrich_device_owner_metadata(projected, session))[0]
 
 
 @router.post("", response_model=DeviceRead, dependencies=[Depends(PermissionChecker(DevicePermissions.CREATE))])
