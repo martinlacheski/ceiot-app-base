@@ -39,6 +39,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
     assert [revision.name for revision in revisions] == [
         "0001_iot_baseline.py",
         "0002_add_environmental_readings.py",
+        "0003_add_device_history_environment_snapshot.py",
     ]
 
 

@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 from sqlmodel import SQLModel, Field, func
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, ForeignKey, Uuid
 
 class DeviceOperationType(str, Enum):
     SENSOR_DATA = "SENSOR_DATA"
@@ -32,6 +32,15 @@ class DeviceOperation(SQLModel, table=True):
     
     # Operational identifier. Devices are resolved through their unique serial.
     device_serial: Optional[str] = Field(default=None) 
+    environment_id: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("environment.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     
     operation_type: DeviceOperationType = Field(index=True)
     

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, ForeignKey, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 
 
@@ -26,6 +26,15 @@ class SensorReading(SQLModel, table=True):
     # Identificación del dispositivo
     device_id: Optional[uuid.UUID] = Field(default=None, foreign_key="device.id", index=True)
     device_serial: str = Field(index=True)  # Redundante pero útil
+    environment_id: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("environment.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     device_type: str = Field(default="generic")
     
     # Generic device-health signals
