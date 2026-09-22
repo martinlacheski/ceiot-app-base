@@ -1,8 +1,10 @@
 import collections.abc
 import contextlib
 
-from sqlalchemy import text
+from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     create_async_engine,
 )
 from sqlmodel import Session, create_engine
@@ -11,6 +13,35 @@ from sqlmodel.ext.asyncio.session import (
 )
 
 from app.core.config import settings
+
+
+def _reset_rls_identity(
+    dbapi_connection,
+    connection_record,
+    reset_state,
+) -> None:
+    """Clear session-scoped RLS identity before a connection is pooled again."""
+    del connection_record
+    if reset_state.terminate_only:
+        return
+
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("RESET app.current_user_id")
+        # RESET is transactional in PostgreSQL.  The pool's normal reset-on-return
+        # rollback runs after this event, so the reset must be committed first.
+        cursor.execute("COMMIT")
+    finally:
+        cursor.close()
+
+
+def install_rls_identity_reset(engine: Engine | AsyncEngine) -> None:
+    """Install PostgreSQL pool cleanup on a sync or async SQLAlchemy engine."""
+    sync_engine = engine.sync_engine if isinstance(engine, AsyncEngine) else engine
+    if sync_engine.dialect.name != "postgresql":
+        return
+    if not event.contains(sync_engine, "reset", _reset_rls_identity):
+        event.listen(sync_engine, "reset", _reset_rls_identity)
 
 
 # Se crea el engine de la base de datos (sincrónico)
@@ -43,6 +74,9 @@ async_engine = create_async_engine(
         {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
     ),
 )
+
+install_rls_identity_reset(engine)
+install_rls_identity_reset(async_engine)
 
 
 def get_session() -> collections.abc.Iterator[Session]:
