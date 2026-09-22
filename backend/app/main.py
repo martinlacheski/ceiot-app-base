@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from app.api.router import router as api_router
 from app.core.config import settings
+from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
 
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
+quiet_http_client_logs()
 
 
 @asynccontextmanager

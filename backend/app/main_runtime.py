@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
 from app.core.mqtt.handlers import (
     process_device_status_message,
@@ -22,6 +23,7 @@ from app.core.mqtt.handlers import (
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
+quiet_http_client_logs()
 
 logger = logging.getLogger(__name__)
 
