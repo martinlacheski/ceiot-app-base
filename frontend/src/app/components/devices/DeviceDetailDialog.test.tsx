@@ -67,9 +67,13 @@ const queryResult = (
   isLoading: options.isLoading ?? false,
 });
 
-function renderDialog() {
+function renderDialog(brokerConnected: boolean | null = device.brokerConnected) {
   return render(
-    <DeviceDetailDialog device={device} open onOpenChange={vi.fn()} />,
+    <DeviceDetailDialog
+      device={{ ...device, brokerConnected }}
+      open
+      onOpenChange={vi.fn()}
+    />,
   );
 }
 
@@ -87,6 +91,27 @@ beforeEach(() => {
 });
 
 describe("DeviceDetailDialog", () => {
+  it.each([
+    [true, "Online"],
+    [false, "Offline"],
+    [null, "No disponible"],
+  ] as const)(
+    "shows %s broker presence as %s separately from the active state",
+    (presence, label) => {
+      renderDialog(presence);
+
+      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(
+        screen
+          .getAllByText("ACTIVO")
+          .some((element) => element.dataset.slot === "badge"),
+      ).toBe(true);
+      if (presence === null) {
+        expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+      }
+    },
+  );
+
   it("shows generic device identity without commercial data", () => {
     renderDialog();
 

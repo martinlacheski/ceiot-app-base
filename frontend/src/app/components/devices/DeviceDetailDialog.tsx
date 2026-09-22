@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import type { Device } from "@/app/types/device.types";
 import { formatDeviceGpsSummary, formatDeviceMac } from "./deviceTelemetry";
+import { DevicePresenceBadge } from "./DevicePresenceBadge";
 
 interface DeviceDetailDialogProps {
   device: Device | null;
@@ -81,6 +82,7 @@ export function DeviceDetailDialog({
             <Badge variant={device.isActive ? "default" : "destructive"}>
               {device.isActive ? "ACTIVO" : "INACTIVO"}
             </Badge>
+            <DevicePresenceBadge brokerConnected={device.brokerConnected} />
           </div>
           <DialogDescription className="sr-only">
             Información del dispositivo y sus lecturas ambientales recientes.

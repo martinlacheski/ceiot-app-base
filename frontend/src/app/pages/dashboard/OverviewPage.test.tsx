@@ -69,8 +69,18 @@ const devices = {
       enabled: true,
       brokerConnected: false,
     },
+    {
+      id: "device-presence-unavailable",
+      serial: "SENSOR-003",
+      name: "Sensor Oeste",
+      deviceTypeId: "type-1",
+      status: "active",
+      isActive: true,
+      enabled: true,
+      brokerConnected: null,
+    },
   ],
-  total: 2,
+  total: 3,
   page: 1,
   size: 100,
   pages: 1,
@@ -131,13 +141,22 @@ describe("OverviewPage operational inventory", () => {
     const offline = screen.getByTestId("device-device-offline-enabled");
     expect(within(offline).getByText("Offline")).toBeInTheDocument();
     expect(within(offline).getByText("Habilitado")).toBeInTheDocument();
+
+    const unavailable = screen.getByTestId("device-device-presence-unavailable");
+    expect(within(unavailable).getByText("No disponible")).toBeInTheDocument();
+    expect(within(unavailable).queryByText("Offline")).not.toBeInTheDocument();
+
+    const onlineSummary = screen.getByText("Online mostrados").closest("div");
+    const offlineSummary = screen.getByText("Offline mostrados").closest("div");
+    expect(within(onlineSummary!).getByText("1")).toBeInTheDocument();
+    expect(within(offlineSummary!).getByText("1")).toBeInTheDocument();
   });
 
   it("shows real inventory totals and honest navigation", () => {
     renderPage();
 
     expect(screen.getByTestId("environment-total")).toHaveTextContent("1");
-    expect(screen.getByTestId("device-total")).toHaveTextContent("2");
+    expect(screen.getByTestId("device-total")).toHaveTextContent("3");
     expect(screen.getByRole("link", { name: "Ver establecimientos" })).toHaveAttribute(
       "href",
       "/app/environments",

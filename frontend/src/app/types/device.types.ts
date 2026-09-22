@@ -49,7 +49,7 @@ export interface Device {
   environmentId?: string;
   updatedAt?: string;
   lastConnection?: string; // ISO date string
-  brokerConnected: boolean;
+  brokerConnected: boolean | null;
   brokerConnectedAt?: string | null;
   brokerDisconnectedAt?: string | null;
   brokerStatusUpdatedAt?: string | null;

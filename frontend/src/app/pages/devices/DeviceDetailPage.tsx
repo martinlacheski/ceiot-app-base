@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
+import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
 import {
   formatDeviceGpsSummary,
   formatDeviceMac,
@@ -88,11 +89,14 @@ export default function DeviceDetailPage() {
         subtitle={device.environment?.name || device.serial}
       />
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Identificación y ubicación</CardTitle>
-          <CardDescription>
-            Últimos datos de conectividad reportados por el dispositivo.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Identificación y ubicación</CardTitle>
+            <CardDescription>
+              Últimos datos de conectividad reportados por el dispositivo.
+            </CardDescription>
+          </div>
+          <DevicePresenceBadge brokerConnected={device.brokerConnected} />
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div>

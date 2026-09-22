@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const queryState = vi.hoisted(() => ({
+  brokerConnected: true as boolean | null,
   history: undefined as unknown,
   latest: undefined as unknown,
 }));
@@ -50,6 +51,7 @@ const device = {
   id: "device-1",
   name: "Environmental sensor",
   serial: "SENSOR-001",
+  brokerConnected: true,
   environment: { id: "env-1", name: "Greenhouse", ownerId: "owner-1" },
 };
 
@@ -85,11 +87,17 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryState.brokerConnected = true;
   queryState.latest = queryResult({ items: [], total: 0 });
   queryState.history = queryResult({ items: [], total: 0 });
   mocks.useQuery.mockImplementation(
     (options: { queryKey: readonly unknown[] }) => {
-      if (options.queryKey[0] === "device") return queryResult(device);
+      if (options.queryKey[0] === "device") {
+        return queryResult({
+          ...device,
+          brokerConnected: queryState.brokerConnected,
+        });
+      }
       if (options.queryKey[1] === "latest") return queryState.latest;
       if (options.queryKey[1] === "history") return queryState.history;
       throw new Error(`Unexpected query key: ${String(options.queryKey)}`);
@@ -102,6 +110,21 @@ afterEach(() => {
 });
 
 describe("DeviceDetailPage", () => {
+  it.each([
+    [true, "Online"],
+    [false, "Offline"],
+    [null, "No disponible"],
+  ] as const)("shows %s broker presence as %s", (presence, label) => {
+    queryState.brokerConnected = presence;
+
+    renderPage();
+
+    expect(screen.getByText(label)).toBeInTheDocument();
+    if (presence === null) {
+      expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+    }
+  });
+
   it("passes only access identity and ownership to guest management", () => {
     renderPage();
 

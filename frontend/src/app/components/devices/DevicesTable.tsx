@@ -78,6 +78,7 @@ import {
 
 import { showConfirmDialog } from "@/store/confirm.store";
 import { DeviceDetailDialog } from "./DeviceDetailDialog";
+import { DevicePresenceBadge } from "./DevicePresenceBadge";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
 import { resolveDeviceEditPath } from "./deviceEditPath";
@@ -216,12 +217,10 @@ export function DeviceMobileCard({
           className="flex w-full min-w-0 items-center justify-between gap-2"
           aria-label="Conectividad y última conexión"
         >
-          <Badge
+          <DevicePresenceBadge
             className="shrink-0"
-            variant={device.brokerConnected ? "default" : "secondary"}
-          >
-            {device.brokerConnected ? "Online" : "Offline"}
-          </Badge>
+            brokerConnected={device.brokerConnected}
+          />
           <p className="min-w-0 flex-1 truncate text-right text-xs text-muted-foreground">
             Última conexión:{" "}
             {device.lastConnection

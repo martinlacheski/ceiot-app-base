@@ -141,6 +141,25 @@ describe("DeviceMobileCard", () => {
         "Última conexión: Sin registros",
       ),
     ).toBeInTheDocument();
+
+    rerender(
+      <DeviceMobileCard
+        device={{ ...baseDevice, brokerConnected: null }}
+        mode="admin"
+        currentUserId="admin-1"
+        {...handlers}
+      />,
+    );
+
+    const unavailableConnectionRow = screen.getByLabelText(
+      "Conectividad y última conexión",
+    );
+    expect(
+      within(unavailableConnectionRow).getByText("No disponible"),
+    ).toBeInTheDocument();
+    expect(
+      within(unavailableConnectionRow).queryByText("Offline"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps the primary action visible and places admin actions in the accessible menu", async () => {

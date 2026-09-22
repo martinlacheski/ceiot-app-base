@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Building2, Cpu, MapPin, Radio, RadioTower, WifiOff } from "lucide-react";
+import { Building2, Cpu, MapPin, RadioTower, WifiOff } from "lucide-react";
 import { Link } from "react-router";
 
 import { PageHeader } from "@/app/components/PageHeader";
+import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
 import { deviceService } from "@/app/services/device.service";
 import { environmentService } from "@/app/services/environment.service";
 import type { Device } from "@/app/types/device.types";
@@ -102,10 +103,7 @@ function DeviceList({ devices }: { devices: Device[] }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant={device.brokerConnected ? "default" : "secondary"}>
-              {device.brokerConnected ? <Radio className="mr-1 h-3 w-3" /> : <WifiOff className="mr-1 h-3 w-3" />}
-              {device.brokerConnected ? "Online" : "Offline"}
-            </Badge>
+            <DevicePresenceBadge brokerConnected={device.brokerConnected} />
             <Badge variant="outline">{device.enabled ? "Habilitado" : "Deshabilitado"}</Badge>
           </div>
         </li>
@@ -137,8 +135,12 @@ export default function OverviewPage() {
 
   const environments = environmentsQuery.data?.items ?? [];
   const devices = devicesQuery.data?.items ?? [];
-  const onlineDevices = devices.filter((device) => device.brokerConnected).length;
-  const offlineDevices = devices.length - onlineDevices;
+  const onlineDevices = devices.filter(
+    (device) => device.brokerConnected === true,
+  ).length;
+  const offlineDevices = devices.filter(
+    (device) => device.brokerConnected === false,
+  ).length;
 
   return (
     <PageHeader
