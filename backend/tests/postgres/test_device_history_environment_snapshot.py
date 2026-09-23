@@ -1,6 +1,7 @@
 """PostgreSQL regression coverage for write-time device-history ownership."""
 
 import uuid
+from datetime import datetime, timedelta, timezone
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.auth.models import User
+from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.device.device_type.models import DeviceTypeCatalog
 from app.api.device.models import Device, DeviceStatus
 from app.api.device.operations.models import (
@@ -18,6 +20,7 @@ from app.api.device.operations.models import (
     DeviceOperationType,
 )
 from app.api.device.operations.service import DeviceOperationService
+from app.api.device.history.service import DeviceHistoryService
 from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.environment.environment_type.models import EnvironmentType
 from app.api.location.models import LocationCity, LocationCountry, LocationState
@@ -271,3 +274,126 @@ async def test_history_snapshots_environment_and_survives_device_reassignment(
     assert old_reading.id not in new_readings
     assert new_operation.id in new_operations
     assert old_operation.id not in new_operations
+
+
+async def test_history_api_scope_uses_snapshot_not_current_device(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    """A former owner keeps both histories; the new owner cannot inherit either."""
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+        old_reading = await SensorService(SensorRepository(session)).save_reading(
+            device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            temperature_c=18.0,
+        )
+        old_operation = await DeviceOperationService(session).create_operation(
+            operation_type=DeviceOperationType.SENSOR_DATA,
+            device_serial=history_rows.device_serial,
+            status=DeviceOperationStatus.SUCCESS,
+        )
+        await session.execute(text("UPDATE device SET environment_id = :env WHERE id = :id"),
+                              {"env": history_rows.new_environment_id,
+                               "id": history_rows.device_id})
+        await session.commit()
+        new_reading = await SensorService(SensorRepository(session)).save_reading(
+            device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            temperature_c=26.0,
+        )
+        new_operation = await DeviceOperationService(session).create_operation(
+            operation_type=DeviceOperationType.KEEP_ACTIVE,
+            device_serial=history_rows.device_serial,
+            status=DeviceOperationStatus.SUCCESS,
+        )
+    await admin_engine.dispose()
+
+    role_engine = rls_engine_factory(pool_size=1)
+    async def read_as(user_id, *, admin=False):
+        async with AsyncSession(role_engine, expire_on_commit=False) as session:
+            await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                                  {"uid": "system_admin" if admin else str(user_id)})
+            user = User(id=user_id, email=f"{user_id}@example.com", username=str(user_id),
+                        password="unused", is_admin=admin)
+            service = DeviceHistoryService(session)
+            scope = await service.resolve_scope(user)
+            listed = await service.list_devices(user, only_former=False,
+                                                search=history_rows.device_serial)
+            former = (await service.list_devices(user,
+                search=history_rows.device_serial)) if user_id == history_rows.old_owner_id else None
+            filtered = (await service.list_devices(
+                user, only_former=False, search=history_rows.device_serial,
+                owner_id=history_rows.old_owner_id)) if admin else None
+            readings = await service.list_sensor_readings(scope, serial=history_rows.device_serial)
+            operations = await service.list_operations(scope, serial=history_rows.device_serial)
+            return listed, {item.id for item in readings["items"]}, {item.id for item in operations["items"]}, filtered, former
+
+    old_list, old_readings, old_operations, _, former = await read_as(history_rows.old_owner_id)
+    assert any(item["serial"] == history_rows.device_serial and item["is_former"]
+               for item in old_list["items"])
+    assert former is not None and former["total"] == 1
+    assert old_reading.id in old_readings and new_reading.id not in old_readings
+    assert old_operation.id in old_operations and new_operation.id not in old_operations
+
+    _, new_readings, new_operations, _, _ = await read_as(history_rows.new_owner_id)
+    assert new_reading.id in new_readings and old_reading.id not in new_readings
+    assert new_operation.id in new_operations and old_operation.id not in new_operations
+
+    unrelated_list, unrelated_readings, unrelated_operations, _, _ = await read_as(uuid.uuid4())
+    assert not any(item["serial"] == history_rows.device_serial for item in unrelated_list["items"])
+    assert not unrelated_readings and not unrelated_operations
+
+    admin_list, admin_readings, admin_operations, filtered, _ = await read_as(uuid.uuid4(), admin=True)
+    assert {old_reading.id, new_reading.id} <= admin_readings
+    assert {old_operation.id, new_operation.id} <= admin_operations
+    assert any(item["owner_id"] == history_rows.old_owner_id for item in admin_list["items"])
+    assert filtered is not None and filtered["total"] == 1
+    assert filtered["items"][0]["environment_id"] == history_rows.old_environment_id
+
+
+async def test_history_environment_guest_sees_operations_but_not_telemetry(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    suffix = uuid.uuid4().hex
+    guest = User(email=f"history-guest-{suffix}@example.com", username=f"history-guest-{suffix}",
+                 password="unused")
+    relation = ScopedGuestRelation(
+        owner_user_id=history_rows.old_owner_id, guest_user_id=guest.id,
+        scope_type=ScopeType.ENVIRONMENT, scope_id=history_rows.old_environment_id,
+        access_starts_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    try:
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            session.add(guest)
+            await session.flush()
+            session.add(relation)
+            await session.commit()
+            reading = await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+                temperature_c=19.0,
+            )
+            operation = await DeviceOperationService(session).create_operation(
+                operation_type=DeviceOperationType.SENSOR_DATA,
+                device_serial=history_rows.device_serial,
+                status=DeviceOperationStatus.SUCCESS,
+            )
+
+        role_engine = rls_engine_factory(pool_size=1)
+        async with AsyncSession(role_engine, expire_on_commit=False) as session:
+            await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                                  {"uid": str(guest.id)})
+            service = DeviceHistoryService(session)
+            scope = await service.resolve_scope(guest)
+            listed = await service.list_devices(guest, only_former=False,
+                                                search=history_rows.device_serial)
+            operations = await service.list_operations(scope, serial=history_rows.device_serial)
+            readings = await service.list_sensor_readings(scope, serial=history_rows.device_serial)
+            assert any(item["serial"] == history_rows.device_serial for item in listed["items"])
+            assert operation.id in {item.id for item in operations["items"]}
+            assert reading.id not in {item.id for item in readings["items"]}
+    finally:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("DELETE FROM scoped_guest_relation WHERE id = :id"),
+                                     {"id": relation.id})
+            await connection.execute(text('DELETE FROM "user" WHERE id = :id'),
+                                     {"id": guest.id})
+        await admin_engine.dispose()
