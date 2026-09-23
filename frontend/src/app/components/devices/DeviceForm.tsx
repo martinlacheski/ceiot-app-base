@@ -347,7 +347,7 @@ export function DeviceForm({
         </div>
 
         {showTechnicalFields && (
-          <div className="space-y-4 rounded-md border bg-slate-50 p-4">
+          <div className="space-y-4 rounded-md border bg-muted/50 p-4">
             <h3 className="text-sm font-medium text-muted-foreground">
               Datos Técnicos
             </h3>

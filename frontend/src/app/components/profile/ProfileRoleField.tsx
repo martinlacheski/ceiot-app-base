@@ -21,7 +21,7 @@ export function ProfileRoleField({
       >
         <Badge
           variant="secondary"
-          className="border-none bg-slate-200 text-[10px] font-bold uppercase text-slate-700 shadow-none hover:bg-slate-200"
+          className="border-none bg-muted text-[10px] font-bold uppercase text-muted-foreground shadow-none hover:bg-muted"
         >
           {isAdmin ? "Admin" : "Usuario"}
         </Badge>

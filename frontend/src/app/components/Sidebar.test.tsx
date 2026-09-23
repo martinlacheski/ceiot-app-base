@@ -69,7 +69,7 @@ describe("Sidebar", () => {
     expect(document.querySelector('a[href="/admin/settings"]')).toBeNull();
   });
 
-  it("muestra el logo de 64px solo cuando la barra está expandida", () => {
+  it("muestra el logo centrado de 36px solo cuando la barra está expandida", () => {
     vi.mocked(useAuthStore).mockImplementation((selector) => {
       const state = {
         authStatus: "authenticated",
@@ -90,7 +90,8 @@ describe("Sidebar", () => {
     );
 
     const logo = screen.getByRole("img", { name: /monitoreo ambiental iot/i });
-    expect(logo.parentElement).toHaveClass("size-16", "bg-white");
+    expect(logo.parentElement).toHaveClass("size-9");
+    expect(logo.parentElement).not.toHaveClass("bg-white");
 
     rerender(
       <MemoryRouter initialEntries={["/app"]}>

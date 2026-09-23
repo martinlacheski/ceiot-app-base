@@ -34,8 +34,8 @@ const ActivityFeed: React.FC = () => {
   ];
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
+    <div className="bg-card p-6 rounded-xl text-card-foreground shadow-sm border border-border">
+      <h3 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h3>
       <div className="space-y-4">
         {activities.map((activity, index) => {
           const Icon = activity.icon;
@@ -45,13 +45,13 @@ const ActivityFeed: React.FC = () => {
                 <Icon size={16} className="text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-sm font-medium text-foreground">
                   {activity.title}
                 </p>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   {activity.description}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {activity.time}
                 </p>
               </div>

@@ -113,4 +113,32 @@ describe("SidebarHeader", () => {
     expect(screen.queryByText("Usuarios")).not.toBeInTheDocument();
     expect(screen.queryByText("Permisos")).not.toBeInTheDocument();
   });
+
+  it("offers the light/dark theme toggle next to the account menu", () => {
+    vi.mocked(useAuthStore).mockImplementation((selector) => {
+      const state = {
+        user: {
+          fullName: "Usuario Demo",
+          username: "udemo",
+          email: "usuario@example.com",
+        },
+        logout,
+        isAdmin: () => false,
+      };
+
+      return typeof selector === "function"
+        ? selector(state as never)
+        : (state as never);
+    });
+
+    render(
+      <MemoryRouter>
+        <SidebarHeader />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Cambiar a modo/i }),
+    ).toBeInTheDocument();
+  });
 });

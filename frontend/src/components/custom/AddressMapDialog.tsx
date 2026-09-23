@@ -286,8 +286,8 @@ function AddressMapDialogContent({
           </Map>
         </div>
 
-        <div className="mt-4 rounded-lg border bg-slate-50/60 p-4">
-          <div className="hidden items-center gap-2 text-sm font-medium text-slate-700 sm:flex [@media(max-height:740px)]:!hidden">
+        <div className="mt-4 rounded-lg border bg-muted/60 p-4">
+          <div className="hidden items-center gap-2 text-sm font-medium text-foreground sm:flex [@media(max-height:740px)]:!hidden">
             <MapPin className="h-4 w-4" />
             Selección actual
             {isResolving ? <Badge variant="secondary">Resolviendo...</Badge> : null}
@@ -296,7 +296,7 @@ function AddressMapDialogContent({
           <Separator className="my-3 hidden sm:block [@media(max-height:740px)]:!hidden" />
 
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Dirección
               {isResolving ? (
                 <Badge
@@ -307,7 +307,7 @@ function AddressMapDialogContent({
                 </Badge>
               ) : null}
             </p>
-            <p className="text-sm text-slate-900">
+            <p className="text-sm text-foreground">
               {selection.address || "Seleccioná una ubicación válida"}
             </p>
           </div>

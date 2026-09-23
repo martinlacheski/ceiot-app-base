@@ -146,7 +146,7 @@ export function GooglePlaceAutocomplete({
       {isOpen && (
         <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
       )}
-      <div className="flex w-full items-center bg-white rounded-sm shadow-md relative z-50">
+      <div className="flex w-full items-center bg-popover text-popover-foreground rounded-sm shadow-md relative z-50">
         <Input
           placeholder={placeholder}
           className="border-none rounded-none focus-visible:ring-0 h-10 flex-1 shadow-none"
@@ -158,26 +158,26 @@ export function GooglePlaceAutocomplete({
           variant="ghost"
           className="rounded-none h-10 w-10 p-0 hover:bg-transparent"
         >
-          <Search className="h-4 w-4 text-gray-500" />
+          <Search className="h-4 w-4 text-muted-foreground" />
         </Button>
       </div>
 
       {isOpen && predictions.length > 0 && (
-        <ul className="absolute z-50 w-full bg-white mt-1 shadow-lg rounded-sm max-h-60 overflow-auto py-1">
+        <ul className="absolute z-50 w-full bg-popover text-popover-foreground mt-1 shadow-lg rounded-sm max-h-60 overflow-auto py-1">
           {predictions.map((prediction) => (
             <li
               key={prediction.place_id}
-              className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm flex items-center gap-2"
+              className="px-4 py-2 hover:bg-accent cursor-pointer text-sm flex items-center gap-2"
               onClick={() => handlePredictionSelect(prediction)}
             >
-              <div className="w-4 h-4 text-gray-400">
+              <div className="w-4 h-4 text-muted-foreground">
                 <Search className="w-3 h-3" />
               </div>
               <div className="flex flex-col">
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-foreground">
                   {prediction.structured_formatting.main_text}
                 </span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted-foreground">
                   {prediction.structured_formatting.secondary_text}
                 </span>
               </div>

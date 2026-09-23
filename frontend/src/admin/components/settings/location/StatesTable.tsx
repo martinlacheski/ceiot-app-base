@@ -686,7 +686,7 @@ export function StatesTable({
       >
         <AccordionItem value="advance-filters" className="border-none">
           <AccordionContent>
-            <div className="rounded-lg border bg-white p-6 shadow-sm">
+            <div className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Filtros avanzados</h3>
                 {hasActiveFilters && (
@@ -838,7 +838,7 @@ export function StatesTable({
         )}
       </div>
 
-      <div className="hidden rounded-md border bg-white md:block">
+      <div className="hidden rounded-md border bg-card text-card-foreground md:block">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

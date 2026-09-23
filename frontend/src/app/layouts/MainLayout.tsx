@@ -38,7 +38,7 @@ const MainLayout = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white flex">
+    <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
         <Sidebar

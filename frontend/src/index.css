@@ -125,6 +125,21 @@
 }
 
 /*
+ * Chrome/Edge paint autofilled inputs with their own yellow background,
+ * ignoring our CSS background. Use the active theme colors and delay the
+ * browser transition to prevent a yellow flash.
+ */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  box-shadow: 0 0 0px 1000px var(--background) inset !important;
+  -webkit-text-fill-color: var(--foreground) !important;
+  caret-color: var(--foreground);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/*
  * react-remove-scroll-bar (used by Radix Dialog) injects:
  *   body[data-scroll-locked] { position: relative !important }
  * On WebKit/Safari this creates a new containing block for position:fixed elements,

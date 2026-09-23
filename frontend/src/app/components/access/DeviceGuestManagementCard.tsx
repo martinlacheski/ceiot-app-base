@@ -153,13 +153,13 @@ export function DeviceGuestManagementCard({
         {(accessContext?.pendingInvitations ?? []).map((invitation) => {
           const inherited = invitation.scopeType === SCOPE_TYPE.ENVIRONMENT;
           return (
-            <div key={`pending-${invitation.id}`} className="rounded-md border border-amber-200 bg-amber-50 p-3">
+            <div key={`pending-${invitation.id}`} className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
               <p className="font-medium">{invitation.email}</p>
-              <span className="inline-flex rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              <span className="inline-flex rounded-full border border-amber-500/40 bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
                 {inherited ? "Invitación pendiente del establecimiento" : "Pendiente"}
               </span>
-              <p className="text-xs text-amber-700">{formatAccessStartLabel(invitation.accessStartsAt)}</p>
-              {inherited ? <p className="text-xs text-amber-700">Invitación heredada del establecimiento. Gestionála desde el establecimiento.</p> : (
+              <p className="text-xs text-amber-700 dark:text-amber-400">{formatAccessStartLabel(invitation.accessStartsAt)}</p>
+              {inherited ? <p className="text-xs text-amber-700 dark:text-amber-400">Invitación heredada del establecimiento. Gestionála desde el establecimiento.</p> : (
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" size="sm" onClick={() => setEditingInvitation(invitation)} disabled={updateInvitationMutation.isPending}>Editar</Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => showConfirmDialog(`¿Querés revocar la invitación pendiente a ${invitation.email}? Esta invitación dejará de estar disponible y ya no podrá usarse para acceder al dispositivo.`, async () => { await revokeInvitationMutation.mutateAsync(invitation.id); })} disabled={revokeInvitationMutation.isPending}>Revocar</Button>

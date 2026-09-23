@@ -22,7 +22,7 @@ export function CreateIdentificationTypePage() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-white p-6">
+      <div className="rounded-lg border bg-card text-card-foreground p-6">
         <IdentificationTypeForm />
       </div>
     </div>

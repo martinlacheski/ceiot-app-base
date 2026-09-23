@@ -12,8 +12,8 @@ const QuickActions: React.FC = () => {
   ];
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+    <div className="bg-card p-6 rounded-xl text-card-foreground shadow-sm border border-border">
+      <h3 className="text-lg font-semibold text-foreground mb-4">Quick Actions</h3>
       <div className="grid grid-cols-2 gap-3">
         {actions.map((action, index) => {
           const Icon = action.icon;

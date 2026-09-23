@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { LogOut, Menu, User, Lock } from "lucide-react";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { showConfirmDialog } from "@/store/confirm.store";
+import { ThemeToggle } from "@/components/custom/ThemeToggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,35 +32,36 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
   };
 
   return (
-    <header className="bg-gray-50 border-b border-gray-200 px-6 py-2 xl:py-3">
+    <header className="bg-background border-b border-border px-6 py-2 xl:py-3">
       <div className="flex items-center justify-between">
         {/* Hamburger — mobile only */}
         <button
           type="button"
           onClick={onMobileMenuOpen}
-          className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          className="md:hidden p-2 rounded-lg hover:bg-accent transition-colors"
           aria-label="Abrir menú"
         >
-          <Menu className="h-5 w-5 text-gray-600" />
+          <Menu className="h-5 w-5 text-muted-foreground" />
         </button>
 
         {/* Actions */}
-        <div className="flex items-center ml-auto">
+        <div className="flex items-center gap-2 ml-auto">
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 aria-label={`${userDisplayName} ${userSubtitle}`}
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-gray-700 transition-colors hover:bg-gray-100 outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-left text-foreground transition-colors hover:bg-accent outline-none focus:ring-2 focus:ring-ring"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-200 text-sm font-semibold text-gray-700">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-muted-foreground">
                   {userInitials}
                 </span>
                 <span className="flex flex-col leading-tight">
-                  <span className="text-sm font-semibold text-gray-900">
+                  <span className="text-sm font-semibold text-foreground">
                     {userDisplayName}
                   </span>
-                  <span className="text-xs text-gray-500">{userSubtitle}</span>
+                  <span className="text-xs text-muted-foreground">{userSubtitle}</span>
                 </span>
               </button>
             </DropdownMenuTrigger>

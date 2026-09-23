@@ -21,15 +21,15 @@ const StatCard: React.FC<StatCardProps> = ({
   const changeColor = {
     positive: 'text-green-600 bg-green-50',
     negative: 'text-red-600 bg-red-50',
-    neutral: 'text-gray-600 bg-gray-50',
+    neutral: 'text-muted-foreground bg-muted',
   }[changeType];
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+    <div className="bg-card p-6 rounded-xl text-card-foreground shadow-sm border border-border hover:shadow-md transition-shadow">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
+          <p className="text-sm font-medium text-muted-foreground mb-1">{title}</p>
+          <p className="text-3xl font-bold text-foreground">{value}</p>
           <div
             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-2 ${changeColor}`}
           >

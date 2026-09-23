@@ -100,7 +100,8 @@ describe("LoginPage", () => {
     expect(screen.getByText("O ingresa con")).toBeInTheDocument();
     expect(providerGet).not.toHaveBeenCalled();
     const logo = screen.getByRole("img", { name: /monitoreo ambiental iot/i });
-    expect(logo.parentElement).toHaveClass("size-24", "bg-white");
+    expect(logo.parentElement).toHaveClass("size-24");
+    expect(logo.parentElement).not.toHaveClass("bg-white");
     expect(screen.getByRole("link", { name: /Volver al inicio/i })).toHaveAttribute("href", LANDING_URL);
   });
 

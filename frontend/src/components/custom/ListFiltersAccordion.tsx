@@ -62,7 +62,7 @@ export function ListFiltersPanel({
     >
       <AccordionItem value={FILTERS_ITEM} className="border-none">
         <AccordionContent>
-          <div className="rounded-lg border bg-white p-6 shadow-sm">
+          <div className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-lg font-semibold">Filtros avanzados</h3>
               {hasActiveFilters ? (

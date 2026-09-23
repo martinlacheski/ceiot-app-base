@@ -52,7 +52,7 @@ export const ConfirmDialog = () => {
               <AlertDialogTitle className="text-base">
                 {title}
               </AlertDialogTitle>
-              <AlertDialogDescription className="text-center text-sm py-2 text-slate-800 dark:text-slate-200">
+              <AlertDialogDescription className="text-center text-sm py-2 text-foreground">
                 {message}
               </AlertDialogDescription>
             </AlertDialogHeader>

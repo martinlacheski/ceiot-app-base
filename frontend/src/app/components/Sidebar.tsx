@@ -183,8 +183,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => toggleExpand(item.label)}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 group ${
                 isChildActive || isExpanded
-                  ? "bg-gray-100 text-gray-900"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               }`}
               style={level > 0 ? { paddingLeft: `${paddingLeft}px` } : {}}
             >
@@ -225,8 +225,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClick={onNavigate}
           className={`flex items-center space-x-3 px-3 py-2 rounded-lg transition-all duration-200 group ${
             isActiveRoute(item.to)
-              ? "bg-gray-100 text-gray-900 border-r-2 border-primary"
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground border-r-2 border-primary"
+              : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
           }`}
           style={level > 0 ? { paddingLeft: `${paddingLeft}px` } : {}}
         >
@@ -242,25 +242,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
-      className={`bg-gray-50 border-r border-gray-200 transition-all duration-300 ease-in-out  ${
+      className={`bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-in-out  ${
         isCollapsed ? "w-20" : "w-72"
       } flex flex-col`}
     >
       {/* Header */}
-      <div className="px-4 py-3 xl:py-4 flex items-center justify-between">
-        {!isCollapsed && <Logo size="default" />}
-        {!isMobile && (
-          <button
-            onClick={onToggle}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-          >
-            {isCollapsed ? (
-              <ChevronRight size={20} />
-            ) : (
-              <ChevronLeft size={20} />
-            )}
-          </button>
-        )}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-3 xl:py-4">
+        <div />
+        {!isCollapsed && <Logo size="small" />}
+        <div className="flex justify-end">
+          {!isMobile && (
+            <button
+              onClick={onToggle}
+              className="rounded-lg p-2 transition-colors hover:bg-sidebar-accent"
+            >
+              {isCollapsed ? (
+                <ChevronRight size={20} />
+              ) : (
+                <ChevronLeft size={20} />
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Navigation */}
@@ -273,21 +276,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* User Profile */}
       {!isCollapsed && (
         <div className="p-2">
-          <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-            <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-700 font-semibold text-sm">
+          <div className="flex items-center space-x-3 p-2 rounded-lg hover:bg-sidebar-accent transition-colors cursor-pointer">
+            <div className="w-8 h-8 bg-sidebar-accent rounded-full flex items-center justify-center text-sidebar-accent-foreground font-semibold text-sm">
               {(user?.fullName || user?.username || "")
                 .substring(0, 2)
                 .toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
+              <p className="text-sm font-medium text-sidebar-foreground truncate">
                 {user?.fullName || user?.username}
               </p>
-              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+              <p className="text-xs text-sidebar-foreground/70 truncate">{user?.email}</p>
             </div>
             <button
               onClick={handleLogout}
-              className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="p-1.5 text-sidebar-foreground/70 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               title="Cerrar sesión"
             >
               <LogOut size={16} />

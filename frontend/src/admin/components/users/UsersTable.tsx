@@ -714,7 +714,7 @@ export function UsersTable({ actions }: UsersTableProps) {
           <AccordionItem value="advance-filters" className="border-none">
             <AccordionContent>
               <div
-                className="rounded-lg border bg-white p-6 shadow-sm"
+                className="rounded-lg border bg-card p-6 text-card-foreground shadow-sm"
                 data-testid="users-filter-panel"
               >
                 <div className="mb-4 flex items-center justify-between">

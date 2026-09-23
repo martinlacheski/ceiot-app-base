@@ -163,7 +163,7 @@ export default function InvitationAcceptPage() {
                   ? "bg-green-100 text-green-600"
                   : invitationStatus === "declined" || invitationStatus === "rechazada"
                   ? "bg-red-100 text-red-600"
-                  : "bg-gray-100 text-gray-600"
+                  : "bg-muted text-muted-foreground"
               }`}
             >
               {(invitationStatus === "accepted" || invitationStatus === "aceptada") && (
@@ -198,7 +198,7 @@ export default function InvitationAcceptPage() {
 
   if (authStatus !== "authenticated") {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-gray-50/50 p-4">
+      <div className="flex min-h-screen w-full items-center justify-center bg-muted/50 p-4">
         <Card className="w-full max-w-lg shadow-xl border-border/40">
           <CardHeader className="flex flex-col items-center gap-6 pb-2 pt-10">
             <div className="scale-125">
@@ -243,7 +243,7 @@ export default function InvitationAcceptPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-gray-50/50 p-4">
+    <div className="flex min-h-screen w-full items-center justify-center bg-muted/50 p-4">
       <Card className="w-full max-w-lg shadow-xl border-border/40">
         <CardHeader className="flex flex-col items-center gap-6 pb-2 pt-10">
           <div className="scale-125">

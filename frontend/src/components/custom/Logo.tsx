@@ -19,15 +19,50 @@ export const Logo = ({ size = "default", className }: Props) => {
     large: "size-24",
   }[size];
   const logoContent = (
-    <span className={cn("inline-flex shrink-0 items-center justify-center rounded-xl border border-black/10 bg-white p-1.5", sizeClassName)}>
-      <img src="/iot.png" alt="Monitoreo Ambiental IoT" width={512} height={511} className="h-full w-full object-contain" />
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center",
+        sizeClassName,
+      )}
+    >
+      <img
+        src="/icon-light-512.png"
+        alt="Monitoreo Ambiental IoT"
+        width={512}
+        height={512}
+        className="h-full w-full object-contain dark:hidden"
+      />
+      <img
+        src="/icon-dark-512.png"
+        alt=""
+        aria-hidden="true"
+        width={512}
+        height={512}
+        className="hidden h-full w-full object-contain dark:block"
+      />
     </span>
   );
   const linkClassName = cn("flex items-center whitespace-nowrap", className);
 
   if (!isAuthenticated) {
-    return <a href={LANDING_URL} className={linkClassName}>{logoContent}</a>;
+    return (
+      <a
+        href={LANDING_URL}
+        className={linkClassName}
+        aria-label="Monitoreo Ambiental IoT"
+      >
+        {logoContent}
+      </a>
+    );
   }
 
-  return <Link to="/app" className={linkClassName}>{logoContent}</Link>;
+  return (
+    <Link
+      to="/app"
+      className={linkClassName}
+      aria-label="Monitoreo Ambiental IoT"
+    >
+      {logoContent}
+    </Link>
+  );
 };
