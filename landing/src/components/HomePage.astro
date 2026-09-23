@@ -1,6 +1,7 @@
 ---
 import { APP_LOGIN_URL, CONTACT_ENDPOINT, WHATSAPP_NUMBER } from "../config/publicUrls";
 import type { LandingContent } from "../i18n/content";
+import BrandIcon from "./BrandIcon.astro";
 import ContactForm from "./ContactForm.astro";
 import Footer from "./Footer.astro";
 import Navbar from "./Navbar.astro";
@@ -35,9 +36,7 @@ const { content } = Astro.props;
             )}
           </div>
         </div>
-        <div class="mx-auto flex aspect-square w-full max-w-md items-center justify-center rounded-[2.5rem] border border-border bg-white p-10 shadow-xl shadow-black/5">
-          <img src="/iot.png" width="512" height="511" alt={content.hero.iconAlt} class="h-full w-full object-contain" loading="eager" fetchpriority="high" />
-        </div>
+        <BrandIcon class="mx-auto aspect-square w-full max-w-md" alt={content.hero.iconAlt} eager />
       </div>
     </div>
   </section>

@@ -5,6 +5,7 @@ interface SeoAssetLink {
   href: string;
   type?: string;
   sizes?: string;
+  media?: string;
 }
 
 const SOCIAL_PREVIEW_IMAGE_BY_LOCALE: Record<Locale, string> = {
@@ -16,6 +17,8 @@ const SOCIAL_PREVIEW_IMAGE_BY_LOCALE: Record<Locale, string> = {
 export function buildSeoAssetLinks(): SeoAssetLink[] {
   return [
     { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png" },
+    { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-32.png", media: "(prefers-color-scheme: light)" },
+    { rel: "icon", type: "image/png", sizes: "32x32", href: "/favicon-dark-32.png", media: "(prefers-color-scheme: dark)" },
     { rel: "apple-touch-icon", sizes: "180x180", href: "/apple-touch-icon.png" },
     { rel: "manifest", href: "/site.webmanifest" },
   ];
@@ -26,5 +29,5 @@ export function getSocialPreviewImage(locale: Locale): string {
 }
 
 export function getBrandLogoImage(): string {
-  return "/iot.png";
+  return "/icon-512.png";
 }

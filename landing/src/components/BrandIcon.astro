@@ -1,0 +1,63 @@
+---
+interface Props {
+  alt?: string;
+  class?: string;
+  eager?: boolean;
+}
+
+const { alt = "", class: className, eager = false } = Astro.props;
+---
+
+<span class:list={["brand-icon", className]} role={alt ? "img" : undefined} aria-label={alt || undefined}>
+  <img
+    src="/icon-light-512.png"
+    width="512"
+    height="512"
+    alt=""
+    aria-hidden="true"
+    class="brand-icon__image brand-icon__image--light"
+    loading={eager ? "eager" : "lazy"}
+    fetchpriority={eager ? "high" : undefined}
+    data-brand-icon="light"
+  />
+  <img
+    src="/icon-dark-512.png"
+    width="512"
+    height="512"
+    alt=""
+    aria-hidden="true"
+    class="brand-icon__image brand-icon__image--dark"
+    loading={eager ? "eager" : "lazy"}
+    fetchpriority={eager ? "high" : undefined}
+    data-brand-icon="dark"
+  />
+</span>
+
+<style>
+  .brand-icon {
+    position: relative;
+    display: block;
+  }
+
+  .brand-icon__image {
+    height: 100%;
+    width: 100%;
+    object-fit: contain;
+  }
+
+  .brand-icon__image--dark {
+    position: absolute;
+    inset: 0;
+    display: none;
+  }
+
+  :global(html.dark) .brand-icon__image--light,
+  :global(html[data-theme="dark"]) .brand-icon__image--light {
+    display: none;
+  }
+
+  :global(html.dark) .brand-icon__image--dark,
+  :global(html[data-theme="dark"]) .brand-icon__image--dark {
+    display: block;
+  }
+</style>

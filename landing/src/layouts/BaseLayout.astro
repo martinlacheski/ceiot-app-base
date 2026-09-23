@@ -70,7 +70,7 @@ const scrollFadeInScript = `(() => {
     <meta name="twitter:title" content={pageTitle} />
     <meta name="twitter:description" content={pageDescription} />
     {socialImage && <meta name="twitter:image" content={socialImage} />}
-    {buildSeoAssetLinks().map((link) => <link rel={link.rel} type={link.type} sizes={link.sizes} href={link.href} />)}
+    {buildSeoAssetLinks().map((link) => <link rel={link.rel} type={link.type} sizes={link.sizes} media={link.media} href={link.href} />)}
     {jsonLdGraph.map((node) => <script type="application/ld+json" set:html={JSON.stringify(node)} />)}
     <script is:inline set:html={themeInitScript}></script>
   </head>

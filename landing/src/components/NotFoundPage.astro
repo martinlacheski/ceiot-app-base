@@ -1,6 +1,7 @@
 ---
 import type { LandingContent } from "../i18n/content";
 import type { NotFoundContent } from "../i18n/notFound";
+import BrandIcon from "./BrandIcon.astro";
 import Footer from "./Footer.astro";
 import Navbar from "./Navbar.astro";
 
@@ -18,9 +19,7 @@ const { content, notFound } = Astro.props;
           <p class="section-copy">{notFound.copy}</p>
           <a class="rounded-full bg-primary px-6 py-3 font-semibold text-primary-foreground" href={content.path}>{notFound.primaryCta}</a>
         </div>
-        <div class="mx-auto flex aspect-square w-full max-w-sm items-center justify-center rounded-[2rem] border border-border bg-white p-10">
-          <img src="/iot.png" width="512" height="511" alt={notFound.imageAlt} class="h-full w-full object-contain" />
-        </div>
+        <BrandIcon class="mx-auto aspect-square w-full max-w-sm" alt={notFound.imageAlt} />
       </div>
     </div>
   </section>

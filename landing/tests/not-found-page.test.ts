@@ -20,8 +20,9 @@ describe("localized 404 pages", () => {
       expect(html).toContain(`<html lang="${page.lang}">`);
       expect(html).toContain(`<title>${page.title}</title>`);
       expect(html).toContain('<meta name="robots" content="noindex, follow">');
-      expect(html.match(/src="\/iot\.png"[^>]*width="512"[^>]*height="511"/g)).toHaveLength(3);
-      expect(html).not.toMatch(/src="\/iot\.png"[^>]*height="512"/);
+      expect(html.match(/src="\/icon-light-512\.png"[^>]*width="512"[^>]*height="512"/g)).toHaveLength(3);
+      expect(html.match(/src="\/icon-dark-512\.png"[^>]*width="512"[^>]*height="512"/g)).toHaveLength(3);
+      expect(html).not.toMatch(/\/iot[.]png/);
       expect(html).toContain(`href="${page.home}"`);
       expect(html).not.toContain('href="#contact"');
       expect(html).not.toMatch(/DVEM|contacto|whatsapp|404_.*\.webp/i);

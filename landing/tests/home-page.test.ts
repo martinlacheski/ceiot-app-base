@@ -32,9 +32,11 @@ describe("HomePage", () => {
       const html = await renderHome(locale);
 
       expect(html).toContain(content.hero.heading);
-      expect(html).toContain('src="/iot.png"');
-      expect(html.match(/src="\/iot\.png"[^>]*width="512"[^>]*height="511"/g)).toHaveLength(3);
-      expect(html).not.toMatch(/src="\/iot\.png"[^>]*height="512"/);
+      expect(html.match(/src="\/icon-light-512\.png"[^>]*width="512"[^>]*height="512"/g)).toHaveLength(3);
+      expect(html.match(/src="\/icon-dark-512\.png"[^>]*width="512"[^>]*height="512"/g)).toHaveLength(3);
+      expect(html).toContain('data-brand-icon="light"');
+      expect(html).toContain('data-brand-icon="dark"');
+      expect(html).not.toMatch(/\/iot[.]png/);
       expect(html).toContain('id="variables"');
       expect(html).toContain('id="contact"');
       expect(html).toContain('href="#contact"');

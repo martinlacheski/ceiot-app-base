@@ -30,9 +30,14 @@ describe("rendered generic landing metadata", () => {
   it("references the generated icon and manifest assets", async () => {
     const html = await (await AstroContainer.create()).renderToString(EsHomePage);
     expect(html).toContain('href="/favicon-32.png"');
+    expect(html).toContain('href="/favicon-dark-32.png"');
+    expect(html).toContain('media="(prefers-color-scheme: light)"');
+    expect(html).toContain('media="(prefers-color-scheme: dark)"');
     expect(html).toContain('href="/apple-touch-icon.png"');
     expect(html).toContain('href="/site.webmanifest"');
-    expect(html).toContain('src="/iot.png"');
+    expect(html).toContain('src="/icon-light-512.png"');
+    expect(html).toContain('src="/icon-dark-512.png"');
+    expect(html).not.toMatch(/\/iot[.]png/);
     expect(html).not.toContain('/favicon.svg');
   });
 });

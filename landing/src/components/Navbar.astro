@@ -1,6 +1,7 @@
 ---
 import { APP_LOGIN_URL } from "../config/publicUrls";
 import type { LandingContent } from "../i18n/content";
+import BrandIcon from "./BrandIcon.astro";
 import ThemeToggle from "./ThemeToggle.astro";
 
 interface Props {
@@ -16,9 +17,7 @@ const navLinks = showContact
 <header class="sticky top-0 z-20 border-b border-border/80 bg-background/90 backdrop-blur">
   <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-2.5 xl:px-8">
     <a class="inline-flex min-w-0 items-center gap-3" href={content.path} aria-label={content.hero.heading}>
-      <span class="flex size-10 shrink-0 items-center justify-center rounded-xl border border-border bg-white p-1.5">
-        <img src="/iot.png" alt="" width="512" height="511" class="h-full w-full object-contain" />
-      </span>
+      <BrandIcon class="size-10 shrink-0" />
       <span class="hidden text-sm font-semibold sm:block">{content.nav.tagline}</span>
     </a>
     <nav class="hidden items-center gap-5 lg:flex">
