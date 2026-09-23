@@ -6,10 +6,6 @@ const projectDir = process.cwd();
 const publicDir = join(projectDir, "public");
 
 const removedPaths = [
-  "src/pages/privacidad.astro",
-  "src/components/PrivacyPolicyPage.astro",
-  "src/components/GoogleMapIsland.tsx",
-  "src/components/MapSection.astro",
   "src/components/ContactSection.astro",
   "src/components/ClientsSection.astro",
   "src/components/DeviceSpinViewer.astro",

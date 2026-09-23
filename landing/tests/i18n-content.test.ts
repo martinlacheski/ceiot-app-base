@@ -17,6 +17,7 @@ describe("generic environmental landing content", () => {
         contactHeading: "Contactanos",
         contactSubmit: "Enviar mensaje",
         contactSuccess: "Recibimos tu mensaje.",
+        mapLabel: "Mapa",
       },
       {
         locale: LOCALES.EN,
@@ -30,6 +31,7 @@ describe("generic environmental landing content", () => {
         contactHeading: "Contact us",
         contactSubmit: "Send message",
         contactSuccess: "We received your message.",
+        mapLabel: "Map",
       },
       {
         locale: LOCALES.PT_BR,
@@ -43,6 +45,7 @@ describe("generic environmental landing content", () => {
         contactHeading: "Entre em contato",
         contactSubmit: "Enviar mensagem",
         contactSuccess: "Recebemos sua mensagem.",
+        mapLabel: "Mapa",
       },
     ];
 
@@ -55,6 +58,9 @@ describe("generic environmental landing content", () => {
       expect(content.hero.appCta).toBe(expected.cta);
       expect(content.nav.contactLabel).toBe(expected.navContact);
       expect(content.nav.links).not.toContainEqual({ href: "#contact", label: expected.navContact });
+      expect(content.nav.links).toContainEqual({ href: "#mapa", label: expected.mapLabel });
+      expect(content.map.missingApiKey).toBeTruthy();
+      expect(content.map.activeDeviceCount).toContain("{count}");
       expect(content).toHaveProperty("whatsapp");
       expect((content as typeof content & { whatsapp: { message: string; label: string } }).whatsapp).toEqual({
         message: expected.whatsappMessage,

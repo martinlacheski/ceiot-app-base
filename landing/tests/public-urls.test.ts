@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import * as publicUrls from "../src/config/publicUrls";
 
 const { resolveContactEndpoint, resolveOptionalPublicUrl, resolvePublicUrl } = publicUrls;
+const {
+  DEFAULT_PUBLIC_API_BASE_URL,
+  DEFAULT_PUBLIC_MAP_LOCATIONS_URL,
+  resolvePublicApiPath,
+  resolvePublicMapLocationsUrl,
+} = publicUrls as typeof publicUrls & {
+  DEFAULT_PUBLIC_API_BASE_URL: string;
+  DEFAULT_PUBLIC_MAP_LOCATIONS_URL: string;
+  resolvePublicApiPath: (baseUrl: string, path: string) => string;
+  resolvePublicMapLocationsUrl: (value: string | undefined, apiBaseUrl?: string) => string;
+};
 const resolveWhatsAppNumber = (publicUrls as typeof publicUrls & {
   resolveWhatsAppNumber: (value: string | undefined) => string | undefined;
 }).resolveWhatsAppNumber;
@@ -53,6 +64,30 @@ describe("landing public urls", () => {
     expect(resolveWhatsAppNumber(" 5491112345678 ")).toBe("5491112345678");
     expect(resolveWhatsAppNumber("12345678")).toBe("12345678");
     expect(resolveWhatsAppNumber("123456789012345")).toBe("123456789012345");
+  });
+
+  it("derives the live map endpoint from the public API base", () => {
+    expect(resolvePublicMapLocationsUrl(undefined, "https://api.example.test/api")).toBe(
+      "https://api.example.test/api/public/map/locations",
+    );
+    expect(resolvePublicMapLocationsUrl("   ", "https://api.example.test/api/")).toBe(
+      "https://api.example.test/api/public/map/locations",
+    );
+    expect(resolvePublicMapLocationsUrl(undefined)).toBe("/api/public/map/locations");
+    expect(DEFAULT_PUBLIC_API_BASE_URL).toBe("/api");
+  });
+
+  it("uses an explicit map override and keeps the static JSON as fallback", () => {
+    expect(
+      resolvePublicMapLocationsUrl(" /map-locations.json ", "https://api.example.test/api"),
+    ).toBe("/map-locations.json");
+    expect(DEFAULT_PUBLIC_MAP_LOCATIONS_URL).toBe("/map-locations.json");
+  });
+
+  it("joins public API paths without duplicate slashes", () => {
+    expect(resolvePublicApiPath("/api/", "/public/map/locations")).toBe(
+      "/api/public/map/locations",
+    );
   });
 
   it.each([

@@ -35,6 +35,18 @@ export interface ContactContent {
   noScript: string;
 }
 
+export interface MapContent {
+  eyebrow: string;
+  heading: string;
+  description: string;
+  missingApiKey: string;
+  activeDeviceCountSingular: string;
+  activeDeviceCount: string;
+  closeLabel: string;
+  language: string;
+  region: string;
+}
+
 export interface LandingContent {
   locale: Locale;
   lang: "es" | "pt-BR" | "en";
@@ -62,6 +74,7 @@ export interface LandingContent {
   variables: { eyebrow: string; heading: string; description: string };
   metrics: Metric[];
   foundation: { eyebrow: string; heading: string; description: string; principles: Principle[] };
+  map: MapContent;
   contact: ContactContent;
   whatsapp: { message: string; label: string };
   footer: { tagline: string; legalLine: string; links: LocaleLink[] };
@@ -84,7 +97,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image.png",
     },
     nav: {
-      links: [{ href: "#hero", label: "Inicio" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "La base" }],
+      links: [{ href: "#hero", label: "Inicio" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "La base" }, { href: "#mapa", label: "Mapa" }],
       contactLabel: "Contacto",
       tagline: "Monitoreo Ambiental IoT",
       localeLabel: "Idioma",
@@ -122,6 +135,17 @@ const CONTENT: Record<Locale, LandingContent> = {
         { title: "Comunicación honesta", description: "Diferenciá siempre una demostración de una implementación operativa." },
       ],
     },
+    map: {
+      eyebrow: "Mapa",
+      heading: "Establecimientos monitoreados",
+      description: "Consultá las ubicaciones públicas de establecimientos que cuentan con dispositivos ambientales activos.",
+      missingApiKey: "El mapa no está disponible porque falta configurar la clave del servicio de mapas.",
+      activeDeviceCountSingular: "{count} dispositivo activo",
+      activeDeviceCount: "{count} dispositivos activos",
+      closeLabel: "Cerrar información",
+      language: "es",
+      region: "AR",
+    },
     contact: {
       eyebrow: "Contacto",
       heading: "Contactanos",
@@ -148,7 +172,11 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Hola, quiero consultar sobre el sistema de monitoreo ambiental IoT.",
       label: "Consultar por WhatsApp",
     },
-    footer: { tagline: "Monitoreo Ambiental IoT", legalLine: "Monitoreo Ambiental IoT · Todos los derechos reservados.", links: locales },
+    footer: {
+      tagline: "Monitoreo Ambiental IoT",
+      legalLine: "Monitoreo Ambiental IoT · Todos los derechos reservados.",
+      links: [...locales, { href: "/privacidad/", label: "Privacidad" }],
+    },
   },
   "pt-br": {
     locale: LOCALES.PT_BR,
@@ -160,7 +188,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image-pt.png",
     },
     nav: {
-      links: [{ href: "#hero", label: "Início" }, { href: "#variables", label: "Variáveis" }, { href: "#base", label: "A base" }],
+      links: [{ href: "#hero", label: "Início" }, { href: "#variables", label: "Variáveis" }, { href: "#base", label: "A base" }, { href: "#mapa", label: "Mapa" }],
       contactLabel: "Contato",
       tagline: "Monitoramento Ambiental IoT",
       localeLabel: "Idioma",
@@ -192,6 +220,17 @@ const CONTENT: Record<Locale, LandingContent> = {
         { title: "Comunicação honesta", description: "Diferencie sempre uma demonstração de uma implementação operacional." },
       ],
     },
+    map: {
+      eyebrow: "Mapa",
+      heading: "Estabelecimentos monitorados",
+      description: "Consulte as localizações públicas de estabelecimentos que possuem dispositivos ambientais ativos.",
+      missingApiKey: "O mapa não está disponível porque falta configurar a chave do serviço de mapas.",
+      activeDeviceCountSingular: "{count} dispositivo ativo",
+      activeDeviceCount: "{count} dispositivos ativos",
+      closeLabel: "Fechar informações",
+      language: "pt-BR",
+      region: "BR",
+    },
     contact: {
       eyebrow: "Contato",
       heading: "Entre em contato",
@@ -218,7 +257,11 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Olá, gostaria de saber mais sobre o sistema de monitoramento ambiental IoT.",
       label: "Falar pelo WhatsApp",
     },
-    footer: { tagline: "Monitoramento Ambiental IoT", legalLine: "Monitoramento Ambiental IoT · Todos os direitos reservados.", links: locales },
+    footer: {
+      tagline: "Monitoramento Ambiental IoT",
+      legalLine: "Monitoramento Ambiental IoT · Todos os direitos reservados.",
+      links: [...locales, { href: "/privacidad/", label: "Privacidade" }],
+    },
   },
   en: {
     locale: LOCALES.EN,
@@ -230,7 +273,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image-en.png",
     },
     nav: {
-      links: [{ href: "#hero", label: "Home" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "Foundation" }],
+      links: [{ href: "#hero", label: "Home" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "Foundation" }, { href: "#mapa", label: "Map" }],
       contactLabel: "Contact",
       tagline: "IoT Environmental Monitoring",
       localeLabel: "Language",
@@ -262,6 +305,17 @@ const CONTENT: Record<Locale, LandingContent> = {
         { title: "Honest communication", description: "Always distinguish a demonstration from an operational implementation." },
       ],
     },
+    map: {
+      eyebrow: "Map",
+      heading: "Monitored establishments",
+      description: "Explore the public locations of establishments with active environmental devices.",
+      missingApiKey: "The map is unavailable because the map service key has not been configured.",
+      activeDeviceCountSingular: "{count} active device",
+      activeDeviceCount: "{count} active devices",
+      closeLabel: "Close information",
+      language: "en",
+      region: "US",
+    },
     contact: {
       eyebrow: "Contact",
       heading: "Contact us",
@@ -288,7 +342,11 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Hello, I would like to ask about the IoT environmental monitoring system.",
       label: "Ask on WhatsApp",
     },
-    footer: { tagline: "IoT Environmental Monitoring", legalLine: "IoT Environmental Monitoring · All rights reserved.", links: locales },
+    footer: {
+      tagline: "IoT Environmental Monitoring",
+      legalLine: "IoT Environmental Monitoring · All rights reserved.",
+      links: [...locales, { href: "/privacidad/", label: "Privacy" }],
+    },
   },
 };
 

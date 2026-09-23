@@ -1,0 +1,20 @@
+---
+import PrivacyPolicyPage from "../components/PrivacyPolicyPage.astro";
+import { getLandingContent, LOCALES } from "../i18n/content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const content = getLandingContent(LOCALES.ES);
+---
+
+<BaseLayout
+  content={content}
+  metadata={{
+    title: "Política de Privacidad | Monitoreo Ambiental IoT",
+    description: "Cómo Monitoreo Ambiental IoT trata los datos personales y técnicos de sus usuarios.",
+    canonicalPath: "/privacidad/",
+    includeAlternates: false,
+    includeJsonLd: false,
+  }}
+>
+  <PrivacyPolicyPage content={content} />
+</BaseLayout>

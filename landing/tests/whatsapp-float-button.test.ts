@@ -1,5 +1,4 @@
 // @ts-nocheck -- Astro's test-only virtual module types are resolved by Vitest.
-import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import WhatsAppFloatButton from "../src/components/WhatsAppFloatButton.astro";
@@ -7,6 +6,7 @@ import EsNotFoundPage from "../src/pages/404.astro";
 import EnNotFoundPage from "../src/pages/en/404.astro";
 import PtBrNotFoundPage from "../src/pages/pt-br/404.astro";
 import { getLandingContent, landingLocales } from "../src/i18n/content";
+import { createAstroContainer } from "./astro-container";
 
 const SYNTHETIC_NUMBER = "5491112345678";
 
@@ -25,7 +25,7 @@ async function renderHomePageWithNumber(number: string | undefined, localeIndex 
     import("../src/components/HomePage.astro"),
     import("../src/i18n/content"),
   ]);
-  const container = await AstroContainer.create();
+  const container = await createAstroContainer();
   return container.renderToString(HomePage, { props: { content: getContent(locales[localeIndex]) } });
 }
 
@@ -37,7 +37,7 @@ afterEach(() => {
 describe("WhatsApp floating contact", () => {
   it("renders the historical floating appearance and an accessible safe external link", async () => {
     const content = getLandingContent(landingLocales[0]);
-    const container = await AstroContainer.create();
+    const container = await createAstroContainer();
     const html = await container.renderToString(WhatsAppFloatButton, {
       props: {
         number: SYNTHETIC_NUMBER,
@@ -67,7 +67,7 @@ describe("WhatsApp floating contact", () => {
     "renders nothing for absent or invalid number %s",
     async (number) => {
       const content = getLandingContent(landingLocales[0]);
-      const container = await AstroContainer.create();
+      const container = await createAstroContainer();
       const html = await container.renderToString(WhatsAppFloatButton, {
         props: { number, message: content.whatsapp.message, label: content.whatsapp.label },
       });
@@ -91,7 +91,7 @@ describe("WhatsApp floating contact", () => {
   });
 
   it("does not render the contact button on localized 404 pages", async () => {
-    const container = await AstroContainer.create();
+    const container = await createAstroContainer();
     for (const page of [EsNotFoundPage, EnNotFoundPage, PtBrNotFoundPage]) {
       const html = await container.renderToString(page);
       expect(html).not.toContain("wa.me");

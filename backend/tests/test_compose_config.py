@@ -246,6 +246,15 @@ class ComposeConfigTest(unittest.TestCase):
             {"/opt/emqx/data", "/opt/emqx/log", "/opt/emqx/certs"},
         )
 
+    def test_map_locations_override_is_optional_so_the_landing_uses_the_api(self):
+        landing_env = self.project / "landing" / ".env"
+        landing_env.write_text(
+            DUMMY_ENV["landing"].replace("PUBLIC_MAP_LOCATIONS_URL=/map-locations.json\n", ""),
+            encoding="utf-8",
+        )
+        landing_args = self.render_config()["services"]["landing"]["build"]["args"]
+        self.assertEqual(landing_args["PUBLIC_MAP_LOCATIONS_URL"], "")
+
     def test_missing_required_build_url_fails_without_reading_real_env(self):
         frontend_env = self.project / "frontend" / ".env"
         frontend_env.write_text(

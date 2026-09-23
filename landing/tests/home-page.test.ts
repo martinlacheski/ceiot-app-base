@@ -1,8 +1,8 @@
 // @ts-nocheck -- Astro's test-only virtual module types are resolved by Vitest.
-import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getLandingContent, landingLocales, LOCALES } from "../src/i18n/content";
+import { createAstroContainer } from "./astro-container";
 
 const SYNTHETIC_ENDPOINT = "https://api.example.test/custom/public/contact";
 const SYNTHETIC_NUMBER = "5491112345678";
@@ -16,7 +16,7 @@ async function renderHome(locale = LOCALES.ES): Promise<string> {
     WHATSAPP_NUMBER: SYNTHETIC_NUMBER,
   }));
   const { default: HomePage } = await import("../src/components/HomePage.astro");
-  const container = await AstroContainer.create();
+  const container = await createAstroContainer();
   return container.renderToString(HomePage, { props: { content: getLandingContent(locale) } });
 }
 
@@ -38,14 +38,16 @@ describe("HomePage", () => {
       expect(html).toContain('data-brand-icon="dark"');
       expect(html).not.toMatch(/\/iot[.]png/);
       expect(html).toContain('id="variables"');
+      expect(html).toContain('id="mapa"');
       expect(html).toContain('id="contact"');
+      expect(html.indexOf('id="mapa"')).toBeLessThan(html.indexOf('id="contact"'));
       expect(html).toContain('href="#contact"');
       expect(html.indexOf('href="#contact"')).toBeLessThan(html.indexOf('id="contact"'));
       expect(html).toContain('data-contact-form');
       expect(html).toContain("°C");
       expect(html).toContain("hPa");
       expect(html).toContain("data-theme-toggle");
-      expect(html).not.toMatch(/DVEM|Matemetal|Mercado Pago|dvem_logo|device-viewer|google maps/i);
+      expect(html).not.toMatch(/DVEM|Matemetal|Mercado Pago|dvem_logo|device-viewer/i);
     }
   });
 

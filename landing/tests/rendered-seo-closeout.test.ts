@@ -1,10 +1,10 @@
 // @ts-nocheck -- Astro's test-only virtual module types are resolved by Vitest.
-import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { describe, expect, it } from "vitest";
 
 import EsHomePage from "../src/pages/index.astro";
 import EnHomePage from "../src/pages/en/index.astro";
 import PtBrHomePage from "../src/pages/pt-br/index.astro";
+import { createAstroContainer } from "./astro-container";
 
 const pages = [
   { component: EsHomePage, lang: "es", title: "Monitoreo Ambiental IoT", image: "/og-image.png" },
@@ -14,7 +14,7 @@ const pages = [
 
 describe("rendered generic landing metadata", () => {
   it("renders localized identity without unsupported absolute metadata or trackers", async () => {
-    const container = await AstroContainer.create();
+    const container = await createAstroContainer();
     for (const page of pages) {
       const html = await container.renderToString(page.component);
       expect(html).toContain(`<html lang="${page.lang}">`);
@@ -28,7 +28,7 @@ describe("rendered generic landing metadata", () => {
   });
 
   it("references the generated icon and manifest assets", async () => {
-    const html = await (await AstroContainer.create()).renderToString(EsHomePage);
+    const html = await (await createAstroContainer()).renderToString(EsHomePage);
     expect(html).toContain('href="/favicon-32.png"');
     expect(html).toContain('href="/favicon-dark-32.png"');
     expect(html).toContain('media="(prefers-color-scheme: light)"');

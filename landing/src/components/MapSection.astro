@@ -1,0 +1,33 @@
+---
+import type { LandingContent } from "../i18n/content";
+import { GoogleMapIsland } from "./GoogleMapIsland";
+
+interface Props { content: LandingContent["map"] }
+const { content } = Astro.props;
+const hasMapsApiKey = Boolean(import.meta.env.PUBLIC_GCP_MAPS_API_KEY?.trim());
+---
+
+<section id="mapa" class="section-shell fade-in-section">
+  <div class="section-container py-16 md:py-24">
+    <div class="flex max-w-3xl flex-col gap-4">
+      <p class="eyebrow">{content.eyebrow}</p>
+      <h2 class="section-title">{content.heading}</h2>
+      <p class="section-copy">{content.description}</p>
+    </div>
+    <div class="map-frame relative z-0 h-[360px] overflow-hidden rounded-2xl border border-border bg-card shadow-sm md:h-[420px]">
+      {hasMapsApiKey ? (
+        <GoogleMapIsland content={content} client:only="react" />
+      ) : (
+        <div class="flex h-full items-center justify-center bg-muted/50 p-8 text-center">
+          <p class="max-w-xl text-sm text-muted-foreground">{content.missingApiKey}</p>
+        </div>
+      )}
+    </div>
+  </div>
+</section>
+
+<style>
+  @media (min-height: 900px) {
+    .map-frame { height: 520px; }
+  }
+</style>

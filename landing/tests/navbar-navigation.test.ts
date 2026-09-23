@@ -1,9 +1,9 @@
 // @ts-nocheck -- Astro's test-only virtual module types are resolved by Vitest.
-import { experimental_AstroContainer as AstroContainer } from "astro/container";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getLandingContent, landingLocales, LOCALES } from "../src/i18n/content";
 import { getNotFoundContent } from "../src/i18n/notFound";
+import { createAstroContainer } from "./astro-container";
 
 const SYNTHETIC_ENDPOINT = "https://api.example.test/custom/public/contact";
 const SYNTHETIC_NUMBER = "5491112345678";
@@ -44,7 +44,7 @@ describe("Navbar contact navigation", () => {
     for (const locale of landingLocales) {
       const content = getLandingContent(locale);
       const { HomePage } = await loadComponents();
-      const container = await AstroContainer.create();
+      const container = await createAstroContainer();
       const html = await container.renderToString(HomePage, { props: { content } });
       const label = CONTACT_LABELS[locale];
 
@@ -56,7 +56,7 @@ describe("Navbar contact navigation", () => {
 
   it("uses complementary lg breakpoints for desktop navigation and the mobile menu", async () => {
     const { HomePage } = await loadComponents();
-    const container = await AstroContainer.create();
+    const container = await createAstroContainer();
     const html = await container.renderToString(HomePage, {
       props: { content: getLandingContent(LOCALES.ES) },
     });
@@ -70,7 +70,7 @@ describe("Navbar contact navigation", () => {
     const content = getLandingContent(LOCALES.EN);
     const originalLinks = content.nav.links.map((link) => ({ ...link }));
     const { HomePage, Navbar, NotFoundPage } = await loadComponents();
-    const container = await AstroContainer.create();
+    const container = await createAstroContainer();
 
     const homeHtml = await container.renderToString(HomePage, { props: { content } });
     const notFoundHtml = await container.renderToString(NotFoundPage, {
@@ -83,5 +83,23 @@ describe("Navbar contact navigation", () => {
     expect(defaultNavbarHtml).not.toContain('href="#contact"');
     expect(content.nav.links).toEqual(originalLinks);
     expect(content.nav.links).not.toContainEqual({ href: "#contact", label: CONTACT_LABELS[LOCALES.EN] });
+  });
+  it("shows the localized privacy link in both header menus, unified with the footer", async () => {
+    const labels = {
+      [LOCALES.ES]: "Privacidad",
+      [LOCALES.PT_BR]: "Privacidade",
+      [LOCALES.EN]: "Privacy",
+    } as const;
+
+    for (const locale of landingLocales) {
+      const content = getLandingContent(locale);
+      const { Navbar } = await loadComponents();
+      const container = await createAstroContainer();
+      const html = await container.renderToString(Navbar, { props: { content } });
+      const anchors = html.match(new RegExp(`<a[^>]*href="/privacidad/"[^>]*>${labels[locale]}</a>`, "g")) ?? [];
+
+      expect(anchors).toHaveLength(2);
+      expect(content.footer.links).toContainEqual({ href: "/privacidad/", label: labels[locale] });
+    }
   });
 });

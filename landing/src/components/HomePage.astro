@@ -4,6 +4,7 @@ import type { LandingContent } from "../i18n/content";
 import BrandIcon from "./BrandIcon.astro";
 import ContactForm from "./ContactForm.astro";
 import Footer from "./Footer.astro";
+import MapSection from "./MapSection.astro";
 import Navbar from "./Navbar.astro";
 import WhatsAppFloatButton from "./WhatsAppFloatButton.astro";
 
@@ -81,6 +82,7 @@ const { content } = Astro.props;
     </div>
   </section>
 
+  <MapSection content={content.map} />
   <ContactForm content={content.contact} endpoint={CONTACT_ENDPOINT} />
 </main>
 
