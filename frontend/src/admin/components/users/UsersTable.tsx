@@ -31,6 +31,7 @@ import { getUserFullName } from "@/auth/actions/session-user";
 
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import {
   ListSortControls,
@@ -77,6 +78,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { User } from "@/interfaces/user.interface";
 import { showConfirmDialog } from "@/store/confirm.store";
+import { toPositiveInt } from "@/utils/url-params";
 import { useNavigate } from "react-router";
 // import { UserDialog } from "./UserDialog";
 import { ViewUserDialog } from "./ViewUserDialog";
@@ -225,8 +227,8 @@ export function UsersTable({ actions }: UsersTableProps) {
   const { user: currentUser } = useAuthStore();
 
   // URL State
-  const page = Number(searchParams.get("page") ?? "1");
-  const size = Number(searchParams.get("size") ?? "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") ?? "";
   // Check if isActive is present. If not, default to "active". If present, check value.
   const rawIsActive = searchParams.get("isActive");
@@ -262,6 +264,7 @@ export function UsersTable({ actions }: UsersTableProps) {
     data: usersResponse,
     isLoading,
     isError,
+    refetch,
   } = useUsers({
     page,
     size,
@@ -280,6 +283,17 @@ export function UsersTable({ actions }: UsersTableProps) {
           : undefined,
     sort: sortField ? `${sortField}:${sortDirection}` : undefined,
   });
+
+  useEffect(() => {
+    const lastPage = usersResponse?.pages;
+    const total = usersResponse?.total;
+    if (!total || total <= 0 || !lastPage || lastPage <= 0 || page <= lastPage)
+      return;
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("page", lastPage.toString());
+    setSearchParams(newParams, { replace: true });
+  }, [page, searchParams, setSearchParams, usersResponse]);
 
   // Export Handler
   const handleExport = async (format: "pdf" | "excel") => {
@@ -630,7 +644,11 @@ export function UsersTable({ actions }: UsersTableProps) {
     enableMultiSort: false,
   });
 
-  if (isError) return <div>Error al cargar usuarios</div>;
+  if (isError) {
+    return (
+      <ListErrorState message="Error al cargar usuarios" onRetry={refetch} />
+    );
+  }
 
   return (
     <div className="w-full space-y-4">

@@ -4,16 +4,35 @@ import { appApi } from "@/api/appApi";
 import {
   createCityAction,
   createStateAction,
+  getCitiesAction,
+  getCountriesAction,
+  getStatesAction,
   updateCityAction,
   updateCountryAction,
 } from "./location.actions";
 
 vi.mock("@/api/appApi", () => ({
   appApi: {
+    get: vi.fn(),
     post: vi.fn(() => Promise.resolve({ data: {} })),
     put: vi.fn(() => Promise.resolve({ data: {} })),
   },
 }));
+
+describe("location action read errors", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ["countries", getCountriesAction],
+    ["states", getStatesAction],
+    ["cities", getCitiesAction],
+  ])("propagates a failed %s list request", async (_resource, action) => {
+    const error = new Error("network unavailable");
+    vi.mocked(appApi.get).mockRejectedValueOnce(error);
+
+    await expect(action({})).rejects.toBe(error);
+  });
+});
 
 describe("location action write contract", () => {
   beforeEach(() => vi.clearAllMocks());

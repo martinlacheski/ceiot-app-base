@@ -389,6 +389,11 @@ describe("UsersTable", () => {
 
   it("keeps mobile controls, desktop headers, URL state, and server sorting synchronized", async () => {
     const user = userEvent.setup();
+    vi.mocked(useUsers).mockReturnValue({
+      data: { items: users, total: 40, page: 4, per_page: 10, pages: 4 },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useUsers>);
     render(
       <MemoryRouter initialEntries={["/admin/users?page=4&sort=email:desc"]}>
         <UsersTable />

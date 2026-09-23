@@ -1,26 +1,37 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DeviceOperation } from "@/app/types/device.types";
 import DeviceOperationsPage from "./DeviceOperationsPage";
 
+const refetchOperations = vi.fn();
+const refetchDevice = vi.fn();
+const getOperationsMock = vi.hoisted(() => vi.fn());
 const queryState: {
   data?: { items: DeviceOperation[]; pages: number; total: number };
   isLoading: boolean;
-} = { isLoading: false };
-let queryOptions: { queryKey: unknown[] };
+  isError?: boolean;
+  refetch?: () => unknown;
+} = { isLoading: false, isError: false, refetch: refetchOperations };
+let queryOptions: { queryKey: unknown[]; queryFn: () => unknown };
 const deviceState: {
   data?: { id: string; name: string; serial: string };
   isLoading: boolean;
-} = { isLoading: false };
+  isError?: boolean;
+  refetch?: () => unknown;
+} = { isLoading: false, isError: false, refetch: refetchDevice };
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: (options: { queryKey: unknown[] }) => {
+  useQuery: (options: { queryKey: unknown[]; queryFn: () => unknown }) => {
     queryOptions = options;
     return queryState;
   },
+}));
+
+vi.mock("@/app/services/device.service", () => ({
+  deviceService: { getOperations: getOperationsMock },
 }));
 
 vi.mock("@/app/hooks/useDevices", () => ({
@@ -86,6 +97,11 @@ function LocationProbe() {
   );
 }
 
+function HistoryBackProbe() {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate(-1)}>Volver en historial</button>;
+}
+
 function renderPage(
   initialEntry = "/app/devices/device-1/operations",
   state?: { from: string },
@@ -111,6 +127,7 @@ function renderPage(
             <>
               <DeviceOperationsPage />
               <LocationProbe />
+              <HistoryBackProbe />
             </>
           }
         />
@@ -128,8 +145,15 @@ describe("DeviceOperationsPage responsive presentation", () => {
       serial: "IOT-0001",
     };
     deviceState.isLoading = false;
+    deviceState.isError = false;
+    deviceState.refetch = refetchDevice;
     queryState.data = { items: operations, pages: 1, total: 2 };
     queryState.isLoading = false;
+    queryState.isError = false;
+    queryState.refetch = refetchOperations;
+    refetchOperations.mockReset();
+    refetchDevice.mockReset();
+    getOperationsMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -272,5 +296,107 @@ describe("DeviceOperationsPage responsive presentation", () => {
 
     expect(screen.getByText("Dispositivo no encontrado")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Volver" })).toBeInTheDocument();
+  });
+
+  it("shows a retryable operations load error", async () => {
+    queryState.data = undefined;
+    queryState.isError = true;
+
+    renderPage();
+
+    expect(screen.getByText("No se pudieron cargar los datos.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetchOperations).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a retryable device load error", async () => {
+    deviceState.data = undefined;
+    deviceState.isError = true;
+
+    renderPage();
+
+    expect(screen.getByText("No se pudieron cargar los datos.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetchDevice).toHaveBeenCalledTimes(1);
+    expect(refetchOperations).not.toHaveBeenCalled();
+  });
+
+  it("uses valid request defaults for invalid page and size URL parameters", () => {
+    renderPage("/app/devices/device-1/operations?page=abc&size=0");
+
+    expect(queryOptions.queryKey).toEqual([
+      "device-operations",
+      "device-1",
+      expect.anything(),
+      1,
+      20,
+    ]);
+    queryOptions.queryFn();
+    expect(getOperationsMock).toHaveBeenCalledWith(
+      "device-1",
+      expect.objectContaining({ page: 1, perPage: 20 }),
+    );
+  });
+
+  it("replaces an out-of-range page when an empty current page still reports results", async () => {
+    queryState.data = undefined;
+    queryState.isLoading = true;
+    const { rerender } = render(
+      <MemoryRouter
+        initialEntries={[
+          "/previous",
+          "/app/devices/device-1/operations?page=99&size=20",
+        ]}
+        initialIndex={1}
+      >
+        <Routes>
+          <Route
+            path="/app/devices/:id/operations"
+            element={
+              <>
+                <DeviceOperationsPage />
+                <LocationProbe />
+                <HistoryBackProbe />
+              </>
+            }
+          />
+          <Route path="/previous" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("page=99");
+
+    queryState.data = { items: [], pages: 3, total: 42 };
+    queryState.isLoading = false;
+    rerender(
+      <MemoryRouter
+        initialEntries={[
+          "/previous",
+          "/app/devices/device-1/operations?page=99&size=20",
+        ]}
+        initialIndex={1}
+      >
+        <Routes>
+          <Route
+            path="/app/devices/:id/operations"
+            element={
+              <>
+                <DeviceOperationsPage />
+                <LocationProbe />
+                <HistoryBackProbe />
+              </>
+            }
+          />
+          <Route path="/previous" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("page=3"),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Volver en historial" }));
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("/previous");
   });
 });

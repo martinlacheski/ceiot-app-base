@@ -16,6 +16,7 @@ import { useMemo, useState } from "react";
 
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import {
   Accordion,
@@ -93,7 +94,12 @@ function PermissionMobileCard({
 }
 
 export function PermissionsTable() {
-  const { data: permissionsData, isLoading, isError } = usePermissions();
+  const {
+    data: permissionsData,
+    isLoading,
+    isError,
+    refetch,
+  } = usePermissions();
 
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -222,7 +228,11 @@ export function PermissionsTable() {
 
   const rows = table.getRowModel().rows;
 
-  if (isError) return <div>Error al cargar permisos</div>;
+  if (isError) {
+    return (
+      <ListErrorState message="Error al cargar permisos" onRetry={refetch} />
+    );
+  }
 
   const hasActiveFilters = columnFilters.length > 0;
 

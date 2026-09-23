@@ -62,10 +62,11 @@ import {
 import { useUsers } from "@/admin/hooks/useUsers";
 import { useEnvironments } from "@/app/hooks/useEnvironments";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { useNavigate, useSearchParams } from "react-router";
 import { deviceService } from "@/app/services/device.service";
 import {
@@ -81,6 +82,7 @@ import { DeviceDetailDialog } from "./DeviceDetailDialog";
 import { DevicePresenceBadge } from "./DevicePresenceBadge";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toPositiveInt } from "@/utils/url-params";
 import { resolveDeviceEditPath } from "./deviceEditPath";
 import {
   buildDeviceMapSearchUrl,
@@ -304,8 +306,8 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
   // URL State
-  const page = Number(searchParams.get("page") || "1");
-  const size = Number(searchParams.get("size") || "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") || "";
   const environmentId = searchParams.get("environmentId") || undefined;
   const ownerId = searchParams.get("ownerId") || undefined;
@@ -382,7 +384,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     return [];
   }, [isAdmin, usersData, environmentsData, user]);
 
-  const { data, isLoading } = useDevices(
+  const { data, isLoading, isError, refetch } = useDevices(
     {
       page,
       perPage: size,
@@ -401,6 +403,14 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     },
     { refetchInterval: 5000 },
   );
+
+  useEffect(() => {
+    if (!data || data.total < 1 || data.pages < 1 || page <= data.pages) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", String(data.pages));
+    setSearchParams(nextParams, { replace: true });
+  }, [data?.pages, data?.total, page, searchParams, setSearchParams]);
 
   // Mutations
   const deleteDevice = useDeleteDevice();
@@ -1007,6 +1017,15 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       });
     },
   });
+
+  if (isError) {
+    return (
+      <ListErrorState
+        message="No se pudieron cargar los datos."
+        onRetry={() => void refetch()}
+      />
+    );
+  }
 
   return (
     <div className="w-full space-y-4">

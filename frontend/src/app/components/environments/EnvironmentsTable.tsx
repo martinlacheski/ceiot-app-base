@@ -49,7 +49,7 @@ import {
   type SortOrder,
 } from "@/app/types/environment.types";
 import { Badge } from "@/components/ui/badge";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -58,6 +58,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { useNavigate, useSearchParams } from "react-router";
 import { environmentService } from "@/app/services/environment.service";
 import {
@@ -73,6 +74,7 @@ import { showConfirmDialog } from "@/store/confirm.store";
 import { EnvironmentDetailDialog } from "./EnvironmentDetailDialog";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toPositiveInt } from "@/utils/url-params";
 import {
   Card,
   CardAction,
@@ -254,8 +256,8 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
   // URL State
-  const page = Number(searchParams.get("page") || "1");
-  const size = Number(searchParams.get("size") || "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") || "";
   const statusFilter = searchParams.get("status") || "active";
   const typeId = searchParams.get("typeId") || undefined;
@@ -281,7 +283,7 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
   // Main Environments Query
   // Data Fetching
   // Data Fetching
-  const { data, isLoading } = useEnvironments({
+  const { data, isLoading, isError, refetch } = useEnvironments({
     page,
     perPage: size,
     search,
@@ -299,6 +301,14 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     sortBy,
     sortOrder,
   });
+
+  useEffect(() => {
+    if (!data || data.total < 1 || data.pages < 1 || page <= data.pages) return;
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", String(data.pages));
+    setSearchParams(nextParams, { replace: true });
+  }, [data?.pages, data?.total, page, searchParams, setSearchParams]);
 
   // Filter Options Queries
   const { data: typesData } = useEnvironmentTypes();
@@ -641,6 +651,15 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
       });
     },
   });
+
+  if (isError) {
+    return (
+      <ListErrorState
+        message="No se pudieron cargar los datos."
+        onRetry={() => void refetch()}
+      />
+    );
+  }
 
   return (
     <div className="w-full space-y-4">

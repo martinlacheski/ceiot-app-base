@@ -22,7 +22,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -34,6 +34,7 @@ import {
 import { getIdentificationTypesAction } from "@/admin/actions/identification.actions";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import {
   Accordion,
@@ -77,6 +78,7 @@ import { exportToExcel, exportToPdf } from "@/lib/export.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { useAuthStore } from "@/auth/store/auth.store";
+import { toPositiveInt } from "@/utils/url-params";
 import { ViewIdentificationTypeDialog } from "./ViewIdentificationTypeDialog";
 
 interface IdentificationTypeMobileCardProps {
@@ -171,8 +173,8 @@ export function IdentificationTypesTable() {
   const { user: currentUser } = useAuthStore();
 
   // URL State
-  const page = Number(searchParams.get("page") ?? "1");
-  const size = Number(searchParams.get("size") ?? "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") ?? "";
   const isActiveParam = searchParams.get("isActive") ?? "active"; // Default to active
 
@@ -189,6 +191,7 @@ export function IdentificationTypesTable() {
     data: identificationTypesResponse,
     isLoading,
     isError,
+    refetch,
   } = useIdentificationTypes({
     page,
     size,
@@ -204,6 +207,23 @@ export function IdentificationTypesTable() {
         ? sorting.map((s) => `${s.id}:${s.desc ? "desc" : "asc"}`).join(",")
         : undefined,
   });
+
+  useEffect(() => {
+    const lastPage = identificationTypesResponse?.pages;
+    const total = identificationTypesResponse?.total;
+    if (
+      !total ||
+      total <= 0 ||
+      !lastPage ||
+      lastPage <= 0 ||
+      page <= lastPage
+    )
+      return;
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("page", lastPage.toString());
+    setSearchParams(newParams, { replace: true });
+  }, [identificationTypesResponse, page, searchParams, setSearchParams]);
 
   const deleteMutation = useDeleteIdentificationType();
   const updateMutation = useUpdateIdentificationType();
@@ -475,7 +495,14 @@ export function IdentificationTypesTable() {
     manualSorting: true,
   });
 
-  if (isError) return <div>Error al cargar tipos de documentos</div>;
+  if (isError) {
+    return (
+      <ListErrorState
+        message="Error al cargar tipos de documentos"
+        onRetry={refetch}
+      />
+    );
+  }
 
   return (
     <div className="w-full space-y-4">

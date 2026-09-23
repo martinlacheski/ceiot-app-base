@@ -17,20 +17,16 @@ export const getIdentificationTypesAction = async ({
   search?: string;
   sort?: string;
 }) => {
-  try {
-    const response = await appApi.get("/tax/identification-types", {
-      params: {
-        page,
-        per_page: size,
-        is_active: isActive,
-        search,
-        sort,
-      },
-    });
-    return response.data;
-  } catch {
-    return { items: [], total: 0, pages: 0 };
-  }
+  const response = await appApi.get("/tax/identification-types", {
+    params: {
+      page,
+      per_page: size,
+      is_active: isActive,
+      search,
+      sort,
+    },
+  });
+  return response.data;
 };
 
 export const getIdentificationTypeAction = async (id: string) => {

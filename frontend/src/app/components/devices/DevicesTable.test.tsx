@@ -1,7 +1,7 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Device } from "@/app/types/device.types";
 import {
@@ -18,8 +18,10 @@ beforeAll(() => {
 
 const useDevicesMock = vi.fn<
   (filters?: unknown, options?: unknown) => {
-    data: { items: Device[]; total: number; pages: number };
+    data?: { items: Device[]; total: number; pages: number };
     isLoading: boolean;
+    isError?: boolean;
+    refetch?: () => unknown;
   }
 >(() => ({
   data: { items: [], total: 0, pages: 0 },
@@ -66,6 +68,17 @@ const baseDevice: Device = {
     ownerName: "Ada Lovelace",
   },
 };
+
+function NavigationProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="location">{location.pathname}{location.search}</output>
+      <button onClick={() => navigate(-1)}>Volver en historial</button>
+    </>
+  );
+}
 
 describe("resolveDeviceEditPath", () => {
   it("routes admin edits to the admin form", () => {
@@ -206,6 +219,16 @@ describe("DeviceMobileCard", () => {
 });
 
 describe("DevicesTable responsive contract", () => {
+  beforeEach(() => {
+    useDevicesMock.mockReset();
+    useDevicesMock.mockReturnValue({
+      data: { items: [], total: 0, pages: 0 },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+  });
+
   it.each(["admin", "user"] as const)(
     "aligns export actions to the right in %s mode",
     (mode) => {
@@ -317,6 +340,81 @@ describe("DevicesTable responsive contract", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("sortBy=name");
     expect(screen.getByTestId("location")).toHaveTextContent("sortOrder=asc");
     expect(screen.getByTestId("location")).not.toHaveTextContent("ownerId");
+  });
+
+  it.each(["admin", "user"] as const)(
+    "shows a retryable load error in %s mode",
+    async (mode) => {
+      const user = userEvent.setup();
+      const refetch = vi.fn();
+      useDevicesMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        refetch,
+      });
+
+      render(<MemoryRouter><DevicesTable mode={mode} /></MemoryRouter>);
+
+      expect(screen.getByText("No se pudieron cargar los datos.")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Reintentar" }));
+      expect(refetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("uses valid defaults for invalid page and size URL parameters", () => {
+    render(
+      <MemoryRouter initialEntries={["/devices?page=abc&size=0"]}>
+        <DevicesTable />
+      </MemoryRouter>,
+    );
+
+    expect(useDevicesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, perPage: 10 }),
+      expect.anything(),
+    );
+  });
+
+  it("replaces an out-of-range page when an empty current page still reports results", async () => {
+    useDevicesMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const { rerender } = render(
+      <MemoryRouter
+        initialEntries={["/previous", "/devices?page=99&size=10"]}
+        initialIndex={1}
+      >
+        <DevicesTable />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("location")).toHaveTextContent("page=99");
+
+    useDevicesMock.mockReturnValue({
+      data: { items: [], total: 21, pages: 3 },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    rerender(
+      <MemoryRouter
+        initialEntries={["/previous", "/devices?page=99&size=10"]}
+        initialIndex={1}
+      >
+        <DevicesTable />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("page=3"),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Volver en historial" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/previous");
   });
 });
 

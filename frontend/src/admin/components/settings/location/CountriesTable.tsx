@@ -41,6 +41,7 @@ import {
 
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import { ListSortControls } from "@/components/custom/ListSortControls";
 import {
@@ -84,6 +85,7 @@ import type { Country } from "@/interfaces/location.interface";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { exportToExcel, exportToPdf } from "@/lib/export.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toPositiveInt } from "@/utils/url-params";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { ViewCountryDialog } from "./ViewCountryDialog";
 import {
@@ -186,8 +188,8 @@ export function CountriesTable({ actions }: Props) {
   const { user: currentUser } = useAuthStore();
 
   // URL State
-  const page = Number(searchParams.get("page") ?? "1");
-  const size = Number(searchParams.get("size") ?? "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") ?? "";
   const isActiveParam = searchParams.get("isActive") ?? "active"; // Default to active
   const parsedSort = parseLocationSort(
@@ -208,6 +210,7 @@ export function CountriesTable({ actions }: Props) {
     data: countriesResponse,
     isLoading,
     isError,
+    refetch,
   } = useCountries({
     page,
     size,
@@ -336,6 +339,24 @@ export function CountriesTable({ actions }: Props) {
     newParams.set("page", "1");
     setSearchParams(newParams, { replace: true });
   }, [parsedSort.isValid, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const lastPage = countriesResponse?.pages;
+    const total = countriesResponse?.total;
+    if (
+      !total ||
+      total <= 0 ||
+      !lastPage ||
+      lastPage <= 0 ||
+      page <= lastPage
+    ) {
+      return;
+    }
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("page", lastPage.toString());
+    setSearchParams(newParams, { replace: true });
+  }, [countriesResponse, page, searchParams, setSearchParams]);
 
   const updateSort = (field?: CountrySortField, direction = parsedSort.sort?.direction ?? "asc") => {
     updateSearchParam("sort", field ? serializeLocationSort({ field, direction }) ?? null : null);
@@ -521,7 +542,14 @@ export function CountriesTable({ actions }: Props) {
     manualSorting: true,
   });
 
-  if (isError) return <div>Error al cargar países</div>;
+  if (isError) {
+    return (
+      <ListErrorState
+        message="Error al cargar países"
+        onRetry={() => void refetch()}
+      />
+    );
+  }
 
   return (
     <div className="w-full space-y-4">

@@ -28,14 +28,10 @@ export const getCountriesAction = async ({
   search?: string;
   sort?: string;
 }) => {
-  try {
-    const response = await appApi.get("/location/countries", {
-      params: { page, per_page: size, is_active: isActive, search, sort },
-    });
-    return response.data; // Expected: { items: [], total: ... }
-  } catch {
-    return { items: [], total: 0 };
-  }
+  const response = await appApi.get("/location/countries", {
+    params: { page, per_page: size, is_active: isActive, search, sort },
+  });
+  return response.data; // Expected: { items: [], total: ... }
 };
 
 export const getCountryAction = async (id: string): Promise<Country> => {
@@ -80,21 +76,17 @@ export const getStatesAction = async ({
   search?: string;
   sort?: string;
 }) => {
-  try {
-    const response = await appApi.get("/location/states", {
-      params: {
-        country_id: countryId,
-        page,
-        per_page: size,
-        is_active: isActive,
-        search,
-        sort,
-      },
-    });
-    return response.data;
-  } catch {
-    return { items: [], total: 0 };
-  }
+  const response = await appApi.get("/location/states", {
+    params: {
+      country_id: countryId,
+      page,
+      per_page: size,
+      is_active: isActive,
+      search,
+      sort,
+    },
+  });
+  return response.data;
 };
 
 export const getStateAction = async (id: string): Promise<State> => {
@@ -141,22 +133,18 @@ export const getCitiesAction = async ({
   search?: string;
   sort?: string;
 }) => {
-  try {
-    const response = await appApi.get("/location/cities", {
-      params: {
-        country_id: countryId,
-        state_id: stateId,
-        page,
-        per_page: size,
-        is_active: isActive,
-        search,
-        sort,
-      },
-    });
-    return response.data;
-  } catch {
-    return { items: [], total: 0 };
-  }
+  const response = await appApi.get("/location/cities", {
+    params: {
+      country_id: countryId,
+      state_id: stateId,
+      page,
+      per_page: size,
+      is_active: isActive,
+      search,
+      sort,
+    },
+  });
+  return response.data;
 };
 
 export const getCityAction = async (id: string): Promise<City> => {

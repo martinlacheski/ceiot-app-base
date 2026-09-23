@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   type ColumnDef,
   flexRender,
@@ -28,6 +28,7 @@ import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import {
   Table,
   TableBody,
@@ -48,6 +49,7 @@ import {
 import { useDevice } from "@/app/hooks/useDevices";
 import { deviceService } from "@/app/services/device.service";
 import type { DeviceOperation } from "@/app/types/device.types";
+import { toPositiveInt } from "@/utils/url-params";
 
 function OperationCard({ row }: { row: Row<DeviceOperation> }) {
   const operation = row.original;
@@ -90,8 +92,8 @@ export default function DeviceOperationsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // URL State
-  const page = Number(searchParams.get("page") || "1");
-  const size = Number(searchParams.get("size") || "20");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 20);
   const search = searchParams.get("search") || "";
 
   // Date State
@@ -101,10 +103,20 @@ export default function DeviceOperationsPage() {
   });
 
   // Fetch Device Info
-  const { data: device, isLoading: isLoadingDevice } = useDevice(id || "");
+  const {
+    data: device,
+    isLoading: isLoadingDevice,
+    isError: isDeviceError,
+    refetch: refetchDevice,
+  } = useDevice(id || "");
 
   // Fetch Operations
-  const { data: operationsData, isLoading: isLoadingOps } = useQuery({
+  const {
+    data: operationsData,
+    isLoading: isLoadingOps,
+    isError: isOperationsError,
+    refetch: refetchOperations,
+  } = useQuery({
     queryKey: [
       "device-operations",
       id,
@@ -121,6 +133,27 @@ export default function DeviceOperationsPage() {
       }),
     enabled: !!device?.id && !!dateRange?.from,
   });
+
+  useEffect(() => {
+    if (
+      !operationsData ||
+      operationsData.total < 1 ||
+      operationsData.pages < 1 ||
+      page <= operationsData.pages
+    ) {
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", String(operationsData.pages));
+    setSearchParams(nextParams, { replace: true });
+  }, [
+    operationsData?.pages,
+    operationsData?.total,
+    page,
+    searchParams,
+    setSearchParams,
+  ]);
 
   const [sorting, setSorting] = useState<SortingState>([]);
 
@@ -270,6 +303,15 @@ export default function DeviceOperationsPage() {
     );
   }
 
+  if (isDeviceError) {
+    return (
+      <ListErrorState
+        message="No se pudieron cargar los datos."
+        onRetry={() => void refetchDevice()}
+      />
+    );
+  }
+
   if (!device) {
     return (
       <div className="space-y-4">
@@ -289,6 +331,15 @@ export default function DeviceOperationsPage() {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (isOperationsError) {
+    return (
+      <ListErrorState
+        message="No se pudieron cargar los datos."
+        onRetry={() => void refetchOperations()}
+      />
     );
   }
 

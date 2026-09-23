@@ -21,7 +21,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -36,6 +36,7 @@ import {
 import { useAuthStore } from "@/auth/store/auth.store";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListSortControls } from "@/components/custom/ListSortControls";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import {
@@ -86,6 +87,7 @@ import {
 import type { City } from "@/interfaces/location.interface";
 import { exportToExcel, exportToPdf } from "@/lib/export.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toPositiveInt } from "@/utils/url-params";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { ViewCityDialog } from "./ViewCityDialog";
 import {
@@ -209,8 +211,8 @@ export function CitiesTable({ stateId: propStateId }: Props) {
   const [isExporting, setIsExporting] = useState(false);
 
   // URL State
-  const page = Number(searchParams.get("page") ?? "1");
-  const size = Number(searchParams.get("size") ?? "10");
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") ?? "";
   const isActiveParam = searchParams.get("isActive");
   const countryIdParam = searchParams.get("countryId");
@@ -234,6 +236,7 @@ export function CitiesTable({ stateId: propStateId }: Props) {
     data: citiesResponse,
     isLoading,
     isError,
+    refetch,
   } = useCities({
     countryId,
     stateId,
@@ -383,6 +386,24 @@ export function CitiesTable({ stateId: propStateId }: Props) {
     newParams.set("page", "1");
     setSearchParams(newParams, { replace: true });
   });
+
+  useEffect(() => {
+    const lastPage = citiesResponse?.pages;
+    const total = citiesResponse?.total;
+    if (
+      !total ||
+      total <= 0 ||
+      !lastPage ||
+      lastPage <= 0 ||
+      page <= lastPage
+    ) {
+      return;
+    }
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.set("page", lastPage.toString());
+    setSearchParams(newParams, { replace: true });
+  }, [citiesResponse, page, searchParams, setSearchParams]);
 
   const updateSort = (
     field?: CitySortField,
@@ -626,7 +647,14 @@ export function CitiesTable({ stateId: propStateId }: Props) {
     enableMultiSort: false,
   });
 
-  if (isError) return <div>Error al cargar ciudades</div>;
+  if (isError) {
+    return (
+      <ListErrorState
+        message="Error al cargar ciudades"
+        onRetry={() => void refetch()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">

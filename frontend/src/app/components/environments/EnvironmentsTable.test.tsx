@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
-import { MemoryRouter, useLocation } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, useLocation, useNavigate } from "react-router";
 
 import type { Environment } from "@/app/types/environment.types";
 import { EnvironmentMobileCard, EnvironmentsTable } from "./EnvironmentsTable";
@@ -9,8 +9,10 @@ import { EnvironmentMobileCard, EnvironmentsTable } from "./EnvironmentsTable";
 Element.prototype.scrollIntoView = vi.fn();
 
 const useEnvironmentsMock = vi.fn<(filters?: unknown) => {
-  data: { items: Environment[]; total: number; pages: number };
+  data?: { items: Environment[]; total: number; pages: number };
   isLoading: boolean;
+  isError?: boolean;
+  refetch?: () => unknown;
 }>(() => ({
   data: { items: [], total: 0, pages: 0 },
   isLoading: false,
@@ -43,6 +45,17 @@ vi.mock("./EnvironmentDetailDialog", () => ({
 function LocationProbe() {
   const location = useLocation();
   return <output aria-label="URL actual">{location.search}</output>;
+}
+
+function NavigationProbe() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  return (
+    <>
+      <output aria-label="URL actual">{location.pathname}{location.search}</output>
+      <button onClick={() => navigate(-1)}>Volver en historial</button>
+    </>
+  );
 }
 
 const environment: Environment = {
@@ -131,6 +144,16 @@ describe("EnvironmentMobileCard", () => {
 });
 
 describe("EnvironmentsTable server-side sorting", () => {
+  beforeEach(() => {
+    useEnvironmentsMock.mockReset();
+    useEnvironmentsMock.mockReturnValue({
+      data: { items: [], total: 0, pages: 0 },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+  });
+
   it("keeps search on its own row and aligns filters with the primary action", () => {
     render(
       <MemoryRouter>
@@ -203,5 +226,69 @@ describe("EnvironmentsTable server-side sorting", () => {
     expect(useEnvironmentsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ sortBy: "name", sortOrder: "asc", page: 1 }),
     );
+  });
+
+  it("shows a retryable load error", async () => {
+    const refetch = vi.fn();
+    useEnvironmentsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+
+    render(<MemoryRouter><EnvironmentsTable /></MemoryRouter>);
+
+    expect(screen.getByText("No se pudieron cargar los datos.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses valid defaults for invalid page and size URL parameters", () => {
+    render(
+      <MemoryRouter initialEntries={["/?page=abc&size=0"]}>
+        <EnvironmentsTable />
+      </MemoryRouter>,
+    );
+
+    expect(useEnvironmentsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, perPage: 10 }),
+    );
+  });
+
+  it("replaces an out-of-range page when an empty current page still reports results", async () => {
+    useEnvironmentsMock.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/previous", "/?page=99&size=10"]} initialIndex={1}>
+        <EnvironmentsTable />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("status", { name: "URL actual" })).toHaveTextContent("page=99");
+
+    useEnvironmentsMock.mockReturnValue({
+      data: { items: [], total: 21, pages: 3 },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    rerender(
+      <MemoryRouter initialEntries={["/previous", "/?page=99&size=10"]} initialIndex={1}>
+        <EnvironmentsTable />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: "URL actual" })).toHaveTextContent("page=3"),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Volver en historial" }));
+    expect(screen.getByRole("status", { name: "URL actual" })).toHaveTextContent("/previous");
   });
 });
