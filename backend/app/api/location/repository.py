@@ -4,13 +4,14 @@ from typing import Optional, List
 import uuid
 from datetime import datetime
 from sqlalchemy.orm import joinedload
-from sqlalchemy import asc, desc, func
+from sqlalchemy import asc, case, desc, func
 
 from app.api.location.models import (
     LocationCountry, LocationCountryUpdate,
     LocationState, LocationStateUpdate,
     LocationCity, LocationCityUpdate
 )
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.sorting import SortSpec
 
 class LocationRepository:
@@ -56,10 +57,21 @@ class LocationRepository:
         if is_active is not None:
              query = query.where(LocationCountry.is_active == is_active)
         
-        if search:
-            from sqlalchemy import col
-            search_pattern = f"%{search}%"
-            query = query.where(col(LocationCountry.name).ilike(search_pattern))
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            from sqlalchemy import or_
+            from sqlmodel import col
+            query = query.where(
+                or_(
+                    col(LocationCountry.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (LocationCountry.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                )
+            )
 
         sort_mapping = {
             "name": (LocationCountry.name, True, False),
@@ -147,10 +159,24 @@ class LocationRepository:
         if is_active is not None:
              query = query.where(LocationState.is_active == is_active)
 
-        if search:
-            from sqlalchemy import col
-            search_pattern = f"%{search}%"
-            query = query.where(col(LocationState.name).ilike(search_pattern))
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            from sqlalchemy import or_
+            from sqlmodel import col
+            query = query.where(
+                or_(
+                    col(LocationState.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    col(LocationCountry.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (LocationState.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                )
+            )
 
         sort_mapping = {
             "name": (LocationState.name, True, False),
@@ -249,15 +275,28 @@ class LocationRepository:
         if is_active is not None:
              query = query.where(LocationCity.is_active == is_active)
 
-        if search:
-            from sqlalchemy import col, or_
-            search_pattern = f"%{search}%"
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            from sqlalchemy import or_
+            from sqlmodel import col
             query = query.where(
                 or_(
-                    col(LocationCity.name).ilike(search_pattern),
-                    col(LocationCity.postal_code).ilike(search_pattern),
-                    col(LocationState.name).ilike(search_pattern),
-                    col(LocationCountry.name).ilike(search_pattern)
+                    col(LocationCity.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    col(LocationCity.postal_code).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    col(LocationState.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    col(LocationCountry.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (LocationCity.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
                 )
             )
 

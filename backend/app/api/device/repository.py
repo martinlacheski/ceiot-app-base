@@ -1,11 +1,13 @@
 from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
-from sqlalchemy import case, or_
+from sqlalchemy import String, and_, case, cast, false, func, literal, or_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
-from sqlmodel import select, func
+from sqlalchemy.orm import aliased, selectinload
+from sqlmodel import select
 from app.api.access.models import ScopeType, ScopedGuestRelation
+from app.api.auth.models import User
+from app.api.device.device_type.models import DeviceTypeCatalog
 from app.api.device.device_type.repository import DeviceTypeRepository
 from app.api.device.models import (
     Device,
@@ -19,6 +21,12 @@ from app.services.pagination import paginate_query_async
 
 from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.location.models import LocationCity, LocationState
+from app.core.search import (
+    ILIKE_ESCAPE,
+    formatted_date,
+    formatted_datetime,
+    ilike_pattern,
+)
 
 
 class DeviceRepository:
@@ -83,6 +91,8 @@ class DeviceRepository:
         ] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
         connected_serials: frozenset[str] | None = None,
+        utc_offset_minutes: int = 0,
+        owner_search_environment_ids: Optional[list[uuid.UUID]] = None,
     ) -> Dict[str, Any]:
         query = select(Device).options(
             selectinload(Device.type),
@@ -122,24 +132,195 @@ class DeviceRepository:
         if environment_id:
             query = query.where(Device.environment_id == environment_id)
 
-        if search:
-            search_term = f"%{search}%"
-            query = query.where(
-                (Device.name.ilike(search_term)) |
-                (Device.serial.ilike(search_term)) |
-                (Device.description.ilike(search_term)) |
-                (Device.model.ilike(search_term)) |
-                (Device.batch.ilike(search_term))
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            query = query.outerjoin(
+                DeviceTypeCatalog,
+                DeviceTypeCatalog.id == Device.device_type_id,
+            ).outerjoin(
+                Environment,
+                Environment.id == Device.environment_id,
             )
+            SearchOwnerMembership = aliased(EnvironmentUser)
+            SearchOwner = aliased(User)
+            owner_full_name = func.trim(
+                SearchOwner.first_name + " " + SearchOwner.last_name
+            )
+            owner_matches = (
+                select(SearchOwnerMembership.id)
+                .join(
+                    SearchOwner,
+                    SearchOwner.id == SearchOwnerMembership.user_id,
+                )
+                .where(
+                    SearchOwnerMembership.environment_id == Device.environment_id,
+                    SearchOwnerMembership.is_owner.is_(True),
+                    SearchOwnerMembership.is_active.is_(True),
+                    or_(
+                        SearchOwner.first_name.ilike(
+                            search_pattern,
+                            escape=ILIKE_ESCAPE,
+                        ),
+                        SearchOwner.last_name.ilike(
+                            search_pattern,
+                            escape=ILIKE_ESCAPE,
+                        ),
+                        owner_full_name.ilike(
+                            search_pattern,
+                            escape=ILIKE_ESCAPE,
+                        ),
+                        and_(
+                            func.nullif(owner_full_name, "").is_(None),
+                            SearchOwner.username.ilike(
+                                search_pattern,
+                                escape=ILIKE_ESCAPE,
+                            ),
+                        ),
+                    ),
+                )
+                .exists()
+            )
+            HasOwnerMembership = aliased(EnvironmentUser)
+            has_active_owner = (
+                select(HasOwnerMembership.id)
+                .where(
+                    HasOwnerMembership.environment_id == Device.environment_id,
+                    HasOwnerMembership.is_owner.is_(True),
+                    HasOwnerMembership.is_active.is_(True),
+                )
+                .exists()
+            )
+            if user_id is not None:
+                ActorOwnerMembership = aliased(EnvironmentUser)
+                actor_is_owner = (
+                    select(ActorOwnerMembership.id)
+                    .where(
+                        ActorOwnerMembership.environment_id == Device.environment_id,
+                        ActorOwnerMembership.user_id == user_id,
+                        ActorOwnerMembership.is_owner.is_(True),
+                        ActorOwnerMembership.is_active.is_(True),
+                    )
+                    .exists()
+                )
+            else:
+                actor_is_owner = false()
+            displayed_owner_fallback = case(
+                (actor_is_owner, "Yo"),
+                (
+                    Device.environment_id.is_not(None) & ~has_active_owner,
+                    "Desconocido",
+                ),
+                else_="",
+            )
+            effective_location = case(
+                (
+                    Device.gps_latitude.is_not(None)
+                    & Device.gps_longitude.is_not(None),
+                    cast(Device.gps_latitude, String)
+                    + literal(",")
+                    + cast(Device.gps_longitude, String),
+                ),
+                else_=Environment.location,
+            )
+            status_label = case(
+                (Device.status == DeviceStatus.NEW, "NUEVO"),
+                (Device.status == DeviceStatus.PAIRED, "VINCULADO"),
+                (Device.status == DeviceStatus.ACTIVE, "ACTIVO"),
+                (Device.status == DeviceStatus.MAINTENANCE, "MANTENIMIENTO"),
+                (Device.status == DeviceStatus.UNPAIRED, "DESVINCULADO"),
+            )
+            enabled_label = case(
+                (Device.enabled.is_(True), "Si"),
+                else_="No",
+            )
+            enabled_state_label = case(
+                (Device.enabled.is_(True), "Habilitado"),
+                else_="Deshabilitado",
+            )
+            active_label = case(
+                (Device.is_active.is_(True), "Activo"),
+                else_="Inactivo",
+            )
+            if connected_serials is None:
+                presence_label = literal("No disponible")
+            elif connected_serials:
+                presence_label = case(
+                    (Device.serial.in_(sorted(connected_serials)), "Online"),
+                    else_="Offline",
+                )
+            else:
+                presence_label = literal("Offline")
+
+            displayed_description = case(
+                (
+                    Device.description.is_(None)
+                    | (func.trim(Device.description) == ""),
+                    "Sin descripción",
+                ),
+                else_=Device.description,
+            )
+            displayed_last_connection = case(
+                (Device.last_connection.is_(None), "Nunca"),
+                else_=formatted_datetime(
+                    Device.last_connection,
+                    utc_offset_minutes,
+                ),
+            )
+            mobile_last_connection = case(
+                (Device.last_connection.is_(None), "Sin registros"),
+                else_=formatted_datetime(
+                    Device.last_connection,
+                    utc_offset_minutes,
+                ),
+            )
+
+            displayed_expressions = (
+                Device.name,
+                Device.serial,
+                displayed_description,
+                Device.model,
+                Device.batch,
+                DeviceTypeCatalog.name,
+                Environment.name,
+                displayed_owner_fallback,
+                effective_location,
+                formatted_date(Device.manufacture_date),
+                displayed_last_connection,
+                mobile_last_connection,
+                status_label,
+                enabled_label,
+                enabled_state_label,
+                active_label,
+                presence_label,
+            )
+            search_conditions = [
+                expression.ilike(
+                    search_pattern,
+                    escape=ILIKE_ESCAPE,
+                )
+                for expression in displayed_expressions
+            ]
+            search_conditions.append(owner_matches)
+            if owner_search_environment_ids:
+                search_conditions.append(
+                    Device.environment_id.in_(owner_search_environment_ids)
+                )
+            query = query.where(or_(*search_conditions))
 
         if device_type_id is not None:
             query = query.where(Device.device_type_id == device_type_id)
 
-        if model:
-            query = query.where(Device.model.ilike(f"%{model}%"))
+        model_pattern = ilike_pattern(model)
+        if model_pattern is not None:
+            query = query.where(
+                Device.model.ilike(model_pattern, escape=ILIKE_ESCAPE)
+            )
 
-        if batch:
-            query = query.where(Device.batch.ilike(f"%{batch}%"))
+        batch_pattern = ilike_pattern(batch)
+        if batch_pattern is not None:
+            query = query.where(
+                Device.batch.ilike(batch_pattern, escape=ILIKE_ESCAPE)
+            )
 
         if manufacture_date:
             # Assuming exact match for date string YYYY-MM-DD
@@ -152,7 +333,6 @@ class DeviceRepository:
             query = query.where(Device.enabled == enabled)
 
         if owner_id:
-            from sqlalchemy.orm import aliased
             OwnerEnvUser = aliased(EnvironmentUser)
             query = query.join(OwnerEnvUser, Device.environment_id == OwnerEnvUser.environment_id).where(
                 OwnerEnvUser.user_id == owner_id,
@@ -174,9 +354,13 @@ class DeviceRepository:
                 return await paginate_query_async(
                     self.session, Device, query.order_by(Device.id.asc()), page, per_page
                 )
-            sort_expression = case(
-                (Device.serial.in_(sorted(connected_serials)), True),
-                else_=False,
+            sort_expression = (
+                case(
+                    (Device.serial.in_(sorted(connected_serials)), True),
+                    else_=False,
+                )
+                if connected_serials
+                else false()
             )
         else:
             sort_expression = sort_expressions[sort_by]

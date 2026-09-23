@@ -1,10 +1,11 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from typing import Optional
-from sqlalchemy import func
+from sqlalchemy import case, func
 import uuid
 
 from app.api.environment.environment_type.models import EnvironmentType, EnvironmentTypeUpdate
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.services.pagination import paginate_query_async
 
 class EnvironmentTypeRepository:
@@ -46,10 +47,21 @@ class EnvironmentTypeRepository:
         if is_active is not None:
             query = query.where(EnvironmentType.is_active == is_active)
 
-        if search:
-            from sqlalchemy import col
-            search_pattern = f"%{search}%"
-            query = query.where(col(EnvironmentType.name).ilike(search_pattern))
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            from sqlalchemy import or_
+            from sqlmodel import col
+            query = query.where(
+                or_(
+                    col(EnvironmentType.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (EnvironmentType.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                )
+            )
 
         if sort:
             from sqlalchemy import asc, desc, func

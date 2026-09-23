@@ -17,6 +17,7 @@ from app.api.device.device_type.models import (
     DeviceTypeCatalog,
     DeviceTypeUpdate,
 )
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.services.pagination import paginate_query_async
 
 
@@ -149,8 +150,13 @@ class DeviceTypeRepository:
         if is_active is not None:
             query = query.where(DeviceTypeCatalog.is_active == is_active)
 
-        if search:
-            query = query.where(col(DeviceTypeCatalog.name).ilike(f"%{search}%"))
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            query = query.where(
+                col(DeviceTypeCatalog.name).ilike(
+                    search_pattern, escape=ILIKE_ESCAPE
+                )
+            )
 
         if sort:
             from sqlalchemy import asc, desc

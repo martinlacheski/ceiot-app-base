@@ -5,8 +5,9 @@ from app.api.auth.models import User, UserUpdate
 from typing import Optional
 from datetime import datetime
 import uuid
-from sqlalchemy import asc, desc, func
+from sqlalchemy import asc, case, desc, func
 
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.sorting import SortSpec
 
 
@@ -66,15 +67,25 @@ class UserRepository:
             query = query.where(User.is_active == is_active)
         if is_admin is not None:
             query = query.where(User.is_admin == is_admin)
-        if search:
-            search_pattern = f"%{search}%"
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
             query = query.where(
                 or_(
-                    col(User.username).ilike(search_pattern),
-                    col(User.email).ilike(search_pattern),
-                    col(User.first_name).ilike(search_pattern),
-                    col(User.last_name).ilike(search_pattern),
-                    col(User.identification_number).ilike(search_pattern)
+                    col(User.username).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    col(User.email).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    col(User.first_name).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    col(User.last_name).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    col(User.identification_number).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (User.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    case(
+                        (User.is_admin == True, "Admin"),
+                        else_="Usuario",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
                 )
             )
 

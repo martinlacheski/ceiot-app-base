@@ -17,6 +17,7 @@ from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.device.models import Device
 from app.api.auth.models import User
 from app.api.environment.environment_type.models import EnvironmentType
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 
 class EnvironmentRepository:
     def __init__(self, db: AsyncSession):
@@ -181,13 +182,15 @@ class EnvironmentRepository:
         if is_active is not None:
              query = query.where(Environment.is_active == is_active)
 
-        if search:
-            search_pattern = f"%{search}%"
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
 
             SearchEnvironmentType = aliased(EnvironmentType)
             type_matches = select(SearchEnvironmentType.id).where(
                 SearchEnvironmentType.id == Environment.type_id,
-                SearchEnvironmentType.name.ilike(search_pattern),
+                SearchEnvironmentType.name.ilike(
+                    search_pattern, escape=ILIKE_ESCAPE
+                ),
             ).exists()
 
             SearchOwnerRelation = aliased(EnvironmentUser)
@@ -203,12 +206,18 @@ class EnvironmentRepository:
                 SearchOwnerRelation.is_owner == True,
                 SearchOwnerRelation.is_active == True,
                 or_(
-                    SearchOwner.first_name.ilike(search_pattern),
-                    SearchOwner.last_name.ilike(search_pattern),
-                    owner_full_name.ilike(search_pattern),
+                    SearchOwner.first_name.ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    SearchOwner.last_name.ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    owner_full_name.ilike(search_pattern, escape=ILIKE_ESCAPE),
                     and_(
                         func.nullif(owner_full_name, "").is_(None),
-                        SearchOwner.username.ilike(search_pattern),
+                        SearchOwner.username.ilike(
+                            search_pattern, escape=ILIKE_ESCAPE
+                        ),
                     ),
                 ),
             ).exists()
@@ -225,23 +234,23 @@ class EnvironmentRepository:
             ).where(
                 SearchCity.id == Environment.city_id,
                 or_(
-                    SearchCity.name.ilike(search_pattern),
-                    SearchState.name.ilike(search_pattern),
-                    SearchCountry.name.ilike(search_pattern),
+                    SearchCity.name.ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    SearchState.name.ilike(search_pattern, escape=ILIKE_ESCAPE),
+                    SearchCountry.name.ilike(search_pattern, escape=ILIKE_ESCAPE),
                 ),
             ).exists()
 
             search_conditions = [
-                Environment.name.ilike(search_pattern),
+                Environment.name.ilike(search_pattern, escape=ILIKE_ESCAPE),
                 type_matches,
                 owner_matches,
-                Environment.address.ilike(search_pattern),
-                Environment.location.ilike(search_pattern),
+                Environment.address.ilike(search_pattern, escape=ILIKE_ESCAPE),
+                Environment.location.ilike(search_pattern, escape=ILIKE_ESCAPE),
                 administrative_location_matches,
                 case(
                     (Environment.is_active == True, "Activo"),
                     else_="Inactivo",
-                ).ilike(search_pattern),
+                ).ilike(search_pattern, escape=ILIKE_ESCAPE),
             ]
 
             if owner_search_environment_ids:
@@ -283,7 +292,7 @@ class EnvironmentRepository:
                             "Invitado",
                         ),
                         else_="",
-                    ).ilike(search_pattern)
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE)
                 )
 
             query = query.where(or_(*search_conditions))
@@ -329,7 +338,10 @@ class EnvironmentRepository:
         the RLS-scoped list query, where they are still intersected with environments
         the actor is allowed to read.
         """
-        search_pattern = f"%{search}%"
+        search_pattern = ilike_pattern(search)
+        if search_pattern is None:
+            return []
+
         owner_full_name = func.trim(User.first_name + " " + User.last_name)
         query = select(EnvironmentUser.environment_id).join(
             User,
@@ -338,12 +350,12 @@ class EnvironmentRepository:
             EnvironmentUser.is_owner == True,
             EnvironmentUser.is_active == True,
             or_(
-                User.first_name.ilike(search_pattern),
-                User.last_name.ilike(search_pattern),
-                owner_full_name.ilike(search_pattern),
+                User.first_name.ilike(search_pattern, escape=ILIKE_ESCAPE),
+                User.last_name.ilike(search_pattern, escape=ILIKE_ESCAPE),
+                owner_full_name.ilike(search_pattern, escape=ILIKE_ESCAPE),
                 and_(
                     func.nullif(owner_full_name, "").is_(None),
-                    User.username.ilike(search_pattern),
+                    User.username.ilike(search_pattern, escape=ILIKE_ESCAPE),
                 ),
             ),
         )

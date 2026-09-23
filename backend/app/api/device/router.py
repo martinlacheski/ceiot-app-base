@@ -172,6 +172,7 @@ async def get_devices(
         "brokerConnected",
     ] = Query("name"),
     sort_order: Literal["asc", "desc"] = Query("asc"),
+    utc_offset_minutes: int = Query(0, ge=-840, le=840),
 ):
     repo = DeviceRepository(session)
 
@@ -179,6 +180,17 @@ async def get_devices(
     requesting_user_id = None
     if "device:read_all" not in current_user.permissions:
         requesting_user_id = current_user.id
+
+    owner_search_environment_ids = None
+    if (
+        search
+        and not current_user.is_admin
+        and session.get_bind().dialect.name == "postgresql"
+    ):
+        async with system_session() as sys_session:
+            owner_search_environment_ids = await EnvironmentRepository(
+                sys_session
+            ).get_owner_search_environment_ids(search)
 
     snapshot = await presence_client.get_snapshot()
     result = await repo.get_all(
@@ -198,6 +210,8 @@ async def get_devices(
         sort_by=sort_by,
         sort_order=sort_order,
         connected_serials=snapshot.client_ids,
+        utc_offset_minutes=utc_offset_minutes,
+        owner_search_environment_ids=owner_search_environment_ids,
     )
     projected = project_broker_presence(
         [DeviceRead.model_validate(item) for item in result["items"]], snapshot

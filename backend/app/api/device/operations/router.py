@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 import uuid
 from fastapi import APIRouter, Depends, Query
@@ -21,6 +21,10 @@ async def get_device_operations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     operation_type: Optional[DeviceOperationType] = None,
+    search: Optional[str] = Query(None),
+    sort_by: Literal["time", "id", "operation_type", "status"] = Query("time"),
+    sort_order: Literal["asc", "desc"] = Query("desc"),
+    utc_offset_minutes: int = Query(0, ge=-840, le=840),
 ):
     """
     Get paginated operations for a specific device.
@@ -45,4 +49,8 @@ async def get_device_operations(
         end_date=end_date,
         operation_type=operation_type,
         access_starts_at=access_starts_at,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        utc_offset_minutes=utc_offset_minutes,
     )

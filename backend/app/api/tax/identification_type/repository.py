@@ -2,11 +2,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from typing import Optional, List
 import uuid
-from sqlalchemy import func
+from sqlalchemy import case, func
 
 from app.api.tax.identification_type.models import (
     IdentificationType, IdentificationTypeUpdate
 )
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 
 class IdentificationTypeRepository:
     def __init__(self, db: AsyncSession):
@@ -46,11 +47,20 @@ class IdentificationTypeRepository:
         if is_active is not None:
              query = query.where(IdentificationType.is_active == is_active)
         
-        if search:
-            from sqlalchemy import col, or_
-            search_pattern = f"%{search}%"
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            from sqlalchemy import or_
+            from sqlmodel import col
             query = query.where(
-                col(IdentificationType.name).ilike(search_pattern)
+                or_(
+                    col(IdentificationType.name).ilike(
+                        search_pattern, escape=ILIKE_ESCAPE
+                    ),
+                    case(
+                        (IdentificationType.is_active == True, "Activo"),
+                        else_="Inactivo",
+                    ).ilike(search_pattern, escape=ILIKE_ESCAPE),
+                )
             )
 
         if sort:

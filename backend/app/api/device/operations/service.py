@@ -1,12 +1,15 @@
-from typing import Optional, Dict
+from typing import Dict, Literal, Optional
 from datetime import datetime
 from uuid import UUID
+from sqlalchemy import String, cast, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 from app.api.device.operations.models import (
     DeviceOperation,
     DeviceOperationType,
     DeviceOperationStatus,
 )
+from app.core.search import ILIKE_ESCAPE, formatted_datetime, ilike_pattern
 
 
 class DeviceOperationService:
@@ -22,8 +25,11 @@ class DeviceOperationService:
         end_date: Optional[datetime] = None,
         operation_type: Optional[DeviceOperationType] = None,
         access_starts_at: Optional[datetime] = None,
+        search: Optional[str] = None,
+        sort_by: Literal["time", "id", "operation_type", "status"] = "time",
+        sort_order: Literal["asc", "desc"] = "desc",
+        utc_offset_minutes: int = 0,
     ) -> dict:
-        from sqlmodel import select, func, desc
         from app.api.device.models import Device
 
         device_result = await self.session.execute(
@@ -54,12 +60,52 @@ class DeviceOperationService:
         if operation_type:
             query = query.where(DeviceOperation.operation_type == operation_type)
 
+        search_pattern = ilike_pattern(search)
+        if search_pattern is not None:
+            displayed_time = formatted_datetime(
+                DeviceOperation.time,
+                utc_offset_minutes,
+                timezone_aware=True,
+            )
+            query = query.where(
+                or_(
+                    *(
+                        expression.ilike(
+                            search_pattern,
+                            escape=ILIKE_ESCAPE,
+                        )
+                        for expression in (
+                            displayed_time,
+                            cast(DeviceOperation.id, String),
+                            cast(DeviceOperation.operation_type, String),
+                            cast(DeviceOperation.status, String),
+                        )
+                    )
+                )
+            )
+
         # Count total
         count_query = select(func.count()).select_from(query.subquery())
         total = (await self.session.execute(count_query)).scalar_one()
 
         # Pagination & Ordering
-        query = query.order_by(desc(DeviceOperation.time))
+        sort_expressions = {
+            "time": DeviceOperation.time,
+            "id": DeviceOperation.id,
+            # Postgres orders native enums by declaration order; sort by the
+            # label text so the order matches what the table shows.
+            "operation_type": cast(DeviceOperation.operation_type, String),
+            "status": cast(DeviceOperation.status, String),
+        }
+        sort_expression = sort_expressions[sort_by]
+        ordered_expression = (
+            sort_expression.desc() if sort_order == "desc" else sort_expression.asc()
+        )
+        query = query.order_by(
+            ordered_expression,
+            DeviceOperation.time.desc(),
+            DeviceOperation.id.asc(),
+        )
         query = query.offset((page - 1) * per_page).limit(per_page)
 
         result = await self.session.execute(query)
