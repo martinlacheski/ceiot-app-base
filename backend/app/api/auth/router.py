@@ -61,6 +61,20 @@ facebook_sso = FacebookSSO(
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 
+SELF_UPDATE_FIELDS = {
+    "email",
+    "username",
+    "first_name",
+    "last_name",
+    "identification_number",
+    "phone",
+    "birth_date",
+    "identification_type_id",
+    "city_id",
+    "address",
+}
+
+
 def _google_credentials() -> tuple[str, str]:
     client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
     client_secret = (settings.GOOGLE_CLIENT_SECRET or "").strip()
@@ -446,11 +460,23 @@ async def update_user(
     db: AsyncDBSession,
     current_user: User = Depends(PermissionChecker("user:me"))
 ):
-    # Verificar si el usuario intenta actualizarse a sí mismo o tiene permisos
-    if current_user.id != user_id:
-        # Si no es él mismo, verificar permiso "user:update"
-        checker = PermissionChecker("user:update")
-        checker(current_user)
+    requested_fields = payload.model_fields_set
+    can_update_users = "user:update" in (current_user.permissions or [])
+
+    if current_user.id == user_id and not can_update_users:
+        if requested_fields - SELF_UPDATE_FIELDS:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No tienes permisos para actualizar campos privilegiados",
+            )
+    elif current_user.id != user_id:
+        PermissionChecker("user:update")(current_user)
+
+    if "is_admin" in requested_fields and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Solo un administrador puede cambiar el rol de administrador",
+        )
 
     user_repo = UserRepository(db)
     service = AuthService(user_repo)
@@ -597,4 +623,3 @@ async def refresh_token(
 async def logout(response: Response):
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
-

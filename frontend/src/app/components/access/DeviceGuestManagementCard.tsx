@@ -16,6 +16,7 @@ import { DateTimePicker24h } from "@/components/custom/DateTimePicker24h";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showConfirmDialog } from "@/store/confirm.store";
+import { getUserFullName } from "@/auth/actions/session-user";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { isValidEmail } from "@/utils/validators";
 
@@ -112,7 +113,8 @@ export function DeviceGuestManagementCard({
 
   const getGuestFullName = (guest: DeviceAccessContext["guests"][number]) => {
     const name = [guest.firstName, guest.lastName].filter(Boolean).join(" ").trim();
-    return name || knownUsers.find((candidate) => candidate.id === guest.guestUserId)?.fullName;
+    const knownUser = knownUsers.find((candidate) => candidate.id === guest.guestUserId);
+    return name || (knownUser ? getUserFullName(knownUser) : undefined);
   };
 
   const handleInvite = () => {

@@ -27,6 +27,7 @@ import { useDeleteUser, useUpdateUser, useUsers } from "@/admin/hooks/useUsers";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { exportToExcel, exportToPdf } from "@/lib/export.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { getUserFullName } from "@/auth/actions/session-user";
 
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
@@ -132,10 +133,7 @@ export function UserMobileCard({
   onDelete,
   onActivate,
 }: UserMobileCardProps) {
-  const fullName =
-    user.fullName?.trim() ||
-    [user.firstName, user.lastName].filter(Boolean).join(" ") ||
-    user.username;
+  const fullName = getUserFullName(user).trim() || user.username;
 
   return (
     <Card

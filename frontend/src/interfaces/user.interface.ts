@@ -2,7 +2,6 @@ export interface User {
   id: string; // UUID
   email: string;
   username: string;
-  fullName: string;
   firstName?: string;
   lastName?: string;
   identificationNumber?: string;
@@ -18,4 +17,8 @@ export interface User {
   isAdmin: boolean;
   isSocialAuth?: boolean;
   permissions: string[];
+}
+
+export interface SessionUser extends User {
+  fullName: string;
 }

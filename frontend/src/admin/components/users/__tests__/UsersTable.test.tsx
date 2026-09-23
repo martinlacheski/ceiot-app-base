@@ -14,7 +14,6 @@ const users = [
     id: "1",
     username: "testuser",
     email: "test@example.com",
-    fullName: "Test User",
     firstName: "Test",
     lastName: "User",
     identificationNumber: "12345678",
@@ -26,7 +25,8 @@ const users = [
     id: "2",
     username: "inactiveuser",
     email: "inactive@example.com",
-    fullName: "Inactive User",
+    firstName: "Inactive",
+    lastName: "User",
     isActive: false,
     isAdmin: false,
     permissions: [],
@@ -40,7 +40,7 @@ vi.mock("@/admin/hooks/useUsers", () => ({
       items: users,
       total: 2,
       page: 1,
-      size: 10,
+      per_page: 10,
       pages: 1,
     },
     isLoading: false,
@@ -113,7 +113,7 @@ describe("UsersTable", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(useUsers).mockReturnValue({
-      data: { items: users, total: 2, page: 1, size: 10, pages: 1 },
+      data: { items: users, total: 2, page: 1, per_page: 10, pages: 1 },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useUsers>);
@@ -127,7 +127,7 @@ describe("UsersTable", () => {
       items: users,
       total: users.length,
       page: 1,
-      size: 10000,
+      per_page: 10000,
       pages: 1,
     });
   });
@@ -265,7 +265,7 @@ describe("UsersTable", () => {
     expect(screen.getAllByTestId("user-mobile-skeleton")).toHaveLength(3);
 
     vi.mocked(useUsers).mockReturnValue({
-      data: { items: [], total: 0, page: 1, size: 10, pages: 0 },
+      data: { items: [], total: 0, page: 1, per_page: 10, pages: 0 },
       isLoading: false,
       isError: false,
     } as unknown as ReturnType<typeof useUsers>);

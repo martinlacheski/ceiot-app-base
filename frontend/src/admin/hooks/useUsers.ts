@@ -7,6 +7,7 @@ import {
   getUsersAction,
   updateUserAction,
   type GetUsersParams,
+  type UserActionPayload,
 } from "../actions/user.actions";
 
 export const useUsers = (
@@ -42,7 +43,7 @@ export const useCreateUser = () => {
 export const useUpdateUser = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, user }: { id: string; user: any }) =>
+    mutationFn: ({ id, user }: { id: string; user: UserActionPayload }) =>
       updateUserAction(id, user),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });

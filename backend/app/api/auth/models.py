@@ -123,6 +123,7 @@ class UserUpdate(SQLModel):
     updated_at: datetime = Field(default_factory=datetime.now)
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
+    is_admin: Optional[bool] = None
 
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -133,14 +134,6 @@ class UserUpdate(SQLModel):
     identification_type_id: Optional[uuid.UUID] = None
     city_id: Optional[uuid.UUID] = None
     address: Optional[str] = None
-
-    @field_validator("password")
-    @classmethod
-    def validate_optional_password(cls, password: Optional[str]) -> Optional[str]:
-        if password is None or not password.strip():
-            return None
-        return validate_password_policy(password)
-
 
 class UserPasswordUpdate(SQLModel):
     old_password: Optional[str] = None

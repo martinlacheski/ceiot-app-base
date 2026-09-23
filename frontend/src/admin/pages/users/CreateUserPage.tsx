@@ -33,7 +33,7 @@ export default function CreateUserPage() {
               "Ya existe un usuario inactivo con estos datos. ¿Deseas habilitarlo?",
               async () => {
                 try {
-                  await updateUser({ id, user: { is_active: true } });
+                  await updateUser({ id, user: { isActive: true } });
                   toast.success("Usuario habilitado exitosamente");
                   navigate("/admin/users");
                 } catch {

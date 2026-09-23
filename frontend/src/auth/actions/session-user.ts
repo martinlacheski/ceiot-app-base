@@ -1,6 +1,10 @@
-import type { User } from "@/interfaces/user.interface";
+import type { SessionUser, User } from "@/interfaces/user.interface";
 
-export const withFullName = (user: User): User => ({
+export const getUserFullName = (
+  user: Pick<User, "firstName" | "lastName">,
+): string => [user.firstName, user.lastName].filter(Boolean).join(" ");
+
+export const withFullName = (user: User): SessionUser => ({
   ...user,
-  fullName: [user.firstName, user.lastName].filter(Boolean).join(" "),
+  fullName: getUserFullName(user),
 });

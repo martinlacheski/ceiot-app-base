@@ -91,7 +91,6 @@ describe("Auth Store", () => {
         permissions: [],
         isActive: true,
         isAdmin: false,
-        fullName: "New Name",
       });
 
       useAuthStore.setState({

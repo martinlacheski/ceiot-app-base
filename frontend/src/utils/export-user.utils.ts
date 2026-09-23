@@ -1,6 +1,6 @@
-import type { User } from "@/interfaces/user.interface";
+import type { SessionUser } from "@/interfaces/user.interface";
 
-type ExportUser = Pick<User, "fullName" | "username" | "email"> | null | undefined;
+type ExportUser = Pick<SessionUser, "fullName" | "username" | "email"> | null | undefined;
 
 export function getExportGeneratedBy(user: ExportUser): string {
   const fullName = user?.fullName?.trim();

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { User } from "@/interfaces/user.interface";
+import type { SessionUser } from "@/interfaces/user.interface";
 import { create } from "zustand";
 
 import { appApi } from "@/api/appApi";
@@ -18,7 +18,7 @@ import { updateUserAction } from "../actions/update-user.action";
 
 type AuthStatus = "authenticated" | "not-authenticated" | "checking";
 
-const normalizeUser = (user: any): User => {
+const normalizeUser = (user: any): SessionUser => {
   if (!user) return user;
   return {
     ...user,
@@ -50,7 +50,7 @@ type ProfileUpdatePayload = {
 
 type AuthState = {
   // Properties
-  user: User | null;
+  user: SessionUser | null;
   token: string | null;
   authStatus: AuthStatus;
 
