@@ -111,8 +111,8 @@ afterEach(() => {
 
 describe("DeviceDetailPage", () => {
   it.each([
-    [true, "Online"],
-    [false, "Offline"],
+    [true, "En línea"],
+    [false, "Fuera de línea"],
     [null, "No disponible"],
   ] as const)("shows %s broker presence as %s", (presence, label) => {
     queryState.brokerConnected = presence;
@@ -121,7 +121,7 @@ describe("DeviceDetailPage", () => {
 
     expect(screen.getByText(label)).toBeInTheDocument();
     if (presence === null) {
-      expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+      expect(screen.queryByText("Fuera de línea")).not.toBeInTheDocument();
     }
   });
 

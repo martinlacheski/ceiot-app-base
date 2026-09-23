@@ -1,4 +1,5 @@
 import type { Device } from "@/app/types/device.types";
+import { getDeviceLocationSourceCodeLabel } from "@/utils/status-labels";
 
 export function getDeviceEffectiveLocation(device: Device): string | null {
   const effectiveLocation = device.effectiveLocation?.trim();
@@ -14,8 +15,9 @@ export function getDeviceEffectiveLocation(device: Device): string | null {
 
 export function getDeviceLocationSourceLabel(device: Device): string | null {
   const source = device.effectiveLocationSource;
-  if (source === "device_gps") return "GPS";
-  if (source === "environment") return "Establecimiento";
+  if (source === "device_gps" || source === "environment") {
+    return getDeviceLocationSourceCodeLabel(source);
+  }
 
   if (device.gpsLatitude != null && device.gpsLongitude != null) {
     return "GPS";

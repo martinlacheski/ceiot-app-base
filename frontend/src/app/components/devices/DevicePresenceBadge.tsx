@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { getConnectionStatusLabel } from "@/utils/status-labels";
 
 interface DevicePresenceBadgeProps
   extends Omit<ComponentProps<typeof Badge>, "children" | "variant"> {
@@ -34,7 +35,7 @@ export function DevicePresenceBadge({
       className={className}
       {...props}
     >
-      {brokerConnected ? "Online" : "Offline"}
+      {getConnectionStatusLabel(brokerConnected ? "online" : "offline")}
     </Badge>
   );
 }

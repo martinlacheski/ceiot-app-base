@@ -10,6 +10,11 @@ from app.api.device.operations.models import (
     DeviceOperationStatus,
 )
 from app.core.search import ILIKE_ESCAPE, formatted_datetime, ilike_pattern
+from app.core.labels_es import (
+    OPERATION_STATUS_LABELS,
+    OPERATION_TYPE_LABELS,
+    codes_matching_label,
+)
 
 
 class DeviceOperationService:
@@ -67,22 +72,23 @@ class DeviceOperationService:
                 utc_offset_minutes,
                 timezone_aware=True,
             )
-            query = query.where(
-                or_(
-                    *(
-                        expression.ilike(
-                            search_pattern,
-                            escape=ILIKE_ESCAPE,
-                        )
-                        for expression in (
-                            displayed_time,
-                            cast(DeviceOperation.id, String),
-                            cast(DeviceOperation.operation_type, String),
-                            cast(DeviceOperation.status, String),
-                        )
-                    )
+            search_conditions = [
+                expression.ilike(search_pattern, escape=ILIKE_ESCAPE)
+                for expression in (
+                    displayed_time,
+                    cast(DeviceOperation.id, String),
+                    cast(DeviceOperation.operation_type, String),
+                    cast(DeviceOperation.status, String),
                 )
-            )
+            ]
+            for column, labels in (
+                (DeviceOperation.operation_type, OPERATION_TYPE_LABELS),
+                (DeviceOperation.status, OPERATION_STATUS_LABELS),
+            ):
+                codes = sorted(code.lower() for code in codes_matching_label(search or "", labels))
+                if codes:
+                    search_conditions.append(func.lower(cast(column, String)).in_(codes))
+            query = query.where(or_(*search_conditions))
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())

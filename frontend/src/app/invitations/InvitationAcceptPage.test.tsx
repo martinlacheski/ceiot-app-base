@@ -120,4 +120,13 @@ describe("InvitationAcceptPage", () => {
     expect(await screen.findByRole("button", { name: /aceptar/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
   });
+
+  it("shows a Spanish label for a processed invitation", async () => {
+    vi.mocked(getInvitationAction).mockResolvedValue({
+      ...invitationMock,
+      status: "revoked",
+    });
+    renderPage();
+    expect(await screen.findByText("Estado: Revocada")).toBeInTheDocument();
+  });
 });

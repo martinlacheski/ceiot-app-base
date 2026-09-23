@@ -11,6 +11,7 @@ import { Building2, MapPin, Phone, FileText, User, Globe } from "lucide-react";
 import { APIProvider, Map, AdvancedMarker } from "@vis.gl/react-google-maps";
 import { useQuery } from "@tanstack/react-query";
 import { environmentService } from "@/app/services/environment.service";
+import { getInvitationStatusLabel } from "@/utils/status-labels";
 
 interface EnvironmentDetailDialogProps {
   environment: Environment | null;
@@ -160,7 +161,7 @@ export function EnvironmentDetailDialog({
                       className="flex items-center justify-between gap-3 rounded-md bg-muted/50 p-3 text-sm"
                     >
                       <span className="font-medium">{invitation.email}</span>
-                      <Badge variant="secondary">{invitation.status}</Badge>
+                      <Badge variant="secondary">{getInvitationStatusLabel(invitation.status)}</Badge>
                     </div>
                   ))}
                 </div>

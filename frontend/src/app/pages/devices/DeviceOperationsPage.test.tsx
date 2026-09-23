@@ -173,12 +173,12 @@ describe("DeviceOperationsPage responsive presentation", () => {
     expect(cards[0]).toHaveTextContent("operation-later");
     expect(cards[1]).toHaveTextContent("operation-earlier");
 
-    expect(within(cards[0]).getByText("SENSOR_DATA")).toBeInTheDocument();
-    expect(within(cards[0]).getByText("SUCCESS")).toBeInTheDocument();
+    expect(within(cards[0]).getByText("Datos de sensores")).toBeInTheDocument();
+    expect(within(cards[0]).getByText("Exitoso")).toBeInTheDocument();
     expect(within(cards[0]).getByText(/24\/07\/2026/)).toBeInTheDocument();
     expect(within(cards[0]).getByText(/12:30|15:30/)).toBeInTheDocument();
-    expect(within(cards[1]).getByText("KEEP_ACTIVE")).toBeInTheDocument();
-    expect(within(cards[1]).getByText("CONFIRMED")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("Dispositivo activo")).toBeInTheDocument();
+    expect(within(cards[1]).getByText("Confirmed")).toBeInTheDocument();
   });
 
   it("gives each mobile operation card a distinguishable accessible name", () => {
@@ -186,12 +186,12 @@ describe("DeviceOperationsPage responsive presentation", () => {
 
     expect(
       screen.getByRole("article", {
-        name: /24\/07\/2026.*SENSOR_DATA.*SUCCESS.*operation-later/,
+        name: /24\/07\/2026.*Datos de sensores.*Exitoso.*operation-later/,
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("article", {
-        name: /23\/07\/2026.*KEEP_ACTIVE.*CONFIRMED.*operation-earlier/,
+        name: /23\/07\/2026.*Dispositivo activo.*Confirmed.*operation-earlier/,
       }),
     ).toBeInTheDocument();
   });
@@ -209,10 +209,10 @@ describe("DeviceOperationsPage responsive presentation", () => {
     renderPage();
 
     const firstArticle = screen.getByRole("article", {
-      name: /SENSOR_DATA.*SUCCESS.*operation-duplicate-a/,
+      name: /Datos de sensores.*Exitoso.*operation-duplicate-a/,
     });
     const secondArticle = screen.getByRole("article", {
-      name: /SENSOR_DATA.*SUCCESS.*operation-duplicate-b/,
+      name: /Datos de sensores.*Exitoso.*operation-duplicate-b/,
     });
 
     expect(firstArticle).toHaveAccessibleName();
@@ -272,8 +272,8 @@ describe("DeviceOperationsPage responsive presentation", () => {
     renderPage("/app/devices/device-1/operations?search=SENSOR_DATA&page=1&size=20&startDate=2026-07-03&endDate=2026-07-04&sortBy=status&sortOrder=asc");
 
     expect(screen.getAllByRole("article")).toHaveLength(2);
-    expect(screen.getAllByText("SENSOR_DATA")).toHaveLength(2);
-    expect(screen.getAllByText("KEEP_ACTIVE")).toHaveLength(2);
+    expect(screen.getAllByText("Datos de sensores")).toHaveLength(2);
+    expect(screen.getAllByText("Dispositivo activo")).toHaveLength(2);
 
     queryOptions.queryFn();
     expect(getOperationsMock).toHaveBeenCalledWith(

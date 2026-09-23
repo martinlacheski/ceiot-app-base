@@ -73,7 +73,7 @@ describe("deviceService.getAll", () => {
     vi.mocked(appApi.get)
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "first", serial: "A", name: "First" }],
+          items: [{ id: "first", serial: "A", name: "First", status: "paired", isActive: true }],
           total: 10001,
           pages: 2,
           page: 1,
@@ -82,7 +82,7 @@ describe("deviceService.getAll", () => {
       })
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "last", serial: "Z", name: "Last" }],
+          items: [{ id: "last", serial: "Z", name: "Last", status: "maintenance", isActive: false }],
           total: 10001,
           pages: 2,
           page: 2,
@@ -117,6 +117,12 @@ describe("deviceService.getAll", () => {
       "excel",
       expect.objectContaining({ data: expect.arrayContaining([expect.arrayContaining(["A"]), expect.arrayContaining(["Z"])]) }),
     );
+    const report = downloadReportMock.mock.calls[0][1] as { columns: string[]; data: string[][] };
+    const situationIndex = report.columns.indexOf("Situación");
+    const stateIndex = report.columns.indexOf("Estado");
+    expect(situationIndex).toBeGreaterThan(-1);
+    expect(report.data.map((row) => row[situationIndex])).toEqual(["VINCULADO", "MANTENIMIENTO"]);
+    expect(report.data.map((row) => row[stateIndex])).toEqual(["Activo", "Inactivo"]);
   });
 });
 
@@ -153,7 +159,7 @@ describe("deviceService.getOperations", () => {
     vi.mocked(appApi.get)
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "first", time: "2026-09-01T00:00:00Z", operation_type: "A", status: "ok" }],
+          items: [{ id: "first", time: "2026-09-01T00:00:00Z", operation_type: "SENSOR_DATA", status: "success" }],
           total: 10001,
           pages: 2,
           page: 1,
@@ -162,7 +168,7 @@ describe("deviceService.getOperations", () => {
       })
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "last", time: "2026-09-02T00:00:00Z", operation_type: "Z", status: "ok" }],
+          items: [{ id: "last", time: "2026-09-02T00:00:00Z", operation_type: "KEEP_ACTIVE", status: "failed" }],
           total: 10001,
           pages: 2,
           page: 2,
@@ -194,6 +200,11 @@ describe("deviceService.getOperations", () => {
         ]),
       }),
     );
+    const exportedRows = downloadReportMock.mock.calls[0][1].data as string[][];
+    expect(exportedRows.map((row) => row.slice(-2))).toEqual([
+      ["Datos de sensores", "Exitoso"],
+      ["Dispositivo activo", "Fallido"],
+    ]);
   });
 });
 

@@ -9,6 +9,7 @@ import type { DeviceMapItem } from "@/interfaces/device-map.interface";
 import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
+import { getConnectionStatusLabel } from "@/utils/status-labels";
 
 interface MapContainerProps {
   devices: DeviceMapItem[];
@@ -124,9 +125,7 @@ export function MapContainer({ devices }: MapContainerProps) {
                         borderRadius: "50%",
                       }}
                     />
-                    {selectedDevice.status === "online"
-                      ? "En línea"
-                      : "Fuera de línea"}
+                    {getConnectionStatusLabel(selectedDevice.status)}
                   </span>
                 </div>
 

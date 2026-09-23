@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
+import { getConnectionStatusLabel } from "@/utils/status-labels";
 
 import { getDevicesForMapAction } from "@/app/actions/device-map.actions";
 import { PageHeader } from "@/app/components/PageHeader";
@@ -82,8 +83,8 @@ export default function MapPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los estados</SelectItem>
-                  <SelectItem value="online">Solo en línea</SelectItem>
-                  <SelectItem value="offline">Solo fuera de línea</SelectItem>
+                  <SelectItem value="online">Solo {getConnectionStatusLabel("online").toLowerCase()}</SelectItem>
+                  <SelectItem value="offline">Solo {getConnectionStatusLabel("offline").toLowerCase()}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -124,9 +125,7 @@ export default function MapPage() {
                           : "bg-red-100 text-red-800"
                       }
                     >
-                      {device.status === "online"
-                        ? "En línea"
-                        : "Fuera de línea"}
+                      {getConnectionStatusLabel(device.status)}
                     </Badge>
                   </div>
                 </div>

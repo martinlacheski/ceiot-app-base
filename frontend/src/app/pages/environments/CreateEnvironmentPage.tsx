@@ -35,6 +35,7 @@ import {
 } from "@/app/components/access/accessStart.utils";
 import { isValidEmail } from "@/utils/validators";
 import { useAuthStore } from "@/auth/store/auth.store";
+import { getInvitationStatusLabel } from "@/utils/status-labels";
 
 const INVITATION_STATUS = {
   PENDING: "pending",
@@ -43,22 +44,12 @@ const INVITATION_STATUS = {
   REVOKED: "revoked",
 } as const;
 
-const INVITATION_STATUS_LABELS: Record<string, string> = {
-  [INVITATION_STATUS.PENDING]: "Pendiente",
-  [INVITATION_STATUS.ACCEPTED]: "Aceptada",
-  [INVITATION_STATUS.DECLINED]: "Rechazada",
-  [INVITATION_STATUS.REVOKED]: "Revocada",
-};
-
 const INVITATION_STATUS_STYLES: Record<string, string> = {
   [INVITATION_STATUS.PENDING]: "border-amber-200 bg-amber-50 text-amber-700",
   [INVITATION_STATUS.ACCEPTED]: "border-emerald-200 bg-emerald-50 text-emerald-700",
   [INVITATION_STATUS.DECLINED]: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300",
   [INVITATION_STATUS.REVOKED]: "border-red-200 bg-red-50 text-red-700",
 };
-
-const getInvitationStatusLabel = (status: string) =>
-  INVITATION_STATUS_LABELS[status] ?? status;
 
 const getInvitationStatusClassName = (status: string) =>
   INVITATION_STATUS_STYLES[status] ?? "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300";

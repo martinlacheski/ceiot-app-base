@@ -121,7 +121,7 @@ describe("DeviceMobileCard", () => {
     const connectionRow = screen.getByLabelText(
       "Conectividad y última conexión",
     );
-    expect(within(connectionRow).getByText("Online")).toBeInTheDocument();
+    expect(within(connectionRow).getByText("En línea")).toBeInTheDocument();
     expect(
       within(connectionRow).getByText(/Última conexión:/),
     ).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe("DeviceMobileCard", () => {
       "Conectividad y última conexión",
     );
     expect(
-      within(fallbackConnectionRow).getByText("Offline"),
+      within(fallbackConnectionRow).getByText("Fuera de línea"),
     ).toBeInTheDocument();
     expect(
       within(fallbackConnectionRow).getByText(
@@ -172,7 +172,7 @@ describe("DeviceMobileCard", () => {
       within(unavailableConnectionRow).getByText("No disponible"),
     ).toBeInTheDocument();
     expect(
-      within(unavailableConnectionRow).queryByText("Offline"),
+      within(unavailableConnectionRow).queryByText("Fuera de línea"),
     ).not.toBeInTheDocument();
   });
 
@@ -228,6 +228,15 @@ describe("DevicesTable responsive contract", () => {
       isError: false,
       refetch: vi.fn(),
     });
+  });
+
+  it("uses the same accented enabled label as device exports", () => {
+    useDevicesMock.mockReturnValue({
+      data: { items: [baseDevice], total: 1, pages: 1 },
+      isLoading: false,
+    });
+    render(<MemoryRouter><DevicesTable mode="admin" /></MemoryRouter>);
+    expect(within(screen.getByRole("table")).getByText("Sí")).toBeInTheDocument();
   });
 
   it.each(["admin", "user"] as const)(

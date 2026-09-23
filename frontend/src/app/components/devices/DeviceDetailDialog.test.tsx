@@ -92,8 +92,8 @@ beforeEach(() => {
 
 describe("DeviceDetailDialog", () => {
   it.each([
-    [true, "Online"],
-    [false, "Offline"],
+    [true, "En línea"],
+    [false, "Fuera de línea"],
     [null, "No disponible"],
   ] as const)(
     "shows %s broker presence as %s separately from the active state",
@@ -107,7 +107,7 @@ describe("DeviceDetailDialog", () => {
           .some((element) => element.dataset.slot === "badge"),
       ).toBe(true);
       if (presence === null) {
-        expect(screen.queryByText("Offline")).not.toBeInTheDocument();
+        expect(screen.queryByText("Fuera de línea")).not.toBeInTheDocument();
       }
     },
   );

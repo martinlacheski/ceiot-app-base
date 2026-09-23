@@ -20,6 +20,7 @@ import {
 } from "@/app/actions/invitation.actions";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { useAuthStore } from "@/auth/store/auth.store";
+import { getInvitationStatusLabel } from "@/utils/status-labels";
 
 export default function InvitationAcceptPage() {
   const [searchParams] = useSearchParams();
@@ -179,7 +180,7 @@ export default function InvitationAcceptPage() {
           </CardHeader>
           <CardContent className="text-center">
             <div className="inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80">
-              Estado: {invitation?.status}
+              Estado: {getInvitationStatusLabel(invitation?.status)}
             </div>
           </CardContent>
           <CardFooter className="justify-center pt-2">

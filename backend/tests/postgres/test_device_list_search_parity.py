@@ -811,6 +811,33 @@ async def test_operation_search_matches_rendered_type_and_status_labels(
     assert set(search_graph.operation_ids) & {uuid.UUID(item["id"]) for item in result["items"]}
 
 
+@pytest.mark.parametrize(
+    ("term", "expected_index"),
+    [
+        ("datos de sensores", 0),
+        ("dispositivo activo", 1),
+        ("solicitud de sesion", 3),
+        ("exitoso", 0),
+        ("fallido", 1),
+        ("pendiente", 2),
+    ],
+)
+async def test_operation_search_matches_spanish_display_labels(
+    postgres_rls_config,
+    search_graph: SearchGraph,
+    term: str,
+    expected_index: int,
+) -> None:
+    engine = create_async_engine(postgres_rls_config.admin_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        result = await _operations(session, search_graph, search=term)
+    await engine.dispose()
+
+    assert search_graph.operation_ids[expected_index] in {
+        uuid.UUID(item["id"]) for item in result["items"]
+    }
+
+
 async def test_operation_search_matches_id_and_utc_shifted_displayed_time(
     postgres_rls_config, search_graph: SearchGraph
 ) -> None:

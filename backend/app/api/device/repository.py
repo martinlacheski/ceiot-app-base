@@ -27,6 +27,7 @@ from app.core.search import (
     formatted_datetime,
     ilike_pattern,
 )
+from app.core.labels_es import DEVICE_STATUS_LABELS, codes_matching_label
 
 
 class DeviceRepository:
@@ -300,6 +301,14 @@ class DeviceRepository:
                 )
                 for expression in displayed_expressions
             ]
+            status_codes = sorted(
+                code.lower()
+                for code in codes_matching_label(search or "", DEVICE_STATUS_LABELS)
+            )
+            if status_codes:
+                search_conditions.append(
+                    func.lower(cast(Device.status, String)).in_(status_codes)
+                )
             search_conditions.append(owner_matches)
             if owner_search_environment_ids:
                 search_conditions.append(

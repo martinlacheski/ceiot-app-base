@@ -135,16 +135,16 @@ describe("OverviewPage operational inventory", () => {
     renderPage();
 
     const online = screen.getByTestId("device-device-online-disabled");
-    expect(within(online).getByText("Online")).toBeInTheDocument();
+    expect(within(online).getByText("En línea")).toBeInTheDocument();
     expect(within(online).getByText("Deshabilitado")).toBeInTheDocument();
 
     const offline = screen.getByTestId("device-device-offline-enabled");
-    expect(within(offline).getByText("Offline")).toBeInTheDocument();
+    expect(within(offline).getByText("Fuera de línea")).toBeInTheDocument();
     expect(within(offline).getByText("Habilitado")).toBeInTheDocument();
 
     const unavailable = screen.getByTestId("device-device-presence-unavailable");
     expect(within(unavailable).getByText("No disponible")).toBeInTheDocument();
-    expect(within(unavailable).queryByText("Offline")).not.toBeInTheDocument();
+    expect(within(unavailable).queryByText("Fuera de línea")).not.toBeInTheDocument();
 
     const onlineSummary = screen.getByText("Online mostrados").closest("div");
     const offlineSummary = screen.getByText("Offline mostrados").closest("div");

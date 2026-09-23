@@ -26,6 +26,7 @@ import { DataTablePagination } from "@/components/custom/DataTablePagination";
 import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListSearchInput } from "@/components/custom/ListSearchInput";
 import { ListExportActions } from "@/components/custom/ListExportActions";
+import { getOperationStatusLabel, getOperationTypeLabel } from "@/utils/status-labels";
 import {
   ListFiltersPanel,
   ListFiltersTrigger,
@@ -88,21 +89,21 @@ function OperationCard({ row }: { row: Row<DeviceOperation> }) {
   return (
     <Card
       role="article"
-      aria-label={`${formattedDateTime}, ${operation.operation_type}, ${operation.status}, operación ${operation.id}`}
+      aria-label={`${formattedDateTime}, ${getOperationTypeLabel(operation.operation_type)}, ${getOperationStatusLabel(operation.status)}, operación ${operation.id}`}
       className="gap-4 py-4"
     >
       <CardHeader>
         <CardTitle>{formattedDateTime}</CardTitle>
         <CardDescription className="flex flex-wrap gap-2">
           <span className="sr-only">Estado</span>
-          <Badge variant="outline">{operation.status}</Badge>
+          <Badge variant="outline">{getOperationStatusLabel(operation.status)}</Badge>
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3">
         <dl className="grid gap-2 text-sm">
           <div>
             <dt className="text-muted-foreground">Tipo</dt>
-            <dd>{operation.operation_type}</dd>
+            <dd>{getOperationTypeLabel(operation.operation_type)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-muted-foreground">ID</dt>
@@ -252,13 +253,14 @@ export default function DeviceOperationsPage() {
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Tipo" align="center" />
         ),
+        cell: ({ row }) => getOperationTypeLabel(row.original.operation_type),
       },
       {
         accessorKey: "status",
         header: ({ column }) => (
           <DataTableColumnHeader column={column} title="Estado" align="center" />
         ),
-        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
+        cell: ({ row }) => <Badge variant="outline">{getOperationStatusLabel(row.original.status)}</Badge>,
       },
     ],
     [],

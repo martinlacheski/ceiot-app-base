@@ -49,6 +49,7 @@ import {
   type SortOrder,
 } from "@/app/types/environment.types";
 import { Badge } from "@/components/ui/badge";
+import { getEnvironmentRoleLabel } from "@/utils/status-labels";
 import { useState, useMemo, useEffect } from "react";
 import {
   Select,
@@ -141,12 +142,7 @@ export function EnvironmentMobileCard({
   const role =
     environment.currentUserRole ??
     (environment.ownerId === currentUserId ? ENVIRONMENT_ROLE.OWNER : null);
-  const roleLabel =
-    role === ENVIRONMENT_ROLE.OWNER
-      ? "Propietario"
-      : role === ENVIRONMENT_ROLE.GUEST
-        ? "Invitado"
-        : null;
+  const roleLabel = role ? getEnvironmentRoleLabel(role) : null;
 
   return (
     <Card className="gap-4 py-4">
@@ -487,12 +483,7 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
         const role =
           environment.currentUserRole ??
           (environment.ownerId === user?.id ? ENVIRONMENT_ROLE.OWNER : null);
-        const label =
-          role === ENVIRONMENT_ROLE.OWNER
-            ? "Propietario"
-            : role === ENVIRONMENT_ROLE.GUEST
-              ? "Invitado"
-              : "-";
+        const label = role ? getEnvironmentRoleLabel(role) : "-";
 
         return <div className="text-center">{label}</div>;
       },

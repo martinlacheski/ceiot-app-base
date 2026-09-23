@@ -105,14 +105,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { applySortingUpdate, toSortingState } from "@/lib/serverSorting";
-
-const DEVICE_STATUS_LABELS: Record<Device["status"], string> = {
-  new: "NUEVO",
-  paired: "VINCULADO",
-  active: "ACTIVO",
-  maintenance: "MANTENIMIENTO",
-  unpaired: "DESVINCULADO",
-};
+import { getDeviceStatusLabel } from "@/utils/status-labels";
 
 const DEVICE_SORT_FIELDS = Object.values(DEVICE_SORT_BY) as DeviceSortBy[];
 const DEVICE_SORT_FIELD_SET = new Set<string>(DEVICE_SORT_FIELDS);
@@ -213,7 +206,7 @@ export function DeviceMobileCard({
               variant="outline"
               className={getDeviceStatusClasses(device.status)}
             >
-              {DEVICE_STATUS_LABELS[device.status]}
+              {getDeviceStatusLabel(device.status)}
             </Badge>
           </div>
         ) : null}
@@ -833,8 +826,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
                 variant="outline"
                 className={getDeviceStatusClasses(status as Device["status"])}
               >
-                {DEVICE_STATUS_LABELS[status as Device["status"]] ||
-                  status.toUpperCase()}
+                {getDeviceStatusLabel(status)}
               </Badge>
             </div>
           );
@@ -854,7 +846,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
           return (
             <div className="flex justify-center">
               <Badge variant={isEnabled ? "default" : "secondary"}>
-                {isEnabled ? "Si" : "No"}
+                {isEnabled ? "Sí" : "No"}
               </Badge>
             </div>
           );
@@ -1278,11 +1270,11 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
                           }
                         >
                           <option value="all">Todos</option>
-                          <option value="new">Nuevo</option>
-                          <option value="paired">Vinculado</option>
-                          <option value="active">Activo</option>
-                          <option value="maintenance">Mantenimiento</option>
-                          <option value="unpaired">Desvinculado</option>
+                          <option value="new">{getDeviceStatusLabel("new")}</option>
+                          <option value="paired">{getDeviceStatusLabel("paired")}</option>
+                          <option value="active">{getDeviceStatusLabel("active")}</option>
+                          <option value="maintenance">{getDeviceStatusLabel("maintenance")}</option>
+                          <option value="unpaired">{getDeviceStatusLabel("unpaired")}</option>
                         </select>
                       </div>
 

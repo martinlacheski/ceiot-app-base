@@ -21,6 +21,7 @@ import {
 import type { Device } from "@/app/types/device.types";
 import { formatDeviceGpsSummary, formatDeviceMac } from "./deviceTelemetry";
 import { DevicePresenceBadge } from "./DevicePresenceBadge";
+import { getDeviceStatusLabel } from "@/utils/status-labels";
 
 interface DeviceDetailDialogProps {
   device: Device | null;
@@ -64,14 +65,6 @@ export function DeviceDetailDialog({
   });
 
   if (!device) return null;
-
-  const DEVICE_STATUS_LABELS: Record<string, string> = {
-    new: "NUEVO",
-    paired: "VINCULADO",
-    active: "ACTIVO",
-    maintenance: "MANTENIMIENTO",
-    unpaired: "DESVINCULADO",
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,7 +118,7 @@ export function DeviceDetailDialog({
                     Estado Operativo:
                   </span>
                   <span className="capitalize">
-                    {DEVICE_STATUS_LABELS[device.status] || device.status}
+                    {getDeviceStatusLabel(device.status)}
                   </span>
                 </div>
                 <div className="flex justify-between border-b pb-1">

@@ -18,6 +18,7 @@ import { DateTimePicker24h } from "@/components/custom/DateTimePicker24h";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { showConfirmDialog } from "@/store/confirm.store";
+import { getInvitationStatusLabel } from "@/utils/status-labels";
 
 interface DeviceConflictDetail {
   message?: string;
@@ -156,7 +157,7 @@ export function EnvironmentGuestManagementCard({ environments }: { environments:
               <div key={invitation.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
                 <div>
                   <p className="font-medium">{invitation.email}</p>
-                  <p className="text-xs text-muted-foreground">Estado: {invitation.status}</p>
+                  <p className="text-xs text-muted-foreground">Estado: {getInvitationStatusLabel(invitation.status)}</p>
                   <p className="text-xs text-muted-foreground">{formatAccessStartLabel(invitation.accessStartsAt)}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">

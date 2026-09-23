@@ -22,6 +22,7 @@ import {
 import { formatDateTime } from "@/utils/date.utils";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 import { downloadReport, toFilenamePart } from "@/lib/downloadReport";
+import { getDeviceStatusLabel, getOperationStatusLabel, getOperationTypeLabel } from "@/utils/status-labels";
 
 const BASE_URL = "/devices";
 
@@ -344,6 +345,7 @@ export const deviceService = {
       "Tipo",
       "Modelo",
       "Ubicación",
+      "Situación",
       "Habilitado",
       "Estado",
       "Establecimiento",
@@ -360,6 +362,7 @@ export const deviceService = {
         if (location === "-") return location;
         return sourceLabel ? `${location} (${sourceLabel})` : location;
       })(),
+      getDeviceStatusLabel(dev.status),
       dev.enabled ? "Sí" : "No",
       dev.isActive ? "Activo" : "Inactivo",
       dev.environment?.name || "-",
@@ -434,8 +437,8 @@ export const deviceService = {
       data: items.map((operation) => [
         formatDateTime(operation.time),
         operation.id,
-        operation.operation_type,
-        operation.status,
+        getOperationTypeLabel(operation.operation_type),
+        getOperationStatusLabel(operation.status),
       ]),
     });
   },

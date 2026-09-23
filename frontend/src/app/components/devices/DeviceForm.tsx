@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SmartDatePicker } from "@/components/custom/SmartDatePicker";
 import { SearchableSelect } from "@/components/custom/SearchableSelect";
+import { getDeviceStatusLabel } from "@/utils/status-labels";
 import {
   FULL_PAGE_FORM_ACTION_BUTTON_CLASS,
   FULL_PAGE_FORM_ACTIONS_CLASS,
@@ -35,14 +36,6 @@ import type {
   DeviceCreate,
   DeviceUpdate,
 } from "@/app/types/device.types";
-
-const DEVICE_STATUS_LABELS: Record<string, string> = {
-  new: "NUEVO",
-  paired: "VINCULADO",
-  active: "ACTIVO",
-  maintenance: "MANTENIMIENTO",
-  unpaired: "DESVINCULADO",
-};
 
 const DEFAULT_DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31";
 
@@ -275,8 +268,7 @@ export function DeviceForm({
                           "border-transparent bg-gray-500 text-white shadow hover:bg-gray-500/80",
                       )}
                     >
-                      {DEVICE_STATUS_LABELS[initialData?.status || "new"] ||
-                        (initialData?.status || "new").toUpperCase()}
+                      {getDeviceStatusLabel(initialData?.status || "new")}
                     </div>
                   </div>
                 </FormItem>
