@@ -89,6 +89,7 @@ class DeviceRepository:
             "isActive",
             "lastConnection",
             "brokerConnected",
+            "deviceTypeName",
         ] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
         connected_serials: frozenset[str] | None = None,
@@ -371,11 +372,18 @@ class DeviceRepository:
                 if connected_serials
                 else false()
             )
+        elif sort_by == "deviceTypeName":
+            if search_pattern is None:
+                query = query.outerjoin(
+                    DeviceTypeCatalog,
+                    DeviceTypeCatalog.id == Device.device_type_id,
+                )
+            sort_expression = DeviceTypeCatalog.name
         else:
             sort_expression = sort_expressions[sort_by]
         direction = sort_expression.desc if sort_order == "desc" else sort_expression.asc
         ordered_expression = direction()
-        if sort_by in {"model", "manufactureDate", "lastConnection"}:
+        if sort_by in {"model", "manufactureDate", "lastConnection", "deviceTypeName"}:
             ordered_expression = ordered_expression.nullslast()
         query = query.order_by(ordered_expression, Device.id.asc())
 

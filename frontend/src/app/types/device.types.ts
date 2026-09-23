@@ -108,6 +108,7 @@ export const DEVICE_SORT_BY = {
   IS_ACTIVE: "isActive",
   LAST_CONNECTION: "lastConnection",
   BROKER_CONNECTED: "brokerConnected",
+  DEVICE_TYPE_NAME: "deviceTypeName",
 } as const;
 
 export type DeviceSortBy =

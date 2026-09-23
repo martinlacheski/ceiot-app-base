@@ -738,8 +738,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         },
       },
       {
-        id: "deviceTypeName",
-        enableSorting: false,
+        id: DEVICE_SORT_BY.DEVICE_TYPE_NAME,
+        accessorFn: (device) => device.type?.name,
+        enableSorting: true,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -928,8 +929,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         },
       },
       {
-        id: "deviceTypeName",
-        enableSorting: false,
+        id: DEVICE_SORT_BY.DEVICE_TYPE_NAME,
+        accessorFn: (device) => device.type?.name,
+        enableSorting: true,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}

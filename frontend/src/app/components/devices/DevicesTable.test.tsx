@@ -343,6 +343,21 @@ describe("DevicesTable responsive contract", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("sortOrder=desc");
   });
 
+  it.each(["admin", "user"] as const)("sorts Tipo in %s mode", async (mode) => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/devices?page=3"]}>
+        <DevicesTable mode={mode} />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Tipo" }));
+    await user.click(screen.getByRole("menuitem", { name: "Asc" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("sortBy=deviceTypeName");
+    expect(screen.getByTestId("location")).toHaveTextContent("page=1");
+  });
+
   it("does not expose sorting for columns unsupported by the server", () => {
     render(<MemoryRouter><DevicesTable /></MemoryRouter>);
 

@@ -20,6 +20,7 @@ class StubSession:
         ("name", "asc", "device.name ASC, device.id ASC"),
         ("serial", "desc", "device.serial DESC, device.id ASC"),
         ("enabled", "asc", "device.enabled ASC, device.id ASC"),
+        ("deviceTypeName", "asc", "device_type.name ASC NULLS LAST, device.id ASC"),
     ],
 )
 async def test_get_all_applies_allowlisted_sort_before_pagination(
@@ -91,6 +92,23 @@ async def test_live_presence_sort_uses_sql_before_pagination(monkeypatch):
     assert "device.broker_connected" not in order_by_clause
 
 
+@pytest.mark.asyncio
+async def test_device_type_sort_reuses_the_search_join(monkeypatch):
+    captured = {}
+
+    async def capture_query(session, model, query, page, per_page):
+        captured["sql"] = str(query)
+        return {"items": [], "total": 0, "pages": 0, "page": page, "per_page": per_page}
+
+    monkeypatch.setattr("app.api.device.repository.paginate_query_async", capture_query)
+    await DeviceRepository(StubSession()).get_all(
+        search="water", sort_by="deviceTypeName", sort_order="desc"
+    )
+
+    assert captured["sql"].count("JOIN device_type") == 1
+    assert "device_type.name DESC NULLS LAST, device.id ASC" in captured["sql"]
+
+
 def test_device_sort_query_parameters_are_strict_literals():
     hints = get_type_hints(get_devices)
 
@@ -104,6 +122,7 @@ def test_device_sort_query_parameters_are_strict_literals():
         "isActive",
         "lastConnection",
         "brokerConnected",
+        "deviceTypeName",
     }
     assert set(get_args(hints["sort_order"])) == {"asc", "desc"}
 
