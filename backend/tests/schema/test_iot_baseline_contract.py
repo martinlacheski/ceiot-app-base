@@ -41,6 +41,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0002_add_environmental_readings.py",
         "0003_add_device_history_environment_snapshot.py",
         "0004_deactivate_legacy_other_device_type.py",
+        "0005_environmental_sensor_model.py",
     ]
 
 

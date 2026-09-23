@@ -61,7 +61,8 @@ def test_revision_is_chained_to_current_head():
     assert revision.down_revision == DOWN_REVISION
     heads = script.get_heads()
     assert len(heads) == 1
-    assert heads[0] == REVISION
+    # Later revisions (e.g. 0005) may extend the chain past 0004, so 0004 is
+    # no longer necessarily the head; it must still be an ancestor of it.
     assert REVISION in {r.revision for r in script.walk_revisions(base=DOWN_REVISION, head=heads[0])}
 
 

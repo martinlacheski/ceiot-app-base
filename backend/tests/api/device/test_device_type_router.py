@@ -56,7 +56,7 @@ async def test_default_device_type_bootstrap_assigns_read_only_code(async_engine
 
     default_type = await repo.ensure_default_exists()
 
-    assert default_type.code == "relay_1"
+    assert default_type.code == "environmental"
 
 
 def test_device_type_catalog_crud_flow(client: TestClient, session: Session):
@@ -66,7 +66,7 @@ def test_device_type_catalog_crud_flow(client: TestClient, session: Session):
     list_response = client.get("/api/devices/types", headers=headers)
     assert list_response.status_code == 200
     assert any(
-        item["name"] == DEFAULT_DEVICE_TYPE_NAME and item["code"] == "relay_1"
+        item["name"] == DEFAULT_DEVICE_TYPE_NAME and item["code"] == "environmental"
         for item in list_response.json()["items"]
     )
 
@@ -124,11 +124,11 @@ def test_device_read_includes_nested_device_type_code(
     )
 
     assert create_response.status_code == 200
-    assert create_response.json()["type"]["code"] == "relay_1"
+    assert create_response.json()["type"]["code"] == "environmental"
 
     get_response = client.get(f"/api/devices/{create_response.json()['id']}", headers=headers)
     assert get_response.status_code == 200
-    assert get_response.json()["type"]["code"] == "relay_1"
+    assert get_response.json()["type"]["code"] == "environmental"
 
 
 def test_device_detail_includes_updated_at(
