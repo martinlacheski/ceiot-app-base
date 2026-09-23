@@ -1,9 +1,17 @@
-# Cambios de DVEM-App (18–20 de septiembre de 2026) para portar a este proyecto
+# Cambios de DVEM-App (18 de septiembre–23 de septiembre de 2026) para portar a este proyecto
 
 > Documento de traspaso para el agente que trabaja en **ceiot-app-base** (base de monitoreo ambiental).
 > Resume todo lo que se cambió en DVEM-App durante una larga sesión de trabajo, incluido lo que hizo otro agente
 > (presencia por EMQX, pulso del dashboard y encabezados de marca en los reportes). Cada cambio indica qué problema resuelve, qué archivos toca y qué hay que
-> adaptar. **Se excluyó todo lo relacionado con Mercado Pago y cobros**, porque este proyecto no tiene sistema de pagos.
+> adaptar. **Se excluyó todo lo relacionado con Mercado Pago y cobros**, porque este proyecto no tiene sistema de pagos. También se excluyó todo lo
+> relacionado con HMPACKING/Expendedora (máquina vending) y con el almacenamiento de objetos para imágenes, porque este proyecto no tiene ninguna de las dos cosas.
+>
+> **Ampliado el 22 de septiembre** con los cambios 25 a 29: modo claro/oscuro, reorganización del sidebar, el criterio de "Volver" en pantallas raíz del
+> sidebar, "Limpiar todos" en el dashboard, y la auditoría del buscador "Buscar en todos los campos" (esta última, trabajo de otro agente).
+>
+> **Ampliado el 23 de septiembre** con los cambios 30 a 35: buckets diarios de reportes en la fecha local del usuario, dispositivos ordenables por
+> "Tipo", el aviso de privacidad de login/registro enlazado a la landing, un typecheck de producción limpio (con un fix genérico al `FormField` de shadcn),
+> la desactivación del tipo de dispositivo legado "Other" vía migración, y el mapa del formulario de establecimiento siguiendo la altura del formulario.
 
 ## Qué hay que hacer
 
@@ -47,7 +55,18 @@ Si tu sesión no puede leer `/home/martin/Code/DVEM-App`, pedile el permiso al u
 - [ ] **22. Historial de dispositivos y de un dispositivo**, con la **telemetría** como pestaña principal (plantilla `HistoryTelemetryTab`), búsqueda, filtros y exportación.
 - [ ] **23. Dispositivos ordenables por propietario, establecimiento y estado**, y columna "Estado".
 - [ ] **24. Alineaciones menores** (Establecimientos en una fila, Permisos, altura de 44 px).
+- [ ] **29. Auditoría "Buscar en todos los campos": paridad completa** en las 14 pantallas de listado, más dos bugs de datos encontrados al arreglar los tests (código postal de ciudades, suites legacy sin el prefijo `/api`).
+- [ ] **25. Modo claro/oscuro persistente**, con la ronda de colores hardcodeados que rompían el tema (fondos, logos, autofill del navegador).
+- [ ] **26. Reorganización del menú lateral** (Dispositivos, Historial, Usuarios y Mapa a la raíz) y filtro/orden del historial por propietario para administradores.
+- [ ] **27. Pantallas de una sola tarjeta sin flecha de "Volver" cuando son raíz del sidebar** (`FormPageLayout` con `hideBackButton`), aplicado a Mi Perfil, Ajustes Generales y Cambiar Contraseña.
+- [ ] **28. "Limpiar todos" también en el dashboard**, sincronización del selector de fechas no controlado tras limpiar, y una X redundante de menos en el selector de usuarios.
 - [ ] **10. Catálogos de documentos y condiciones fiscales por país** (opcional; solo si este proyecto conserva datos fiscales de los usuarios).
+- [ ] **31. Dispositivos ordenables por "Tipo"** en el listado. Agregar `deviceTypeName` al enum de ordenamiento del backend y a la columna del frontend.
+- [ ] **34. Tipo de dispositivo legado "Other" desactivado vía migración**, en vez de recrearse y reactivarse solo. Copiar la migración de datos y simplificar el repositorio.
+- [ ] **32. Aviso de privacidad en login y registro** enlazado a `/privacidad` de la landing. Este proyecto ya tiene `PRIVACY_POLICY_URL` en `publicUrls.ts` y la página `landing/src/pages/privacidad.astro`: solo falta usarlo en las dos pantallas.
+- [ ] **33. Typecheck de producción limpio.** Verificar con `npm run build` (usa `tsc -b`, no `tsc --noEmit` sobre el tsconfig raíz) y aplicar el fix genérico al `FormField` compartido (tercer genérico `TTransformedValues`).
+- [ ] **35. Mapa del formulario de establecimiento siguiendo la altura del formulario** (bajar `xl:min-h-[44rem]` a algo más chico, por ejemplo `xl:min-h-[24rem]`).
+- [ ] **30. Buckets diarios de reportes en la fecha local del usuario, no en UTC** (solo si/cuando este proyecto tenga un endpoint de reportes con agregación por día, como el que trae el cambio 4): agregar `utc_offset_minutes` reutilizando `format_local`/`formatted_time` de `backend/app/api/device/history/query_utils.py` (cambio 22).
 
 ### Cómo copiar cada archivo
 
@@ -108,8 +127,19 @@ Se comprobó contra `/home/martin/Code/ceiot-app-base`. **Leer antes de portar**
 | 22 | Historial de dispositivos y de un dispositivo (telemetría) | Media | Columnas y filtros de las magnitudes del proyecto |
 | 23 | Dispositivos ordenables por propietario/establecimiento/estado | Baja | Ninguna |
 | 24 | Alineaciones menores de pantallas | Baja | Ninguna |
+| 25 | Modo claro/oscuro persistente | Media | Colores hardcodeados propios de este proyecto |
+| 26 | Reorganización del menú lateral y filtro de historial por propietario | Media | Etiquetas y rutas propias |
+| 27 | Pantallas de una sola tarjeta sin flecha de "Volver" en la raíz del sidebar | Baja | Ninguna |
+| 28 | "Limpiar todos" en el dashboard, selector de fechas sincronizado, X redundante | Baja | Ninguna |
+| 29 | Auditoría "Buscar en todos los campos": paridad completa + bugs de datos encontrados | **Alta** | Revisar si el bug del código postal y el de las rutas `/api` también están en este proyecto |
+| 30 | Buckets diarios de reportes en la fecha local del usuario, no UTC | Baja (depende del cambio 4) | Reescribir sobre lecturas de sensores; solo aplica si hay reportes con agregación diaria |
+| 31 | Dispositivos ordenables por "Tipo" | Baja | Ninguna |
+| 32 | Aviso de privacidad de login/registro enlazado a la landing | Media | Ninguna (la URL y la página ya existen en este proyecto) |
+| 33 | Typecheck de producción limpio (`tsc -b`) y fix genérico de `FormField` | Media | Ninguna |
+| 34 | Tipo de dispositivo legado "Other" desactivado vía migración | Baja | Ninguna |
+| 35 | Mapa del formulario de establecimiento sigue la altura del formulario | Baja | Ninguna |
 
-Orden sugerido: 1 → 13 → 2 → 5 → 4 → 3 → 6 y 7 → 8 y 9 → 15 → 16 → 17 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → resto.
+Orden sugerido: 1 → 13 → 2 → 5 → 4 → 3 → 6 y 7 → 8 y 9 → 15 → 16 → 17 → 29 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28 → 32 → 33 → 34 → 31 → 35 → 30 → resto.
 
 ---
 
@@ -906,9 +936,265 @@ Las tablas de Mercado Pago de DVEM también adoptaron este estándar, pero **no 
 
 ---
 
+## 25. Modo claro/oscuro persistente
+
+**Problema.** DVEM no tenía selector de tema, pero **el CSS del modo oscuro ya estaba definido** (variables shadcn en `index.css`, `.dark { ... }`) sin que nada lo activara nunca. Al construir el toggle, apareció una serie de fondos y colores **hardcodeados** (`bg-white`, `bg-gray-*`, `bg-slate-*`, texto fijo) en vez de los tokens semánticos (`bg-background`, `bg-card`, `bg-muted`, `bg-sidebar`, etc.): al activar el oscuro, esos elementos se quedaban con su color fijo mientras el resto sí cambiaba, produciendo pantallas "a medio tematizar" (texto claro sobre fondo que seguía blanco, tarjetas sin contraste, el propio botón del toggle invisible por estar sobre un header que no cambiaba).
+
+**Solución.**
+- `useTheme` (hook): resuelve el tema desde `localStorage` (clave `dvem-theme`), cae a `prefers-color-scheme` si no hay nada guardado, y sigue la preferencia del sistema en vivo mientras el usuario no elija explícitamente. Aplica la clase `.dark` en `<html>`.
+- `ThemeToggle` (componente): botón sol/luna que usa el hook; se colocó junto al menú de cuenta (`SidebarHeader`) y junto al enlace "Volver al inicio" en `AuthLayout` (login, registro, etc.), en la misma fila, para que ambos controles queden agrupados.
+- Script inline en `index.html`, antes de montar React, que aplica el tema guardado/del sistema **antes del primer pintado** (evita el flash del tema incorrecto).
+- Se reemplazaron los colores hardcodeados por tokens semánticos en el header y el menú lateral (aprovechando los tokens `sidebar-*` de shadcn, ya definidos y sin usar), el contenedor principal del layout, el selector de país, y varias tarjetas/paneles de dispositivos.
+- Dos logos PNG (`dvem-logo.png`, `dvem-logo-inverted.png`) tenían el fondo (blanco y negro respectivamente) **horneado en el píxel**, no transparente: se "despremultiplicó" el color contra el fondo sólido conocido (técnica estándar cuando un asset se exportó compuesto sobre negro o blanco) para recuperar la transparencia real sin re-hacer el logo.
+- El autofill de Chrome/Edge pinta el fondo de los inputs de amarillo **ignorando el CSS de la página**; se neutraliza con `box-shadow: 0 0 0px 1000px var(--background) inset` + `transition-delay` largo (evita el flash amarillo antes de que el override entre en efecto).
+
+**Trampas:**
+- Un componente puede usar `bg-background` en vez de `bg-transparent` como el resto de los inputs: `CountrySelect` quedaba con un tono más oscuro que la tarjeta que lo contenía, aunque técnicamente "seguía el tema".
+- El ícono de un botón puede seguir el tema (color de texto) mientras su contenedor no — si eso pasa, el ícono se vuelve invisible por falta de contraste (pasó con el toggle sobre el header antes de tematizar el header).
+- Si hay un componente compartido con logos/branding de terceros (ej. un proveedor de pagos) pensado solo para fondo claro, no intentar re-tematizarlo: ponerle un chip de fondo blanco propio es más simple y respeta los colores de marca.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/index.html` | modificado | `/home/martin/Code/DVEM-App/frontend/index.html` | script inline anti-flash |
+| `frontend/src/hooks/useTheme.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/hooks/useTheme.ts` |  |
+| `frontend/src/hooks/useTheme.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/hooks/useTheme.test.tsx` |  |
+| `frontend/src/components/custom/ThemeToggle.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/components/custom/ThemeToggle.tsx` |  |
+| `frontend/src/components/custom/ThemeToggle.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/components/custom/ThemeToggle.test.tsx` |  |
+| `frontend/src/index.css` | modificado | `/home/martin/Code/DVEM-App/frontend/src/index.css` | override de autofill; el resto de las variables `.dark` ya deberían existir |
+| `frontend/src/app/components/SidebarHeader.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/SidebarHeader.tsx` | agrega `ThemeToggle` y pasa sus colores a tokens semánticos |
+| `frontend/src/app/components/SidebarHeader.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/SidebarHeader.test.tsx` |  |
+| `frontend/src/app/layouts/MainLayout.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/layouts/MainLayout.tsx` | `bg-white` fijo → `bg-background` |
+| `frontend/src/app/components/Sidebar.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/Sidebar.tsx` | colores `gray-*` → tokens `sidebar-*`, logo centrado con grid de 3 columnas |
+| `frontend/src/components/custom/CountrySelect.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/custom/CountrySelect.tsx` | `bg-background` → `bg-transparent` (como el resto de los inputs) |
+| `frontend/src/app/components/devices/DeviceEstablishmentBlock.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/devices/DeviceEstablishmentBlock.tsx` |  |
+| `frontend/src/app/components/devices/DevicesTable.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/devices/DevicesTable.tsx` | panel "Filtros avanzados" |
+| `frontend/src/app/components/devices/DeviceForm.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/devices/DeviceForm.tsx` | ⚠ bloque "Datos Técnicos": solo el token de fondo, el resto del formulario tiene campos de importe/comisiones (ver cambio 6) |
+| `frontend/src/app/components/access/DeviceGuestManagementCard.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/access/DeviceGuestManagementCard.tsx` | tarjeta de invitación pendiente: tinte con opacidad en vez de color fijo |
+| `frontend/src/auth/layouts/AuthLayout.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/auth/layouts/AuthLayout.tsx` | agrega `ThemeToggle` junto al enlace de volver, en la misma fila |
+| `frontend/src/auth/layouts/AuthLayout.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/auth/layouts/AuthLayout.test.tsx` |  |
+| `frontend/src/app/pages/profile/ProfilePage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/profile/ProfilePage.tsx` | ⚠ la tarjeta de Mercado Pago es de cobros y no se porta; solo sirve como ejemplo del patrón "chip blanco para un logo de marca ajena" si este proyecto tiene algo similar |
+| `frontend/public/dvem-logo.png` | modificado (binario) | `/home/martin/Code/DVEM-App/frontend/public/dvem-logo.png` | técnica de "despremultiplicado" si el logo de este proyecto tiene el mismo problema; no copiar el archivo, es el logo de DVEM |
+| `frontend/public/dvem-logo-inverted.png` | modificado (binario) | `/home/martin/Code/DVEM-App/frontend/public/dvem-logo-inverted.png` | ídem |
+
+## 26. Reorganización del menú lateral y filtro de historial por propietario
+
+**Problema.** "Dispositivos", "Historial de dispositivos" y "Usuarios" vivían escondidos dentro de "Ajustes"; un administrador no tenía forma directa de ver la vista simple que ve un usuario común, y las etiquetas del menú sugerían que el administrador era "dueño" de todos los dispositivos, cuando en realidad ve los de otros.
+
+**Solución.**
+- `Dispositivos`, `Vista de dispositivos` (solo admin, la misma tabla que ve un usuario común pero con visibilidad total), `Historial de dispositivos` y `Usuarios` se movieron de "Ajustes" a la raíz del menú. `Mapa` se movió justo debajo de "Inicio".
+- Etiquetas corregidas para no afirmar posesión ("Vista de dispositivos" en vez de "Mis dispositivos" para el admin).
+- El historial de dispositivos ganó, solo para administradores, filtro y orden por **propietario**, con el selector de Establecimiento **en cascada** al propietario elegido (si cambia el propietario, se resetea el establecimiento si ya no aplica). El campo `owner_id`/`owner_name` se expone únicamente cuando quien consulta es administrador.
+- Tamaño de página por defecto del historial de dispositivos: **10**, no 20 (para que coincida con el resto de las listas del cambio 17).
+- El historial de dispositivos **ya no tiene un rango de fechas por defecto**: mostraba "hoy" (un rango falso de un solo día) junto a la leyenda "Todas las fechas", que se contradecían. Otras pantallas que sí tienen un rango por defecto real se unificaron a **30 días** (hoy más los 29 anteriores).
+
+**Trampa:** si se agrega un filtro nuevo con cascada a otro (propietario → establecimiento), acordarse de resetear también la página al cambiar cualquiera de los dos, y de invalidar la selección del hijo si deja de pertenecer al padre elegido.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/app/components/Sidebar.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/Sidebar.tsx` | ver también el cambio 25 (colores) |
+| `frontend/src/app/components/Sidebar.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/Sidebar.test.tsx` |  |
+| `frontend/src/app/pages/devices/UserDevicesPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/UserDevicesPage.tsx` | título/subtítulo según rol; se sacó el botón "Historial de dispositivos" (ya tiene entrada propia en el sidebar) |
+| `frontend/src/app/pages/devices/UserDevicesPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/UserDevicesPage.test.tsx` |  |
+| `backend/app/api/device/history/router.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/history/router.py` | parámetro `owner_id`, orden por `owner_name` |
+| `backend/app/api/device/history/schemas.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/history/schemas.py` |  |
+| `backend/app/api/device/history/service.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/history/service.py` |  |
+| `backend/tests/api/device/test_history_owner_filter.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/test_history_owner_filter.py` |  |
+| `frontend/src/api/deviceHistory.api.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/api/deviceHistory.api.ts` |  |
+| `frontend/src/api/deviceHistory.api.test.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/api/deviceHistory.api.test.ts` |  |
+| `frontend/src/app/pages/devices/FormerDevicesPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/FormerDevicesPage.tsx` | filtro/orden por propietario en cascada, tamaño de página 10, sin rango de fechas por defecto |
+| `frontend/src/app/pages/devices/FormerDevicesPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/FormerDevicesPage.test.tsx` |  |
+| `frontend/src/app/pages/devices/DeviceOperationsPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/DeviceOperationsPage.tsx` | ⚠ pantalla de pagos: solo el default de 30 días |
+| `frontend/src/app/pages/devices/DeviceOperationsPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/DeviceOperationsPage.test.tsx` |  |
+| `frontend/src/app/pages/dashboard/MapPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/dashboard/MapPage.tsx` | título/subtítulo acortados |
+| `frontend/src/app/pages/dashboard/MapPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/dashboard/MapPage.test.tsx` |  |
+
+## 27. Pantallas de una sola tarjeta: flecha de "Volver" solo donde corresponde
+
+**Problema.** El cambio 18 unificó el botón "Volver", pero `FormPageLayout` lo mostraba **siempre**, incluso en pantallas que ahora son raíz de una sección del sidebar (Mi Perfil, y cualquier pantalla de ajustes de una sola tarjeta): no tiene sentido un botón "Volver" en una pantalla a la que se llega directo desde el menú, igual que "Inicio" o "Mapa" no lo tienen. Además, esas pantallas de una sola tarjeta (Ajustes Generales, Cambiar Contraseña) no usaban `FormPageLayout` en absoluto: tenían su propio título de tamaño fijo (no escalaba en pantallas grandes como el resto) y un ancho limitado (`max-w-2xl`) en vez de ocupar todo el ancho disponible.
+
+**Solución.**
+- `FormPageLayout` ganó una prop opcional `hideBackButton` (por defecto `false`, no rompe los usos existentes) para las pantallas que son raíz de su sección: se las pasa por ese layout **sin** flecha.
+- Regla para decidir: si la pantalla se llega **desde el sidebar**, sin flecha (Mi Perfil, Ajustes Generales, Historial de dispositivos). Si se llega desde un menú contextual (por ejemplo, "Cambiar Contraseña" desde el menú de cuenta), **con** flecha — sigue siendo una sub-pantalla, no una raíz.
+- Ajustes Generales y Cambiar Contraseña migradas al layout compartido (título/subtítulo con la misma escala responsiva que el resto, ancho completo).
+
+**Trampa de test:** si una pantalla usa `FormPageLayout` con acciones propias al pie ("Volver"/"Guardar"), y además el layout mostraba su propia flecha, un test que busca el botón "Volver" por nombre accesible puede encontrar **dos** elementos; con `hideBackButton` activo queda uno solo.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/components/custom/FormPageLayout.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/custom/FormPageLayout.tsx` | ⚠ ya existe (cambio 18): agregar la prop `hideBackButton` |
+| `frontend/src/app/pages/profile/ProfilePage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/profile/ProfilePage.tsx` | `hideBackButton` activo |
+| `frontend/src/app/pages/profile/ProfilePage.layout.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/app/pages/profile/ProfilePage.layout.test.tsx` |  |
+| `frontend/src/app/pages/devices/FormerDeviceHistoryPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/devices/FormerDeviceHistoryPage.tsx` | título con la misma escala responsiva que el resto |
+| `frontend/src/admin/pages/settings/GeneralSettingsPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/settings/GeneralSettingsPage.tsx` | ⚠ contiene comisiones y valores de cobro (no portar ese contenido); el patrón de layout (`FormPageLayout`, `hideBackButton`, campos en un mismo renglón con texto descriptivo) sí aplica a cualquier pantalla de ajustes de una sola tarjeta |
+| `frontend/src/app/pages/profile/ChangePasswordPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/profile/ChangePasswordPage.tsx` | migrada a `FormPageLayout`, con flecha (se llega desde el menú de cuenta) |
+| `frontend/src/app/components/Header.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/Header.tsx` | ítem del menú de cuenta renombrado de "Información Personal" a "Mi perfil", igual que en el sidebar |
+| `frontend/src/app/components/SidebarHeader.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/SidebarHeader.tsx` | mismo cambio de etiqueta |
+
+## 28. Dashboard: "Limpiar todos", selector de fechas sincronizado y una X de menos
+
+**Problema.** El dashboard tenía sus propios filtros (fechas, usuario, establecimiento, dispositivo, moneda) pero no el botón "Limpiar todos" que ya tienen las demás listas del cambio 17. Al agregarlo apareció un bug más general: el selector de rango de fechas (`components/ui/date-range-picker.tsx`) solo lee sus props `initialDateFrom`/`initialDateTo` **al montarse** — es "no controlado" puertas adentro. Si el estado del padre cambia por otra vía que no sea el propio selector (por ejemplo, un botón que resetea el rango a los últimos 30 días), el selector se queda mostrando visualmente el valor viejo aunque el estado ya cambió.
+
+**Solución.**
+- Botón **"Limpiar todos"** (mismo texto, mismo estilo `variant="outline" size="sm"` que el resto de los paneles "Filtros avanzados" del cambio 17) que resetea establecimiento, dispositivo, propietario, moneda y el rango de fechas a su valor por defecto; visible solo si hay algún filtro activo.
+- El `DateRangePicker` del dashboard recibe una `key` derivada del rango actual (`` `${from}|${to}` ``): al cambiar el rango por fuera del propio selector, React lo desmonta y remonta, y el selector vuelve a leer el valor correcto. El mismo problema (y la misma solución) ya existía resuelto en el selector de fecha del historial de un dispositivo por serial.
+- El selector de usuario (`SearchableSelect`) tenía su propia X de "limpiar" individual que, junto al nuevo "Limpiar todos", quedaba redundante — y además nunca reflejaba un estado realmente "vacío" (su valor por defecto es la cadena `"all"`, no `undefined`, así que la X estaba siempre visible sin cumplir función real). Se agregó una prop `showClear` a `SearchableSelect` (por defecto `true`, no cambia ningún otro uso existente) para poder ocultarla puntualmente donde ya hay un "Limpiar todos" al lado.
+
+**Trampa de test:** al usar la técnica de la `key` para forzar el remount de un selector no controlado, un test que guarda una referencia al elemento (`const picker = screen.getByRole(...)`) **antes** de una interacción que cambia esa `key`, y reutiliza esa misma variable después, queda con una referencia a un nodo que ya no está en el DOM. Hay que volver a consultar el elemento con `getByRole` después de cada interacción que pueda remontarlo, no reutilizar la variable.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/app/pages/dashboard/OverviewPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/dashboard/OverviewPage.tsx` | ⚠ dashboard de ingresos: es la referencia del patrón "Limpiar todos" + selector sincronizado, no portar el resto |
+| `frontend/src/app/pages/dashboard/OverviewPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/pages/dashboard/OverviewPage.test.tsx` |  |
+| `frontend/src/components/custom/SearchableSelect.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/custom/SearchableSelect.tsx` | ⚠ ya existe (cambio 7): agregar la prop `showClear` |
+
+## 29. Auditoría "Buscar en todos los campos": paridad completa
+
+*(Trabajo del otro agente.)*
+
+**Contexto.** Siguiendo el criterio del cambio 17 ("el buscador busca en **todas** las columnas visibles"), se auditaron las 14 pantallas de listado del proyecto. 6 tenían el bug (algún campo visible que no entraba en la búsqueda); las otras 8 ya cumplían. **En este proyecto, al aplicar el estándar del cambio 17 a cada lista, conviene revisar explícitamente que cada columna mostrada esté cubierta por la búsqueda del servidor** — es fácil agregar una columna a la tabla y olvidarse de sumarla al filtro.
+
+**Fixes de búsqueda:**
+- **Establecimientos:** buscaba solo por nombre; ahora también por tipo, dueño, dirección y ubicación.
+- **Permisos:** el filtro "Tipo" comparaba contra el booleano crudo (`true`/`false`) en vez del texto mostrado ("Básico"/"Opcional"); se corrigió con un `accessorFn` que expone la etiqueta visible en vez del valor crudo.
+- **Provincias:** no buscaban por nombre de país (el `join` con país ya existía en el repositorio; solo faltaba usarlo en el filtro de búsqueda).
+- **Tipos de documento y de condición fiscal:** no buscaban por nombre ni código de país. Se agregó un mapa `COUNTRY_CODE_LABELS` en cada repositorio, sincronizado a mano con `frontend/src/constants/supported-countries.ts`. **Trampa:** si este proyecto también tiene una lista central de países, el mismo patrón aplica, pero hay que mantener ambos lados sincronizados a mano (o generar uno desde el otro).
+
+**Bugs encontrados al arreglar los tests relacionados, sin relación directa con el buscador — revisar si este proyecto los heredó de la misma base de código:**
+- **Bug de datos real:** `LocationCityRead` no devolvía `postal_code` en absoluto, aunque la columna existe en el modelo — la columna "Código Postal" del listado de ciudades quedaba vacía siempre. Alcanza con revisar si el schema de lectura de ciudades de este proyecto tiene el mismo campo faltante.
+- Dos suites de test legacy (`test_location.py`, `test_tax.py`) pegaban a rutas **sin** el prefijo `/api` (`/location/countries` en vez de `/api/location/countries`) y fallaban en el primer request, antes de llegar a ninguna aserción real — quedaron así sin que nadie lo notara. Se corrigieron las rutas y, de paso, dos aserciones que asumían un comportamiento viejo incorrecto: que un GET-by-id después de borrar debía dar 404, y que el listado sin filtro explícito debía ocultar los inactivos. Se confirmó contra el patrón real y consistente del resto del backend (por ejemplo `EnvironmentRepository.get_by_id`) que el comportamiento correcto es otro: GET-by-id siempre devuelve el registro aunque esté inactivo, y el listado sin `isActive` explícito trae todo (es el frontend quien pide `isActive=true` por defecto). **Si este proyecto heredó las mismas suites legacy, probablemente tenga el mismo bug de rutas** y valga la pena revisar esas mismas dos aserciones contra el comportamiento real, en vez de asumir cuál es "el correcto".
+- Un `.pyc` de `alembic/__pycache__` había quedado trackeado en git; se sacó del control de versiones. Revisar que `__pycache__/` esté en el `.gitignore` de este proyecto.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/api/environment/environment/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/environment/environment/repository.py` | búsqueda por tipo, dueño, dirección y ubicación |
+| `backend/tests/api/environment/test_environment_search.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/api/environment/test_environment_search.py` |  |
+| `backend/tests/api/test_device.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/api/test_device.py` | cobertura del fix de dispositivos del cambio 5/6 que había quedado sin test propio |
+| `frontend/src/admin/components/permissions/PermissionsTable.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/admin/components/permissions/PermissionsTable.tsx` | `accessorFn` con la etiqueta visible del tipo |
+| `frontend/src/admin/components/permissions/PermissionsTable.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/admin/components/permissions/PermissionsTable.test.tsx` |  |
+| `backend/app/api/location/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/location/repository.py` | búsqueda de provincias por nombre de país |
+| `backend/app/api/location/models.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/location/models.py` | `postal_code` en `LocationCityRead` — bug de datos, no de búsqueda |
+| `backend/app/api/tax/identification_type/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/tax/identification_type/repository.py` | `COUNTRY_CODE_LABELS` |
+| `backend/app/api/tax/tax_type/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/tax/tax_type/repository.py` | `COUNTRY_CODE_LABELS` |
+| `backend/tests/api/tax/test_country_catalogs.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/tax/test_country_catalogs.py` |  |
+| `backend/tests/test_location.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/test_location.py` | prefijo `/api`, tests de búsqueda por país, aserciones corregidas |
+| `backend/tests/test_tax.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/test_tax.py` | prefijo `/api`, aserciones corregidas |
+
+---
+
+## 30. Buckets diarios de reportes en la fecha local del usuario, no en UTC
+
+**Problema.** Los reportes financieros agrupaban por día con `func.date(Payment.date_created)` sobre un timestamp naive-UTC. Un pago después de las 21:00 en Argentina ya es
+el día siguiente en UTC, así que filtrar "un solo día" mostraba una fila fantasma del día posterior. Los límites del filtro (`start_date`/`end_date`) estaban bien; solo la
+etiqueta del día estaba mal.
+
+**Solución.** Las rutas de reportes diarios ahora reciben `utc_offset_minutes` (mismo `Query(0, ge=-840, le=840, description=UTC_OFFSET_HELP)` y misma convención que el
+historial de dispositivos del cambio 22) y arman la fecha con `format_local`/`formatted_time` de `backend/app/api/device/history/query_utils.py` en vez de `func.date(...)`.
+El frontend manda el offset del navegador. El valor por defecto (0) no rompe a quien no lo mande. **Este proyecto todavía no tiene `backend/app/api/reports/`** (recién lo
+trae el cambio 4, sobre lecturas de sensores en vez de pagos): este cambio solo aplica **después** de portar el 4, sobre las mismas rutas de agregación diaria que traiga ese
+reporte. Si el cambio 4 no incluye una agregación por día, este cambio no tiene dónde aplicarse.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/api/reports/repository.py` | modificado (tras el cambio 4) | `/home/martin/Code/DVEM-App/backend/app/api/reports/repository.py` | ⚠ agrupa por `Payment.date_created`: reescribir sobre lecturas de sensores |
+| `backend/app/api/reports/router.py` | modificado (tras el cambio 4) | `/home/martin/Code/DVEM-App/backend/app/api/reports/router.py` | agrega `utc_offset_minutes: int = Query(0, ge=-840, le=840, description=UTC_OFFSET_HELP)` importado de `app.api.device.history.router` |
+| `backend/app/api/reports/service.py` | modificado (tras el cambio 4) | `/home/martin/Code/DVEM-App/backend/app/api/reports/service.py` | propaga `utc_offset_minutes` a la capa de repositorio |
+| `backend/tests/api/reports/test_daily_bucket_timezone.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/reports/test_daily_bucket_timezone.py` | ⚠ construye pagos de ejemplo: adaptar a lecturas de sensores |
+| `frontend/src/api/reports.api.ts` | modificado (tras el cambio 4) | `/home/martin/Code/DVEM-App/frontend/src/api/reports.api.ts` | manda el offset del navegador |
+| `frontend/src/api/reports.api.test.ts` | modificado (tras el cambio 4) | `/home/martin/Code/DVEM-App/frontend/src/api/reports.api.test.ts` |  |
+
+## 31. Dispositivos ordenables por "Tipo"
+
+**Problema.** El listado de dispositivos se podía ordenar por nombre, estado, fecha de fabricación, última conexión, presencia, establecimiento y propietario, pero no por
+tipo de dispositivo.
+
+**Solución.** Se agregó `"deviceTypeName"` al `Literal` de `sort_by` del backend (router y repositorio), reutilizando el `outerjoin` a `DeviceTypeCatalog` que ya existía
+para la búsqueda cuando está disponible (para no duplicar el `JOIN`), y ordenando con `NULLS LAST` igual que el resto de las columnas que admiten dispositivos sin ese dato.
+En el frontend, la columna "Tipo" de `DevicesTable` gana `id: DEVICE_SORT_BY.DEVICE_TYPE_NAME`, `accessorFn: (device) => device.type?.name` y `enableSorting: true`.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/api/device/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/repository.py` | agrega `"deviceTypeName"` al `Literal` de `sort_by` y el `elif` de ordenamiento |
+| `backend/app/api/device/router.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/router.py` | agrega `"deviceTypeName"` al `Literal` del parámetro `sort_by` |
+| `backend/tests/api/device/test_device_sorting.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/api/device/test_device_sorting.py` | caso `deviceTypeName` y test de que reutiliza el `JOIN` de la búsqueda |
+| `frontend/src/app/types/device.types.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/types/device.types.ts` | agrega `DEVICE_TYPE_NAME: "deviceTypeName"` a `DEVICE_SORT_BY` |
+| `frontend/src/app/components/devices/DevicesTable.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/devices/DevicesTable.tsx` | columna "Tipo" ordenable en las dos vistas de la tabla (admin y usuario) |
+| `frontend/src/app/components/devices/DevicesTable.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/devices/DevicesTable.test.tsx` |  |
+
+## 32. Aviso de privacidad de login y registro enlazado a la landing
+
+**Problema.** Las pantallas de login y registro mostraban un texto de aceptación de "términos y condiciones" que apuntaba a `href="#"` (un enlace muerto), sin política de
+privacidad real.
+
+**Solución.** El texto se reemplaza por "Al continuar, aceptás la política de privacidad." con el enlace a `PRIVACY_POLICY_URL`, una URL absoluta a `/privacidad` en la
+landing. **Este proyecto ya tiene ambas piezas**: `frontend/src/config/publicUrls.ts` ya exporta `PRIVACY_POLICY_URL` (con `resolveLandingPageUrl`, equivalente a la
+`landingPageUrl` de DVEM) y `landing/src/pages/privacidad.astro` ya existe. Lo único que falta es reemplazar el texto de `LoginPage.tsx` y `RegisterPage.tsx` por el aviso y
+el enlace — no hay que tocar `publicUrls.ts` ni crear la página de la landing.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/auth/pages/login/LoginPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/auth/pages/login/LoginPage.tsx` | importar `PRIVACY_POLICY_URL` de `@/config/publicUrls` (ya existe en este proyecto) |
+| `frontend/src/auth/pages/login/LoginPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/auth/pages/login/LoginPage.test.tsx` |  |
+| `frontend/src/auth/pages/register/RegisterPage.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/auth/pages/register/RegisterPage.tsx` | ídem |
+| `frontend/src/auth/pages/register/RegisterPage.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/auth/pages/register/RegisterPage.test.tsx` |  |
+
+## 33. Typecheck de producción limpio
+
+**Problema.** `tsc --noEmit` sobre el `tsconfig.json` raíz no revisa nada útil (el raíz solo referencia los otros tsconfigs vía `references`); el typecheck real de producción
+es el que corre `npm run build` (`tsc -b && vite build`). Al correr `tsc -b` de verdad en DVEM aparecieron errores genéricos, entre ellos uno en el `FormField` compartido de
+shadcn: le faltaba un tercer parámetro de tipo (`TTransformedValues`) que `ControllerProps` de `react-hook-form` sí admite, y que aparece en cuanto algún formulario usa un
+resolver que transforma el tipo de salida (por ejemplo Zod con `.transform()`).
+
+**Solución.** `frontend/src/components/ui/form.tsx`: `FormField` gana el genérico `TTransformedValues = TFieldValues` y lo propaga a `ControllerProps<TFieldValues, TName,
+TTransformedValues>`. **Este proyecto ya usa `tsc -b` en `npm run build`** (no hace falta cambiar `package.json`), así que alcanza con: aplicar el fix de `form.tsx` (genérico,
+no depende de nada de DVEM) y correr `cd frontend && npm run build` para ver si aparece algún otro error de tipos propio de este proyecto (los demás archivos que tocó este
+commit en DVEM son específicos de HMPACKING/Expendedora y de `MoneyInput` y no aplican acá).
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/components/ui/form.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/ui/form.tsx` | agrega el genérico `TTransformedValues` a `FormField` |
+
+## 34. Tipo de dispositivo legado "Other" desactivado vía migración
+
+**Problema.** "Other" era un tipo de dispositivo catch-all heredado que no representa ningún producto real, pero aparecía en el selector de tipos porque el repositorio lo
+recreaba y reactivaba solo cada vez que se resolvía su id (`ensure_legacy_other_exists`), igual que hace con el tipo por defecto.
+
+**Solución.** Una migración de datos (pura, sin cambio de esquema) desactiva la fila fija de "Other" (`is_active = False`); el `downgrade` la reactiva. Se elimina
+`ensure_legacy_other_exists`, `get_legacy_other` y la rama que los usaba en `resolve` del repositorio: como cualquier otro tipo inactivo, ya no se recrea ni se reactiva solo,
+queda fuera del selector y no se puede asignar a dispositivos nuevos; los dispositivos existentes de ese tipo lo siguen resolviendo normalmente (se conserva la fila, no se
+borra, por la FK). **Este proyecto tiene exactamente el mismo patrón** (`LEGACY_OTHER_DEVICE_TYPE_ID/CODE/NAME` en `device_type/constants.py` y
+`ensure_legacy_other_exists`/`get_legacy_other` en `device_type/repository.py`), así que aplica sin adaptación más allá de encadenar la migración a la cabeza de este
+proyecto.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/alembic/versions/z2a3b4c5d6e7_deactivate_legacy_other_device_type.py` | nuevo | `/home/martin/Code/DVEM-App/backend/alembic/versions/z2a3b4c5d6e7_deactivate_legacy_other_device_type.py` | re-encadenar `down_revision` a la cabeza de este proyecto |
+| `backend/app/api/device/device_type/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/device_type/repository.py` | elimina `get_legacy_other`, `ensure_legacy_other_exists` y la rama de `resolve` que los usaba |
+| `backend/tests/alembic/test_deactivate_legacy_other_revision.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/alembic/test_deactivate_legacy_other_revision.py` |  |
+| `backend/tests/api/device/test_device_type_router.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/api/device/test_device_type_router.py` |  |
+| `backend/tests/api/device/test_legacy_other_deactivation.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/test_legacy_other_deactivation.py` |  |
+| `backend/tests/api/test_device.py` | modificado | `/home/martin/Code/DVEM-App/backend/tests/api/test_device.py` |  |
+
+## 35. Mapa del formulario de establecimiento sigue la altura del formulario
+
+**Problema.** En el formulario de Establecimiento, el mapa de la columna derecha tenía un `xl:min-h-[44rem]` fijo que obligaba a la tarjeta a ser más alta que el contenido
+real del formulario, sin entrar completa en una pantalla Full HD.
+
+**Solución.** Se baja el mínimo de `xl:min-h-[44rem]` a `xl:min-h-[24rem]` (en DVEM, junto con compactar la sección de Mercado Pago, que no se porta) y se agrega
+`data-testid="environment-map-container"` para poder testearlo. **Este proyecto tiene el mismo `xl:min-h-[44rem]` en `EnvironmentForm.tsx`** (línea 761 al momento de
+escribir esto), en el contenedor del mapa: aplica el mismo ajuste de altura, sin la parte de compactar campos de Mercado Pago (no existen en este proyecto).
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/app/components/environments/EnvironmentForm.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/environments/EnvironmentForm.tsx` | ⚠ el commit de origen también compacta el bloque de ubicación de Mercado Pago: portar solo el cambio de altura del mapa (`xl:min-h-[44rem]` → `xl:min-h-[24rem]`) y el `data-testid` |
+| `frontend/src/app/components/environments/EnvironmentForm.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/environments/EnvironmentForm.test.tsx` | solo el test que verifica `min-h-[44rem]` ausente en `environment-map-container` |
+
+---
+
 ## Lo que NO se porta (cobros y Mercado Pago)
 
 - Las tablas de administración de Mercado Pago (vendedores, sucursales, cajas), aunque también adoptaron el estándar del cambio 17, y los mapas de etiquetas de pagos (métodos, estados y detalles de rechazo) de los cambios 21 y 22.
+- **`MoneyInput`** (`frontend/src/components/custom/MoneyInput.tsx` y `moneyInputCore.ts`): input de dinero con agrupado por locale, decimales por moneda y el aviso de límite de decimales. Es una pieza de UI genérica en sí misma, pero **todo lo que la usa y todo lo que resuelve** (moneda, `Intl.NumberFormat` con `currency`, precio de dispositivo) es de cobros; no hay ningún campo de importe en este proyecto que la necesite. No se porta.
+- Todo lo de **HMPACKING/Expendedora** (máquina vending): niveles, motores, capacidad, imágenes de producto y almacenamiento de objetos (S3/SeaweedFS), limpieza de medios. Se excluyó por completo de este documento porque este proyecto no tiene ese tipo de dispositivo; se listan los commits de referencia en DVEM-App por si hace falta ubicarlos: `25b8727b`, `00112287`, `01409469`, `26c2996f`, `bb23d87c`, `f8ae8c4a`, `d00f9d8a`, `59a8c9e9`, `636c0d46`, `df1717cf`, `5f90bb40`, `622c8470`, `64d98b33`, `acbc2282`, `f71ee76f`, `290eda1a`, `74df7422`, `c997ac40`, y sus commits de documentación (`docs(hmpacking): ...`, `docs(env): ...`).
 
 No copiar ni buscar equivalentes de estos cambios de DVEM-App. Se listan solo para que se reconozcan si aparecen en archivos mixtos:
 
@@ -920,3 +1206,4 @@ No copiar ni buscar equivalentes de estos cambios de DVEM-App. Se listan solo pa
   que los originó.
 - El ajuste del manejador MQTT `init_point` para dispositivos sin dueño.
 - Comisiones (DVEM y de invitados) en dispositivos, establecimientos y en el traslado de dispositivos.
+- El campo "Comisión Invitados" de Ajustes Generales (cambio 27): se sacó de la pantalla porque en DVEM esa comisión siempre la define el propietario del establecimiento, no el administrador; el resto de los campos de esa misma pantalla (Comisión DVEM, costo mínimo, expiración del QR) también son de cobros y no se portan — solo el patrón de layout.
