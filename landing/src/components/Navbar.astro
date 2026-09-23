@@ -7,15 +7,17 @@ import ThemeToggle from "./ThemeToggle.astro";
 interface Props {
   content: LandingContent;
   showContact?: boolean;
+  /** Prefix for in-page fragment links, so pages other than home link back to home sections. */
+  linkBase?: string;
 }
 
-const { content, showContact = false } = Astro.props;
+const { content, showContact = false, linkBase = "" } = Astro.props;
 const privacyLink = content.footer.links.find((link) => link.href === "/privacidad/");
 const navLinks = [
   ...content.nav.links,
   ...(showContact ? [{ href: "#contact", label: content.nav.contactLabel }] : []),
   ...(privacyLink ? [privacyLink] : []),
-];
+].map((link) => (link.href.startsWith("#") ? { ...link, href: `${linkBase}${link.href}` } : link));
 ---
 <header class="sticky top-0 z-20 border-b border-border/80 bg-background/90 backdrop-blur">
   <div class="mx-auto flex max-w-7xl items-center justify-between gap-3 px-6 py-2.5 xl:px-8">

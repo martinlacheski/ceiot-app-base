@@ -6,20 +6,6 @@ import Navbar from "./Navbar.astro";
 interface Props { content: LandingContent }
 const { content } = Astro.props;
 
-const prefixFragmentLink = (href: string) => href.startsWith("#")
-  ? `${content.path}${href}`
-  : href;
-const navigationContent: LandingContent = {
-  ...content,
-  nav: {
-    ...content.nav,
-    links: content.nav.links.map((link) => ({
-      ...link,
-      href: prefixFragmentLink(link.href),
-    })),
-  },
-};
-
 const LAST_UPDATED = "23 de septiembre de 2026";
 const SECTIONS = [
   {
@@ -110,7 +96,7 @@ const SECTIONS = [
 ] satisfies Array<{ heading: string; paragraphs: string[] }>;
 ---
 
-<Navbar content={navigationContent} />
+<Navbar content={content} showContact linkBase={content.path} />
 
 <main>
   <section class="section-shell">
@@ -135,4 +121,4 @@ const SECTIONS = [
   </section>
 </main>
 
-<Footer content={navigationContent} />
+<Footer content={content} />

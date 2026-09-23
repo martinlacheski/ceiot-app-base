@@ -19,6 +19,15 @@ describe("privacy policy", () => {
     expect(html).not.toContain('rel="alternate" hreflang=');
   });
 
+  it("keeps the header identical to home, with contact pointing back to the home section", async () => {
+    const html = await (await AstroContainer.create()).renderToString(PrivacyPage);
+    const header = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+
+    expect(header.match(/<a[^>]*href="\/#contact"[^>]*>Contacto<\/a>/g) ?? []).toHaveLength(2);
+    expect(header.match(/<a[^>]*href="\/privacidad\/"[^>]*>Privacidad<\/a>/g) ?? []).toHaveLength(2);
+    expect(header).not.toContain('href="#');
+  });
+
   it("covers the source-backed policy sections without legacy business references", async () => {
     const html = await (await AstroContainer.create()).renderToString(PrivacyPage);
     for (const heading of [
