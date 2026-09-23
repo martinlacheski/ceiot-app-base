@@ -253,10 +253,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       } flex flex-col`}
     >
       {/* Header */}
-      <div className="grid grid-cols-[1fr_auto_1fr] items-center px-4 py-3 xl:py-4">
-        <div />
-        {!isCollapsed && <Logo size="small" />}
-        <div className="flex justify-end">
+      <div className="flex items-center gap-2 px-4 py-3 xl:py-4">
+        {!isCollapsed && (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <Logo size="small" />
+            <span className="truncate text-sm font-semibold text-sidebar-foreground">
+              Monitoreo Ambiental IoT
+            </span>
+          </div>
+        )}
+        <div className={`flex justify-end ${isCollapsed ? "mx-auto" : "ml-auto"}`}>
           {!isMobile && (
             <button
               onClick={onToggle}

@@ -42,6 +42,36 @@ describe("Sidebar", () => {
     ]);
   });
 
+  it("muestra el logo con el nombre del proyecto y lo oculta al colapsar", () => {
+    vi.mocked(useAuthStore).mockImplementation((selector) => {
+      const state = {
+        user: { id: "u1", fullName: "Usuario Demo" },
+        logout: vi.fn(),
+        isAdmin: () => false,
+        authStatus: "authenticated",
+      };
+      return typeof selector === "function"
+        ? selector(state as never)
+        : (state as never);
+    });
+
+    const { rerender } = render(
+      <MemoryRouter initialEntries={["/app"]}>
+        <Sidebar isCollapsed={false} onToggle={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Monitoreo Ambiental IoT")).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter initialEntries={["/app"]}>
+        <Sidebar isCollapsed onToggle={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Monitoreo Ambiental IoT")).not.toBeInTheDocument();
+  });
+
   it("usa la ruta de dispositivos de usuario en /app/devices", () => {
     vi.mocked(useAuthStore).mockImplementation((selector) => {
       const state = {

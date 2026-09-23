@@ -8,7 +8,6 @@ import {
 } from "react-router";
 import { toast } from "sonner";
 
-import { ArrowLeft } from "lucide-react";
 import { Logo } from "@/components/custom/Logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,7 +20,6 @@ import { useAuthStore } from "@/auth/store/auth.store";
 import { showConfirmDialog, showInfoDialog } from "@/store/confirm.store";
 import { useQuery } from "@tanstack/react-query";
 import { ForgotPasswordDialog } from "../../components/ForgotPasswordDialog";
-import { LANDING_URL } from "@/config/publicUrls";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -166,13 +164,6 @@ export const LoginPage = () => {
 
   return (
     <div className={"flex flex-col gap-6 max-w-md w-full mx-auto"}>
-      <a
-        href={LANDING_URL}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Volver al inicio
-      </a>
       <Card className="overflow-hidden p-0  ">
         <CardContent className="grid p-0 md:grid-cols-1">
           <form className="p-6 md:p-8" onSubmit={handleLogin}>

@@ -7,7 +7,6 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { appApi } from "@/api/appApi";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { ConfirmDialog } from "@/components/custom/ConfirmDialog";
-import { LANDING_URL } from "@/config/publicUrls";
 import { useConfirmStore } from "@/store/confirm.store";
 import { LoginPage } from "./LoginPage";
 
@@ -102,7 +101,8 @@ describe("LoginPage", () => {
     const logo = screen.getByRole("img", { name: /monitoreo ambiental iot/i });
     expect(logo.parentElement).toHaveClass("size-24");
     expect(logo.parentElement).not.toHaveClass("bg-white");
-    expect(screen.getByRole("link", { name: /Volver al inicio/i })).toHaveAttribute("href", LANDING_URL);
+    // The back link is rendered once by AuthLayout, not by the page itself.
+    expect(screen.queryByRole("link", { name: /Volver al inicio/i })).not.toBeInTheDocument();
   });
 
   it("calls login on submit", async () => {
