@@ -122,6 +122,18 @@ describe("DeviceDetailDialog", () => {
     expect(screen.queryByText(/^\$\s/)).not.toBeInTheDocument();
   });
 
+  it("shows the backend update timestamp", () => {
+    render(
+      <DeviceDetailDialog
+        device={{ ...device, updatedAt: "2026-09-23T15:45:00Z" }}
+        open
+        onOpenChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Actualizado:/)).toBeInTheDocument();
+  });
+
   it("queries both environmental endpoints every 5 seconds while open", () => {
     renderDialog();
 

@@ -1,7 +1,7 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
 from typing import Literal, Optional
-from sqlalchemy import func, or_
+from sqlalchemy import and_, case, func, or_
 from sqlalchemy.orm import aliased
 import uuid
 
@@ -106,6 +106,9 @@ class EnvironmentRepository:
         sort_by: Literal["name", "type", "owner", "status"] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
         owner_id: Optional[uuid.UUID] = None,
+        search: Optional[str] = None,
+        actor_user_id: Optional[uuid.UUID] = None,
+        owner_search_environment_ids: Optional[list[uuid.UUID]] = None,
     ) -> dict:
         query = select(Environment).options(
             selectinload(Environment.type),
@@ -178,6 +181,113 @@ class EnvironmentRepository:
         if is_active is not None:
              query = query.where(Environment.is_active == is_active)
 
+        if search:
+            search_pattern = f"%{search}%"
+
+            SearchEnvironmentType = aliased(EnvironmentType)
+            type_matches = select(SearchEnvironmentType.id).where(
+                SearchEnvironmentType.id == Environment.type_id,
+                SearchEnvironmentType.name.ilike(search_pattern),
+            ).exists()
+
+            SearchOwnerRelation = aliased(EnvironmentUser)
+            SearchOwner = aliased(User)
+            owner_full_name = func.trim(
+                SearchOwner.first_name + " " + SearchOwner.last_name
+            )
+            owner_matches = select(SearchOwnerRelation.id).join(
+                SearchOwner,
+                SearchOwner.id == SearchOwnerRelation.user_id,
+            ).where(
+                SearchOwnerRelation.environment_id == Environment.id,
+                SearchOwnerRelation.is_owner == True,
+                SearchOwnerRelation.is_active == True,
+                or_(
+                    SearchOwner.first_name.ilike(search_pattern),
+                    SearchOwner.last_name.ilike(search_pattern),
+                    owner_full_name.ilike(search_pattern),
+                    and_(
+                        func.nullif(owner_full_name, "").is_(None),
+                        SearchOwner.username.ilike(search_pattern),
+                    ),
+                ),
+            ).exists()
+
+            SearchCity = aliased(LocationCity)
+            SearchState = aliased(LocationState)
+            SearchCountry = aliased(LocationCountry)
+            administrative_location_matches = select(SearchCity.id).join(
+                SearchState,
+                SearchState.id == SearchCity.state_id,
+            ).join(
+                SearchCountry,
+                SearchCountry.id == SearchState.country_id,
+            ).where(
+                SearchCity.id == Environment.city_id,
+                or_(
+                    SearchCity.name.ilike(search_pattern),
+                    SearchState.name.ilike(search_pattern),
+                    SearchCountry.name.ilike(search_pattern),
+                ),
+            ).exists()
+
+            search_conditions = [
+                Environment.name.ilike(search_pattern),
+                type_matches,
+                owner_matches,
+                Environment.address.ilike(search_pattern),
+                Environment.location.ilike(search_pattern),
+                administrative_location_matches,
+                case(
+                    (Environment.is_active == True, "Activo"),
+                    else_="Inactivo",
+                ).ilike(search_pattern),
+            ]
+
+            if owner_search_environment_ids:
+                search_conditions.append(
+                    Environment.id.in_(owner_search_environment_ids)
+                )
+
+            if actor_user_id is not None:
+                ActorEnvironmentUser = aliased(EnvironmentUser)
+                ActorEnvironmentGuest = aliased(ScopedGuestRelation)
+                ActorDeviceGuest = aliased(ScopedGuestRelation)
+                ActorGuestDevice = aliased(Device)
+                actor_owner_role = select(ActorEnvironmentUser.id).where(
+                    ActorEnvironmentUser.environment_id == Environment.id,
+                    ActorEnvironmentUser.user_id == actor_user_id,
+                    ActorEnvironmentUser.is_owner == True,
+                    ActorEnvironmentUser.is_active == True,
+                ).exists()
+                actor_environment_guest = select(ActorEnvironmentGuest.id).where(
+                    ActorEnvironmentGuest.scope_type == ScopeType.ENVIRONMENT,
+                    ActorEnvironmentGuest.scope_id == Environment.id,
+                    ActorEnvironmentGuest.guest_user_id == actor_user_id,
+                    ActorEnvironmentGuest.is_active == True,
+                ).exists()
+                actor_device_guest = select(ActorDeviceGuest.id).join(
+                    ActorGuestDevice,
+                    ActorGuestDevice.id == ActorDeviceGuest.scope_id,
+                ).where(
+                    ActorDeviceGuest.scope_type == ScopeType.DEVICE,
+                    ActorGuestDevice.environment_id == Environment.id,
+                    ActorDeviceGuest.guest_user_id == actor_user_id,
+                    ActorDeviceGuest.is_active == True,
+                ).exists()
+                search_conditions.append(
+                    case(
+                        (actor_owner_role, "Propietario"),
+                        (
+                            or_(actor_environment_guest, actor_device_guest),
+                            "Invitado",
+                        ),
+                        else_="",
+                    ).ilike(search_pattern)
+                )
+
+            query = query.where(or_(*search_conditions))
+
         sort_expression = Environment.name
         if sort_by == "type":
             query = query.join(EnvironmentType, EnvironmentType.id == Environment.type_id)
@@ -206,6 +316,39 @@ class EnvironmentRepository:
             page=page,
             per_page=per_page
         )
+
+    async def get_owner_search_environment_ids(
+        self,
+        search: str,
+    ) -> list[uuid.UUID]:
+        """Resolve owner display-name matches outside the paginated list query.
+
+        Non-admin RLS sessions cannot see another user's EnvironmentUser owner row,
+        even when the environment itself is visible through guest access. The service
+        can run this lookup with a system-scoped session and pass the IDs back into
+        the RLS-scoped list query, where they are still intersected with environments
+        the actor is allowed to read.
+        """
+        search_pattern = f"%{search}%"
+        owner_full_name = func.trim(User.first_name + " " + User.last_name)
+        query = select(EnvironmentUser.environment_id).join(
+            User,
+            User.id == EnvironmentUser.user_id,
+        ).where(
+            EnvironmentUser.is_owner == True,
+            EnvironmentUser.is_active == True,
+            or_(
+                User.first_name.ilike(search_pattern),
+                User.last_name.ilike(search_pattern),
+                owner_full_name.ilike(search_pattern),
+                and_(
+                    func.nullif(owner_full_name, "").is_(None),
+                    User.username.ilike(search_pattern),
+                ),
+            ),
+        )
+        rows = await self.db.exec(query)
+        return list(rows.all())
 
     async def update(self, env_id: uuid.UUID, env_update: EnvironmentUpdate) -> Optional[Environment]:
         env = await self.get_by_id(env_id)

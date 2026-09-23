@@ -22,7 +22,7 @@ import {
   createEnvironmentTypeAction,
   updateEnvironmentTypeAction,
 } from "@/admin/actions/environment.actions";
-import type { EnvironmentType } from "@/interfaces/environment.interface";
+import type { EnvironmentTypeListItem } from "@/interfaces/environment.interface";
 
 const schema = z.object({
   name: z.string().min(1, "El nombre es requerido"),
@@ -34,7 +34,7 @@ type FormData = z.infer<typeof schema>;
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  item: EnvironmentType | null;
+  item: EnvironmentTypeListItem | null;
 }
 
 export function EnvironmentTypeDialog({ open, onOpenChange, item }: Props) {

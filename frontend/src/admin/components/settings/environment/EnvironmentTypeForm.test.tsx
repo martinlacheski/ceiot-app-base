@@ -97,12 +97,13 @@ describe("EnvironmentTypeForm", () => {
     render(<EnvironmentTypeForm />);
 
     await user.type(screen.getByLabelText("Nombre"), "Comercio");
+    await user.click(screen.getByRole("switch", { name: "Activo" }));
     await user.click(screen.getByRole("button", { name: "Crear Tipo de Establecimiento" }));
 
     await waitFor(() => expect(mocks.confirm).toHaveBeenCalledOnce());
     await mocks.confirm.mock.calls[0][1]();
 
-    expect(mocks.create).toHaveBeenCalledWith({ name: "Comercio", is_active: true });
+    expect(mocks.create).toHaveBeenCalledWith({ name: "Comercio", is_active: false });
     expect(mocks.navigate).toHaveBeenCalledWith("/admin/environments/types");
   });
 
@@ -110,7 +111,7 @@ describe("EnvironmentTypeForm", () => {
     const user = userEvent.setup();
     render(
       <EnvironmentTypeForm
-        initialData={{ id: "env-1", name: "Oficina", is_active: false }}
+        initialData={{ id: "env-1", name: "Oficina", isActive: false }}
       />,
     );
 

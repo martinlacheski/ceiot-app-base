@@ -32,7 +32,7 @@ class EnvironmentType(EnvironmentTypeBase, table=True):
     environments: List["Environment"] = Relationship(back_populates="type", sa_relationship_kwargs={"lazy": "selectin"})
 
 class EnvironmentTypeCreate(EnvironmentTypeBase):
-    pass
+    is_active: Optional[bool] = None
 
 class EnvironmentTypeRead(CamelModel):
     id: uuid.UUID

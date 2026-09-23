@@ -155,6 +155,7 @@ class DeviceRead(CamelModel):
     broker_connected_at: Optional[datetime] = None
     broker_disconnected_at: Optional[datetime] = None
     broker_status_updated_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     environment_id: Optional[uuid.UUID] = None
     type: Optional[DeviceTypeRead] = None
     environment: Optional["EnvironmentEmbeddedRead"] = None

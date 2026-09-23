@@ -72,7 +72,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { EnvironmentType } from "@/interfaces/environment.interface";
+import type { EnvironmentTypeListItem } from "@/interfaces/environment.interface";
 import { exportToExcel, exportToPdf } from "@/lib/export.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
 import { showConfirmDialog } from "@/store/confirm.store";
@@ -80,8 +80,8 @@ import { useAuthStore } from "@/auth/store/auth.store";
 import { ViewEnvironmentTypeDialog } from "./ViewEnvironmentTypeDialog";
 
 interface EnvironmentTypeMobileCardProps {
-  environmentType: EnvironmentType;
-  onView: (environmentType: EnvironmentType) => void;
+  environmentType: EnvironmentTypeListItem;
+  onView: (environmentType: EnvironmentTypeListItem) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string, event: React.MouseEvent) => void;
   onRestore: (id: string, event: React.MouseEvent) => void;
@@ -179,7 +179,7 @@ export function EnvironmentTypesTable() {
   const [accordionValue, setAccordionValue] = useState<string>("");
   const [isExporting, setIsExporting] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<EnvironmentType | null>(
+  const [selectedItem, setSelectedItem] = useState<EnvironmentTypeListItem | null>(
     null
   );
 
@@ -241,7 +241,7 @@ export function EnvironmentTypesTable() {
     navigate(`/admin/environments/types/edit/${id}`);
   };
 
-  const handleView = (environmentType: EnvironmentType) => {
+  const handleView = (environmentType: EnvironmentTypeListItem) => {
     setSelectedItem(environmentType);
     setIsViewOpen(true);
   };
@@ -279,7 +279,7 @@ export function EnvironmentTypesTable() {
         filename: "reporte_tipos_establecimiento",
         generatedBy: getExportGeneratedBy(currentUser),
         columns: ["Nombre", "Estado"],
-        data: items.map((item: EnvironmentType) => [
+        data: items.map((item: EnvironmentTypeListItem) => [
           item.name,
           item.is_active ? "Activo" : "Inactivo",
         ]),
@@ -320,7 +320,7 @@ export function EnvironmentTypesTable() {
   // Logic: Active filters exist if search is present OR isActive is NOT "active" (default)
   const hasActiveFilters = !!search || isActiveParam !== "active";
 
-  const columns: ColumnDef<EnvironmentType>[] = [
+  const columns: ColumnDef<EnvironmentTypeListItem>[] = [
     {
       accessorKey: "name",
       header: ({ column }) => (

@@ -27,7 +27,7 @@ class EnvironmentTypeService:
                 detail={"code": "INACTIVE_DUPLICATE", "message": "El tipo existe pero está inactivo.", "id": str(inactive.id)}
             )
             
-        env_type = EnvironmentType(**payload.model_dump())
+        env_type = EnvironmentType(**payload.model_dump(exclude_none=True))
         return await self.repo.create(env_type)
 
     async def get_all(

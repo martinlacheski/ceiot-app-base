@@ -3,6 +3,12 @@ import type { PaginatedResponse } from "./common.types";
 export interface DeviceTypeCatalog {
   id: string;
   name: string;
+  is_active: boolean;
+}
+
+export interface DeviceTypeRead {
+  id: string;
+  name: string;
   isActive: boolean;
 }
 
@@ -53,7 +59,7 @@ export interface Device {
   brokerConnectedAt?: string | null;
   brokerDisconnectedAt?: string | null;
   brokerStatusUpdatedAt?: string | null;
-  type?: DeviceTypeCatalog;
+  type?: DeviceTypeRead;
 
   // Relations
   environment?: DeviceEnvironmentSummary;
@@ -84,7 +90,13 @@ export interface DevicePairingRequest {
 }
 
 export type DevicesResponse = PaginatedResponse<Device>;
-export type DeviceTypesResponse = PaginatedResponse<DeviceTypeCatalog>;
+export interface DeviceTypesResponse {
+  items: DeviceTypeCatalog[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+}
 
 export const DEVICE_SORT_BY = {
   NAME: "name",

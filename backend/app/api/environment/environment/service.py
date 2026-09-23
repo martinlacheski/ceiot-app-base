@@ -55,10 +55,25 @@ class EnvironmentService:
         sort_by: Literal["name", "type", "owner", "status"] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
         owner_id: uuid.UUID | None = None,
+        search: str | None = None,
     ) -> dict:
+        owner_search_environment_ids = None
+        if (
+            search
+            and actor_user is not None
+            and not actor_user.is_admin
+            and self.repo.db.get_bind().dialect.name == "postgresql"
+        ):
+            async with system_session() as sys_session:
+                owner_search_environment_ids = await EnvironmentRepository(
+                    sys_session
+                ).get_owner_search_environment_ids(search)
+
         result = await self.repo.get_all(
             city_id, state_id, country_id, type_id, user_id, page, per_page,
-            is_active, sort_by, sort_order, owner_id,
+            is_active, sort_by, sort_order, owner_id, search,
+            actor_user.id if actor_user is not None else None,
+            owner_search_environment_ids,
         )
         if actor_user is not None:
             actor_user_id = actor_user.id

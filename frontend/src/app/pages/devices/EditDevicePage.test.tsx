@@ -60,9 +60,13 @@ vi.mock("@/app/hooks/useDevices", () => ({
         {
           id: DEFAULT_DEVICE_TYPE_ID,
           name: "1 Relé",
-          isActive: true,
+          is_active: true,
         },
       ],
+      total: 1,
+      page: 1,
+      per_page: 100,
+      pages: 1,
     },
   }),
 }));

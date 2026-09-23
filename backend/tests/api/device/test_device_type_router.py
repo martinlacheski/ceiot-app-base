@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 import pytest
@@ -8,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.api.auth.models import User
 from app.api.device.device_type.constants import DEFAULT_DEVICE_TYPE_ID, DEFAULT_DEVICE_TYPE_NAME
 from app.api.device.device_type.models import DeviceTypeCatalog
+from app.api.device.models import Device
 from app.api.device.device_type.repository import DeviceTypeRepository
 from app.api.device.permissions import DevicePermissions
 from app.api.device.service import DeviceService
@@ -129,6 +131,41 @@ def test_device_read_includes_nested_device_type_code(
     get_response = client.get(f"/api/devices/{create_response.json()['id']}", headers=headers)
     assert get_response.status_code == 200
     assert get_response.json()["type"]["code"] == "relay_1"
+
+
+def test_device_detail_includes_updated_at(
+    client: TestClient,
+    session: Session,
+):
+    user = create_device_admin(session)
+    headers = {"Authorization": f"Bearer {make_token(user.id)}"}
+    serial = DeviceService.generate_serial()
+    updated_at = datetime(2026, 9, 23, 12, 34, 56)
+
+    create_response = client.post(
+        "/api/devices",
+        headers=headers,
+        json={
+            "serial": serial,
+            "name": "Updated At Device",
+            "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
+        },
+    )
+    assert create_response.status_code == 200
+
+    device = session.get(Device, UUID(create_response.json()["id"]))
+    assert device is not None
+    device.updated_at = updated_at
+    session.add(device)
+    session.commit()
+
+    get_response = client.get(
+        f"/api/devices/{create_response.json()['id']}",
+        headers=headers,
+    )
+
+    assert get_response.status_code == 200
+    assert datetime.fromisoformat(get_response.json()["updatedAt"]) == updated_at
 
 
 def test_device_type_create_rejects_duplicate_name_case_insensitively(

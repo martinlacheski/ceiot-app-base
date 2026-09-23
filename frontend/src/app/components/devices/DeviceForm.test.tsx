@@ -15,7 +15,15 @@ class ResizeObserverMock {
 vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 
 vi.mock("@/app/hooks/useDevices", () => ({
-  useDeviceTypes: () => ({ data: { items: [{ id: DEVICE_TYPE_ID, name: "1 Relé", isActive: true }] } }),
+  useDeviceTypes: () => ({
+    data: {
+      items: [{ id: DEVICE_TYPE_ID, name: "1 Relé", is_active: true }],
+      total: 1,
+      page: 1,
+      per_page: 100,
+      pages: 1,
+    },
+  }),
   useUnpairDevice: () => ({ mutateAsync: vi.fn() }),
 }));
 

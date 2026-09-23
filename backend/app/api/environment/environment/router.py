@@ -50,6 +50,7 @@ async def get_all_environments(
     page: int = 1,
     per_page: int = 10,
     is_active: Optional[bool] = None,
+    search: Optional[str] = Query(None),
     sort_by: Literal["name", "type", "owner", "status"] = Query("name"),
     sort_order: Literal["asc", "desc"] = Query("asc"),
     current_user: User = Depends(get_current_user)
@@ -74,6 +75,7 @@ async def get_all_environments(
         sort_by,
         sort_order,
         owner_id,
+        search,
     )
     # Serialize to ensure computed properties (owner_name) and camelCase are applied
     result["items"] = [

@@ -52,7 +52,7 @@ export function EnvironmentTypeForm({ initialData }: Props) {
     resolver: zodResolver(schema) as any,
     defaultValues: {
       name: initialData?.name || "",
-      is_active: initialData?.is_active ?? true,
+      is_active: initialData?.isActive ?? true,
     },
   });
 

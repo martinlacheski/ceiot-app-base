@@ -2,6 +2,7 @@ import { appApi } from "@/api/appApi";
 import type {
   EnvironmentType,
   EnvironmentTypeCreate,
+  EnvironmentTypeListItem,
   EnvironmentTypeUpdate,
 } from "@/interfaces/environment.interface";
 
@@ -15,7 +16,7 @@ interface GetEnvironmentTypesParams {
 }
 
 interface GetEnvironmentTypesResponse {
-  items: EnvironmentType[];
+  items: EnvironmentTypeListItem[];
   total: number;
   page: number;
   per_page: number;

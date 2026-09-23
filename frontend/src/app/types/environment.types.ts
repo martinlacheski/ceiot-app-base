@@ -100,7 +100,7 @@ export interface EnvironmentFilters {
 export interface EnvironmentType {
   id: string;
   name: string;
-  isActive: boolean;
+  is_active: boolean;
 }
 
 export type EnvironmentTypesResponse = PaginatedResponse<EnvironmentType>;
