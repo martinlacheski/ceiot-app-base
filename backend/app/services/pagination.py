@@ -6,14 +6,14 @@ from sqlmodel import Session, select, func
 
 
 DEFAULT_PER_PAGE = 10
-MAX_PER_PAGE = 100
+MAX_PER_PAGE = 10000
 
 
 # Sanitiza la paginación
 def sanitize_pagination(page: int = 1, per_page: int = DEFAULT_PER_PAGE):
     # Se valida que la página sea mayor o igual a 1
     page = max(1, int(page or 1))
-    # Se valida que el número de elementos por página sea mayor o igual a 1 y menor o igual a 100
+    # Se valida que el número de elementos por página sea mayor o igual a 1 y menor o igual a 10000
     per_page = min(MAX_PER_PAGE, max(1, int(per_page or DEFAULT_PER_PAGE)))
     # Se retorna la página y el número de elementos por página
     return page, per_page

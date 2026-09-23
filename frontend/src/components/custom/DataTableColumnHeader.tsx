@@ -16,7 +16,7 @@ interface DataTableColumnHeaderProps<TData, TValue>
   extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
   column: Column<TData, TValue>;
   title: string | ReactNode;
-  align?: "start" | "end";
+  align?: "start" | "center" | "end";
   hideReset?: boolean;
   triggerClassName?: string;
 }
@@ -30,17 +30,34 @@ export function DataTableColumnHeader<TData, TValue>({
   triggerClassName,
 }: DataTableColumnHeaderProps<TData, TValue>) {
   if (!column.getCanSort()) {
-    return <div className={cn(align === "end" && "text-right", className)}>{title}</div>;
+    return (
+      <div className={cn(align === "end" && "text-right", align === "center" && "text-center", className)}>
+        {title}
+      </div>
+    );
   }
 
   return (
-    <div className={cn("flex items-center space-x-2", align === "end" ? "justify-end" : "justify-start", className)}>
+    <div
+      className={cn(
+        "flex items-center space-x-2",
+        align === "end" && "justify-end",
+        align === "center" && "w-full justify-center",
+        align === "start" && "justify-start",
+        className,
+      )}
+    >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="sm"
-            className={cn("h-8 data-[state=open]:bg-accent", align === "end" ? "-mr-3" : "-ml-3", triggerClassName)}
+            className={cn(
+              "h-8 data-[state=open]:bg-accent",
+              align === "end" && "-mr-3",
+              align === "start" && "-ml-3",
+              triggerClassName,
+            )}
           >
             <span>{title}</span>
             {column.getIsSorted() === "desc" ? (

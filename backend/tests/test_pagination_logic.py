@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from sqlmodel import select
-from app.services.pagination import paginate_query_async
+from app.services.pagination import DEFAULT_PER_PAGE, paginate_query_async, sanitize_pagination
 from app.api.auth.models import User
 
 # Mock DB Session
@@ -50,3 +50,18 @@ async def test_paginate_query_async_total_filtered(mock_db_session):
 
     # Verify that scalar was called (it means count query was executed)
     assert mock_db_session.scalar.called
+
+
+def test_sanitize_pagination_allows_export_sized_pages():
+    assert sanitize_pagination(1, 10000) == (1, 10000)
+
+
+def test_sanitize_pagination_clamps_above_cap():
+    assert sanitize_pagination(1, 10001) == (1, 10000)
+
+
+def test_sanitize_pagination_lower_bounds():
+    # 0/None fall back to the default page size; negatives clamp to 1.
+    assert sanitize_pagination(0, 0) == (1, DEFAULT_PER_PAGE)
+    assert sanitize_pagination(None, None) == (1, DEFAULT_PER_PAGE)
+    assert sanitize_pagination(-3, -5) == (1, 1)
