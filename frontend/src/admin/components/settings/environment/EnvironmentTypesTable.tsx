@@ -89,6 +89,34 @@ interface EnvironmentTypeMobileCardProps {
   onRestore: (id: string, event: React.MouseEvent) => void;
 }
 
+const ENVIRONMENT_TYPE_SORT_COLUMNS = new Set(["name", "is_active"]);
+
+function parseSorting(rawSort: string | null): SortingState {
+  if (!rawSort) return [];
+
+  const sorting = rawSort.split(",").map((entry) => {
+    const [id, direction, ...rest] = entry.split(":");
+    if (
+      rest.length > 0 ||
+      !ENVIRONMENT_TYPE_SORT_COLUMNS.has(id) ||
+      (direction !== "asc" && direction !== "desc")
+    ) {
+      return null;
+    }
+    return { id, desc: direction === "desc" };
+  });
+
+  return sorting.every((entry) => entry !== null)
+    ? (sorting as SortingState)
+    : [];
+}
+
+function serializeSorting(sorting: SortingState): string | undefined {
+  return sorting.length > 0
+    ? sorting.map(({ id, desc }) => `${id}:${desc ? "desc" : "asc"}`).join(",")
+    : undefined;
+}
+
 function EnvironmentTypeMobileCard({
   environmentType,
   onView,
@@ -175,9 +203,13 @@ export function EnvironmentTypesTable() {
   const size = toPositiveInt(searchParams.get("size"), 10);
   const search = searchParams.get("search") ?? "";
   const isActiveParam = searchParams.get("isActive") ?? "active"; // Default to active
+  const sorting = useMemo(
+    () => parseSorting(searchParams.get("sort")),
+    [searchParams],
+  );
+  const serializedSort = serializeSorting(sorting);
 
   // Local UI State
-  const [sorting, setSorting] = useState<SortingState>([]);
   const [accordionValue, setAccordionValue] = useState<string>("");
   const [isExporting, setIsExporting] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
@@ -201,10 +233,7 @@ export function EnvironmentTypesTable() {
         : isActiveParam === "inactive"
         ? false
         : undefined,
-    sort:
-      sorting.length > 0
-        ? sorting.map((s) => `${s.id}:${s.desc ? "desc" : "asc"}`).join(",")
-        : undefined,
+    sort: serializedSort,
   });
 
   useEffect(() => {
@@ -281,10 +310,7 @@ export function EnvironmentTypesTable() {
             : isActiveParam === "inactive"
             ? false
             : undefined,
-        sort:
-          sorting.length > 0
-            ? sorting.map((s) => `${s.id}:${s.desc ? "desc" : "asc"}`).join(",")
-            : undefined,
+        sort: serializedSort,
       });
 
       const items = response.items;
@@ -472,6 +498,20 @@ export function EnvironmentTypesTable() {
     setSearchParams(newParams);
   };
 
+  const handleSortingChange = (updater: Updater<SortingState>) => {
+    const nextSorting =
+      typeof updater === "function" ? updater(sorting) : updater;
+    const newParams = new URLSearchParams(searchParams);
+    const nextSort = serializeSorting(nextSorting);
+    if (nextSort) {
+      newParams.set("sort", nextSort);
+    } else {
+      newParams.delete("sort");
+    }
+    newParams.set("page", "1");
+    setSearchParams(newParams);
+  };
+
   const table = useReactTable({
     data: environmentTypesResponse?.items || [],
     columns,
@@ -480,7 +520,7 @@ export function EnvironmentTypesTable() {
       pagination: paginationState,
       sorting,
     },
-    onSortingChange: setSorting,
+    onSortingChange: handleSortingChange,
     onPaginationChange: handlePaginationChange,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -549,7 +589,7 @@ export function EnvironmentTypesTable() {
         }
         secondaryActions={
           sorting.length > 0 ? (
-            <Button variant="outline" onClick={() => setSorting([])}>
+            <Button variant="outline" onClick={() => handleSortingChange([])}>
               <RotateCcw className="mr-2 size-4" />
               Resetear orden
             </Button>

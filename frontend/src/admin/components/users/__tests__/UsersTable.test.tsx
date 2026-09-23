@@ -148,7 +148,7 @@ describe("UsersTable", () => {
     expect(within(card).getByText("Activo")).toBeInTheDocument();
   });
 
-  it("uses cards below lg and preserves the desktop table at lg+", () => {
+  it("uses cards below md and preserves the desktop table at md+", () => {
     render(
       <MemoryRouter>
         <UsersTable />
@@ -158,11 +158,11 @@ describe("UsersTable", () => {
     expect(screen.getByTestId("users-mobile-list")).toHaveClass(
       "grid",
       "grid-cols-1",
-      "lg:hidden",
+      "md:hidden",
     );
     expect(screen.getByTestId("users-desktop-table")).toHaveClass(
       "hidden",
-      "lg:block",
+      "md:block",
     );
     expect(screen.getAllByTestId("user-mobile-card")).toHaveLength(
       users.length,

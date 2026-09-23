@@ -58,6 +58,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
+import { CenteredHeader } from "@/components/custom/CenteredHeader";
 import { ListErrorState } from "@/components/custom/ListErrorState";
 import { useNavigate, useSearchParams } from "react-router";
 import { environmentService } from "@/app/services/environment.service";
@@ -90,6 +92,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  applySortingUpdate,
+  toSortingState,
+  type ServerSort,
+} from "@/lib/serverSorting";
 
 interface EnvironmentsTableProps {
   actions?: React.ReactNode;
@@ -442,7 +449,9 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
   const columns: ColumnDef<Environment>[] = [
     {
       accessorKey: "name",
-      header: () => <div className="text-center">Nombre</div>,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Nombre" align="center" />
+      ),
       cell: ({ row }) => (
         <div className="font-medium text-center max-w-[200px] mx-auto whitespace-normal break-words">
           {row.getValue("name")}
@@ -450,22 +459,29 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
       ),
     },
     {
-      accessorKey: "type",
-      header: () => <div className="text-center">Tipo</div>,
+      id: "type",
+      accessorFn: (environment) => environment.type?.name || "",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Tipo" align="center" />
+      ),
       cell: ({ row }) => (
         <div className="text-center">{row.original.type?.name || "-"}</div>
       ),
     },
     {
-      accessorKey: "ownerName",
-      header: () => <div className="text-center">Dueño</div>,
+      id: "owner",
+      accessorFn: (environment) => environment.ownerName || "",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Dueño" align="center" />
+      ),
       cell: ({ row }) => (
         <div className="text-center">{row.original.ownerName || "-"}</div>
       ),
     },
     {
       accessorKey: "currentUserRole",
-      header: () => <div className="text-center">Rol</div>,
+      enableSorting: false,
+      header: () => <CenteredHeader>Rol</CenteredHeader>,
       cell: ({ row }) => {
         const environment = row.original;
         const role =
@@ -483,7 +499,8 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     },
     {
       accessorKey: "address",
-      header: () => <div className="text-center">Dirección</div>,
+      enableSorting: false,
+      header: () => <CenteredHeader>Dirección</CenteredHeader>,
       cell: ({ row }) => (
         <div className="text-center max-w-[300px] mx-auto whitespace-normal break-words">
           {row.getValue("address")}
@@ -492,7 +509,8 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     },
     {
       accessorKey: "location",
-      header: () => <div className="text-center">Ubicación</div>,
+      enableSorting: false,
+      header: () => <CenteredHeader>Ubicación</CenteredHeader>,
       cell: ({ row }) => {
         const location = row.getValue("location") as string;
         if (!location) return <div className="text-center">-</div>;
@@ -520,10 +538,13 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
       },
     },
     {
-      accessorKey: "isActive",
-      header: () => <div className="text-center">Estado</div>,
+      id: "status",
+      accessorFn: (environment) => environment.isActive,
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Estado" align="center" />
+      ),
       cell: ({ row }) => {
-        const isActive = row.getValue("isActive") as boolean;
+        const isActive = row.original.isActive;
         return (
           <div className="flex justify-center">
             <Badge variant={isActive ? "default" : "destructive"}>
@@ -535,7 +556,8 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     },
     {
       id: "actions",
-      header: () => <div className="text-center">Acciones</div>,
+      enableSorting: false,
+      header: () => <CenteredHeader>Acciones</CenteredHeader>,
       cell: ({ row }) => {
         const environment = row.original;
         const canEdit = Boolean(
@@ -628,6 +650,7 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     }),
     [page, size],
   );
+  const currentSort = { sortBy, sortOrder } satisfies ServerSort<EnvironmentSortBy>;
 
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
@@ -638,8 +661,19 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
     state: {
       rowSelection,
       pagination: paginationState,
+      sorting: toSortingState(currentSort),
     },
     onRowSelectionChange: setRowSelection,
+    manualSorting: true,
+    onSortingChange: (updater) => {
+      const next = applySortingUpdate(
+        updater,
+        currentSort,
+        Object.values(ENVIRONMENT_SORT_BY),
+        { sortBy: DEFAULT_SORT_BY, sortOrder: DEFAULT_SORT_ORDER },
+      );
+      updateParams({ sortBy: next.sortBy, sortOrder: next.sortOrder });
+    },
     manualPagination: true,
     pageCount: data?.pages || -1,
     onPaginationChange: (updater) => {

@@ -9,14 +9,23 @@ import {
   useReactTable,
   type ColumnDef,
   type ColumnFiltersState,
+  type PaginationState,
   type SortingState,
+  type Updater,
 } from "@tanstack/react-table";
-import { Filter, RotateCcw, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Filter, RotateCcw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 
+import { useAuthStore } from "@/auth/store/auth.store";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
+import {
+  ListExportActions,
+  type ListExportFormat,
+} from "@/components/custom/ListExportActions";
 import { ListErrorState } from "@/components/custom/ListErrorState";
+import { ListSearchInput } from "@/components/custom/ListSearchInput";
 import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 import {
   Accordion,
@@ -25,11 +34,7 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -38,12 +43,43 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { exportToExcel, exportToPdf } from "@/lib/export.utils";
+import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toPositiveInt } from "@/utils/url-params";
 
 interface PermissionRow {
   value: string;
   label: string;
   group: string;
   is_basic: boolean;
+}
+
+const SORTABLE_COLUMNS = new Set(["label", "value", "group", "is_basic"]);
+
+function parseSorting(raw: string | null): SortingState {
+  if (!raw) return [];
+
+  const sorting = raw.split(",").map((entry) => {
+    const [id, direction, ...extra] = entry.split(":");
+    if (
+      extra.length > 0 ||
+      !SORTABLE_COLUMNS.has(id) ||
+      (direction !== "asc" && direction !== "desc")
+    ) {
+      return null;
+    }
+    return { id, desc: direction === "desc" };
+  });
+
+  return sorting.every((entry) => entry !== null)
+    ? (sorting as SortingState)
+    : [];
+}
+
+function serializeSorting(sorting: SortingState): string | null {
+  return sorting.length
+    ? sorting.map(({ id, desc }) => `${id}:${desc ? "desc" : "asc"}`).join(",")
+    : null;
 }
 
 function PermissionMobileCard({
@@ -100,11 +136,32 @@ export function PermissionsTable() {
     isError,
     refetch,
   } = usePermissions();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user } = useAuthStore();
 
-  const [sorting, setSorting] = useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
   const [accordionValue, setAccordionValue] = useState<string>("");
+
+  const page = toPositiveInt(searchParams.get("page"), 1);
+  const size = toPositiveInt(searchParams.get("size"), 10);
+  const globalFilter = searchParams.get("search") ?? "";
+  const groupFilter = searchParams.get("group");
+  const typeParam = searchParams.get("type");
+  const typeFilter = typeParam === "basic" || typeParam === "optional" ? typeParam : null;
+  const sorting = useMemo(
+    () => parseSorting(searchParams.get("sort")),
+    [searchParams],
+  );
+  const columnFilters = useMemo<ColumnFiltersState>(
+    () => [
+      ...(groupFilter ? [{ id: "group", value: groupFilter }] : []),
+      ...(typeFilter ? [{ id: "is_basic", value: typeFilter }] : []),
+    ],
+    [groupFilter, typeFilter],
+  );
+  const pagination = useMemo<PaginationState>(
+    () => ({ pageIndex: page - 1, pageSize: size }),
+    [page, size],
+  );
 
   const data = useMemo<PermissionRow[]>(() => {
     if (!permissionsData || !permissionsData.groups) return [];
@@ -174,7 +231,8 @@ export function PermissionsTable() {
       },
     },
     {
-      accessorKey: "is_basic",
+      id: "is_basic",
+      accessorFn: (row) => (row.is_basic ? "Básico" : "Opcional"),
       header: ({ column }) => (
         <div className="text-center">
           <DataTableColumnHeader
@@ -185,7 +243,7 @@ export function PermissionsTable() {
         </div>
       ),
       cell: ({ row }) => {
-        const isBasic = row.getValue("is_basic");
+        const isBasic = row.original.is_basic;
         return (
           <div className="text-center">
             <Badge variant={isBasic ? "default" : "secondary"}>
@@ -194,8 +252,8 @@ export function PermissionsTable() {
           </div>
         );
       },
-      filterFn: (row, id, value) => {
-        const isBasic = row.getValue(id);
+      filterFn: (row, _id, value) => {
+        const isBasic = row.original.is_basic;
         if (value === "basic") return isBasic === true;
         if (value === "optional") return isBasic === false;
         return true;
@@ -209,6 +267,57 @@ export function PermissionsTable() {
     return Array.from(new Set(data.map((item) => item.group))).sort();
   }, [data]);
 
+  const updateUrl = (
+    updates: Record<string, string | null>,
+    { resetPage = false, replace = false } = {},
+  ) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    if (resetPage) next.delete("page");
+    setSearchParams(next, { replace });
+  };
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    const rawPage = searchParams.get("page");
+    const rawSize = searchParams.get("size");
+
+    if (rawPage !== null && (!/^\d+$/.test(rawPage) || Number(rawPage) < 1)) {
+      next.delete("page");
+      changed = true;
+    }
+    if (rawSize !== null && (!/^\d+$/.test(rawSize) || Number(rawSize) < 1)) {
+      next.delete("size");
+      changed = true;
+    }
+    if (typeParam !== null && !typeFilter) {
+      next.delete("type");
+      changed = true;
+    }
+    if (searchParams.has("sort") && parseSorting(searchParams.get("sort")).length === 0) {
+      next.delete("sort");
+      changed = true;
+    }
+    if (permissionsData && groupFilter && !groups.includes(groupFilter)) {
+      next.delete("group");
+      changed = true;
+    }
+
+    if (changed) setSearchParams(next, { replace: true });
+  }, [
+    groupFilter,
+    groups,
+    permissionsData,
+    searchParams,
+    setSearchParams,
+    typeFilter,
+    typeParam,
+  ]);
+
   const table = useReactTable({
     data,
     columns,
@@ -216,17 +325,52 @@ export function PermissionsTable() {
       sorting,
       columnFilters,
       globalFilter,
+      pagination,
     },
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
+    onSortingChange: (updater) => {
+      const next = typeof updater === "function" ? updater(sorting) : updater;
+      updateUrl({ sort: serializeSorting(next) }, { resetPage: true });
+    },
+    onColumnFiltersChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(columnFilters) : updater;
+      updateUrl(
+        {
+          group: (next.find(({ id }) => id === "group")?.value as string) ?? null,
+          type: (next.find(({ id }) => id === "is_basic")?.value as string) ?? null,
+        },
+        { resetPage: true },
+      );
+    },
+    onGlobalFilterChange: (updater) => {
+      const next =
+        typeof updater === "function" ? updater(globalFilter) : updater;
+      updateUrl({ search: next || null }, { resetPage: true });
+    },
+    onPaginationChange: (updater: Updater<PaginationState>) => {
+      const next = typeof updater === "function" ? updater(pagination) : updater;
+      updateUrl({
+        page: String(next.pageIndex + 1),
+        size: String(next.pageSize),
+      });
+    },
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    autoResetPageIndex: false,
   });
 
   const rows = table.getRowModel().rows;
+  const matchingRows = table.getPrePaginationRowModel().rows;
+
+  useEffect(() => {
+    if (matchingRows.length === 0) return;
+    const lastPage = Math.max(1, Math.ceil(matchingRows.length / size));
+    if (page > lastPage) {
+      updateUrl({ page: String(lastPage) }, { replace: true });
+    }
+  }, [matchingRows.length, page, size]);
 
   if (isError) {
     return (
@@ -237,7 +381,7 @@ export function PermissionsTable() {
   const hasActiveFilters = columnFilters.length > 0;
 
   const clearAllFilters = () => {
-    setColumnFilters([]);
+    updateUrl({ group: null, type: null }, { resetPage: true });
   };
 
   // Helper to get current filter value
@@ -251,31 +395,37 @@ export function PermissionsTable() {
       ?.setFilterValue(value === "all" ? undefined : value);
   };
 
+  const handleExport = async (format: ListExportFormat) => {
+    const options = {
+      title: "Reporte de Permisos",
+      filename: "reporte_permisos",
+      generatedBy: getExportGeneratedBy(user),
+      columns: ["Permiso", "Código", "Grupo", "Tipo"],
+      data: matchingRows.map(({ original }) => [
+        original.label,
+        original.value,
+        original.group,
+        original.is_basic ? "Básico" : "Opcional",
+      ]),
+    };
+
+    if (format === "pdf") {
+      await exportToPdf(options);
+      return;
+    }
+    await exportToExcel(options);
+  };
+
   return (
     <div className="w-full space-y-4">
       <div className="space-y-4">
         <ListToolbarLayout
           search={
-            <div className="relative w-full min-w-0">
-              <Input
-                placeholder="Buscar permisos..."
-                value={globalFilter ?? ""}
-                onChange={(event) => setGlobalFilter(event.target.value)}
-                className="pr-11"
-                data-list-toolbar-search-control
-              />
-              {globalFilter && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-1/2 size-11 -translate-y-1/2"
-                  onClick={() => setGlobalFilter("")}
-                  aria-label="Limpiar búsqueda"
-                >
-                  <X />
-                </Button>
-              )}
-            </div>
+            <ListSearchInput
+              value={globalFilter}
+              onChange={(value) => updateUrl({ search: value || null }, { resetPage: true })}
+              onClear={() => updateUrl({ search: null }, { resetPage: true })}
+            />
           }
           primaryActions={
             <Button
@@ -298,7 +448,10 @@ export function PermissionsTable() {
             </Button>
           }
           secondaryActions={sorting.length > 0 ? (
-            <Button variant="outline" onClick={() => setSorting([])}>
+            <Button
+              variant="outline"
+              onClick={() => updateUrl({ sort: null }, { resetPage: true })}
+            >
               <RotateCcw data-icon="inline-start" />
               Limpiar ordenamiento
             </Button>
@@ -362,6 +515,11 @@ export function PermissionsTable() {
           </AccordionItem>
         </Accordion>
       </div>
+
+      <ListExportActions
+        onExport={handleExport}
+        disabled={isLoading || matchingRows.length === 0}
+      />
 
       <div className="md:hidden">
         {isLoading ? (

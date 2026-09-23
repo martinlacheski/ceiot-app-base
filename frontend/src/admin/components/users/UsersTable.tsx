@@ -823,7 +823,7 @@ export function UsersTable({ actions }: UsersTableProps) {
         </div>
       </div>
       <div
-        className="grid grid-cols-1 gap-3 lg:hidden"
+        className="grid grid-cols-1 gap-3 md:hidden"
         data-testid="users-mobile-list"
       >
         {isLoading ? (
@@ -871,7 +871,7 @@ export function UsersTable({ actions }: UsersTableProps) {
         )}
       </div>
       <div
-        className="hidden rounded-md border lg:block"
+        className="hidden rounded-md border md:block"
         data-testid="users-desktop-table"
       >
         <Table>

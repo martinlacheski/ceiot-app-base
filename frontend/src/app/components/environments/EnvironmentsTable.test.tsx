@@ -181,6 +181,48 @@ describe("EnvironmentsTable server-side sorting", () => {
     expect(exportActions?.parentElement).toHaveClass("flex", "justify-end");
   });
 
+  it("uses centered sortable headers to update the server sort in the URL", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <EnvironmentsTable />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    const table = screen.getByRole("table");
+    for (const label of ["Nombre", "Tipo", "Dueño", "Estado"]) {
+      expect(
+        within(table).getByRole("button", { name: label }).parentElement,
+      ).toHaveClass("w-full", "justify-center");
+    }
+    for (const label of ["Rol", "Dirección", "Ubicación", "Acciones"]) {
+      expect(
+        within(table).queryByRole("button", { name: label }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(table).getByRole("columnheader", { name: label })
+          .firstElementChild,
+      ).toHaveClass("text-center");
+    }
+
+    await user.click(within(table).getByRole("button", { name: "Dueño" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Desc" }));
+
+    await waitFor(() =>
+      expect(useEnvironmentsMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          sortBy: "owner",
+          sortOrder: "desc",
+          page: 1,
+        }),
+      ),
+    );
+    expect(screen.getByRole("status", { name: "URL actual" })).toHaveTextContent(
+      "sortBy=owner&sortOrder=desc",
+    );
+  });
+
   it("falls back to valid defaults when the URL contains invalid sorting", async () => {
     const user = userEvent.setup();
     render(
