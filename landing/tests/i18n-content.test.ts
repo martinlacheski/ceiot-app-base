@@ -72,6 +72,21 @@ describe("generic environmental landing content", () => {
     }
   });
 
+  it("uses the localized brand name in the nav and footer, with a rights line", () => {
+    const expectations = [
+      { locale: LOCALES.ES, brand: "Monitoreo Ambiental IoT", legal: "Monitoreo Ambiental IoT · Todos los derechos reservados." },
+      { locale: LOCALES.PT_BR, brand: "Monitoramento Ambiental IoT", legal: "Monitoramento Ambiental IoT · Todos os direitos reservados." },
+      { locale: LOCALES.EN, brand: "IoT Environmental Monitoring", legal: "IoT Environmental Monitoring · All rights reserved." },
+    ];
+
+    for (const expected of expectations) {
+      const content = getLandingContent(expected.locale);
+      expect(content.nav.tagline).toBe(expected.brand);
+      expect(content.footer.tagline).toBe(expected.brand);
+      expect(content.footer.legalLine).toBe(expected.legal);
+    }
+  });
+
   it("contains no legacy company, payment, customer, or live-service claims", () => {
     for (const locale of landingLocales) {
       const serialized = JSON.stringify(getLandingContent(locale));

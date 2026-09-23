@@ -86,7 +86,7 @@ const CONTENT: Record<Locale, LandingContent> = {
     nav: {
       links: [{ href: "#variables", label: "Variables" }, { href: "#base", label: "La base" }],
       contactLabel: "Contacto",
-      tagline: "Una base para monitoreo ambiental",
+      tagline: "Monitoreo Ambiental IoT",
       localeLabel: "Idioma",
       locales,
       mobileMenuLabel: "Abrir menú",
@@ -148,7 +148,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Hola, quiero consultar sobre el sistema de monitoreo ambiental IoT.",
       label: "Consultar por WhatsApp",
     },
-    footer: { tagline: "Base informativa de monitoreo ambiental IoT", legalLine: "Contenido informativo sobre monitoreo ambiental IoT.", links: locales },
+    footer: { tagline: "Monitoreo Ambiental IoT", legalLine: "Monitoreo Ambiental IoT · Todos los derechos reservados.", links: locales },
   },
   "pt-br": {
     locale: LOCALES.PT_BR,
@@ -162,7 +162,7 @@ const CONTENT: Record<Locale, LandingContent> = {
     nav: {
       links: [{ href: "#variables", label: "Variáveis" }, { href: "#base", label: "A base" }],
       contactLabel: "Contato",
-      tagline: "Uma base para monitoramento ambiental",
+      tagline: "Monitoramento Ambiental IoT",
       localeLabel: "Idioma",
       locales,
       mobileMenuLabel: "Abrir menu",
@@ -218,7 +218,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Olá, gostaria de saber mais sobre o sistema de monitoramento ambiental IoT.",
       label: "Falar pelo WhatsApp",
     },
-    footer: { tagline: "Base informativa de monitoramento ambiental IoT", legalLine: "Conteúdo informativo sobre monitoramento ambiental IoT.", links: locales },
+    footer: { tagline: "Monitoramento Ambiental IoT", legalLine: "Monitoramento Ambiental IoT · Todos os direitos reservados.", links: locales },
   },
   en: {
     locale: LOCALES.EN,
@@ -232,7 +232,7 @@ const CONTENT: Record<Locale, LandingContent> = {
     nav: {
       links: [{ href: "#variables", label: "Variables" }, { href: "#base", label: "Foundation" }],
       contactLabel: "Contact",
-      tagline: "A foundation for environmental monitoring",
+      tagline: "IoT Environmental Monitoring",
       localeLabel: "Language",
       locales,
       mobileMenuLabel: "Open menu",
@@ -288,7 +288,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       message: "Hello, I would like to ask about the IoT environmental monitoring system.",
       label: "Ask on WhatsApp",
     },
-    footer: { tagline: "Informational foundation for IoT environmental monitoring", legalLine: "Informational content about IoT environmental monitoring.", links: locales },
+    footer: { tagline: "IoT Environmental Monitoring", legalLine: "IoT Environmental Monitoring · All rights reserved.", links: locales },
   },
 };
 

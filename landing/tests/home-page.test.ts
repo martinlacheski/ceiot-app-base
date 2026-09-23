@@ -49,6 +49,15 @@ describe("HomePage", () => {
     }
   });
 
+  it("prefixes the footer rights line with the current year", async () => {
+    const html = await renderHome(LOCALES.ES);
+    const footer = html.slice(html.indexOf("<footer"));
+
+    expect(footer).toContain(
+      `© ${new Date().getFullYear()} Monitoreo Ambiental IoT · Todos los derechos reservados.`,
+    );
+  });
+
   it("places contact before the footer and preserves WhatsApp after the footer", async () => {
     const html = await renderHome();
     const contactIndex = html.indexOf('id="contact"');

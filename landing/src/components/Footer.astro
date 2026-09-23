@@ -15,6 +15,6 @@ const { content } = Astro.props;
         {content.footer.links.map((link) => <a class="text-sm text-muted-foreground hover:text-foreground" href={link.href}>{link.label}</a>)}
       </div>
     </div>
-    <p class="text-center text-sm text-muted-foreground">{content.footer.legalLine}</p>
+    <p class="text-center text-sm text-muted-foreground">© {new Date().getFullYear()} {content.footer.legalLine}</p>
   </div>
 </footer>
