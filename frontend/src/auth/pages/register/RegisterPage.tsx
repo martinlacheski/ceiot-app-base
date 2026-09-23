@@ -211,6 +211,9 @@ export const RegisterPage = () => {
           <form className="p-6 md:p-8" onSubmit={handleRegister}>
             <div className="flex flex-col gap-6">
               <div className="flex flex-col items-center text-center">
+                <h1 className="mb-4 text-xl font-bold text-balance md:text-2xl">
+                  Monitoreo Ambiental IoT
+                </h1>
                 <Logo />
 
                 <p className="text-balance text-muted-foreground">

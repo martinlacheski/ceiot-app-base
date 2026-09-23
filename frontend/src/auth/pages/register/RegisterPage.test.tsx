@@ -116,6 +116,18 @@ describe("RegisterPage", () => {
     );
   });
 
+  it("shows the product title above the icon-only logo", () => {
+    render(
+      <MemoryRouter initialEntries={["/auth/register"]}>
+        <RegisterPage />
+      </MemoryRouter>
+    );
+
+    const title = screen.getByRole("heading", { level: 1, name: "Monitoreo Ambiental IoT" });
+    const logo = screen.getByRole("img", { name: /monitoreo ambiental iot/i });
+    expect(title.compareDocumentPosition(logo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("links the consent notice to the landing privacy policy only", () => {
     render(
       <MemoryRouter initialEntries={["/auth/register"]}>
