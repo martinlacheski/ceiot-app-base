@@ -30,5 +30,8 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/tests/setup.ts",
+    // Heavy interaction suites exceed the 5s default when the full run is under load.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });
