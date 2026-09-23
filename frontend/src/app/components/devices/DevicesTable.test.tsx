@@ -27,6 +27,7 @@ const useDevicesMock = vi.fn<
   data: { items: [], total: 0, pages: 0 },
   isLoading: false,
 }));
+const exportDevicesMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/hooks/useDevices", () => ({
   useDevices: (filters: unknown, options: unknown) => useDevicesMock(filters, options),
@@ -45,7 +46,7 @@ vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: () => ({ user: { id: "owner-1" } }),
 }));
 vi.mock("@/app/services/device.service", () => ({
-  deviceService: { export: vi.fn() },
+  deviceService: { export: exportDevicesMock },
 }));
 vi.mock("./DeviceDetailDialog", () => ({ DeviceDetailDialog: () => null }));
 
@@ -269,7 +270,8 @@ describe("DevicesTable responsive contract", () => {
 
     const cards = screen.getByTestId("device-cards");
     expect(within(cards).getByText("Cargando dispositivos")).toBeInTheDocument();
-    expect(document.querySelector(".lg\\:block table")).toBeInTheDocument();
+    expect(document.querySelector(".md\\:block table")).toBeInTheDocument();
+    expect(cards).toHaveClass("md:hidden");
 
     useDevicesMock.mockReturnValue({ data: { items: [], total: 0, pages: 0 }, isLoading: false });
     rerender(<MemoryRouter><DevicesTable /></MemoryRouter>);
@@ -300,8 +302,9 @@ describe("DevicesTable responsive contract", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("sortBy=lastConnection");
   });
 
-  it("uses server response order without sortable header behavior", () => {
-    useDevicesMock.mockReturnValueOnce({
+  it("wires sortable headers to the URL-backed server sort", async () => {
+    const user = userEvent.setup();
+    useDevicesMock.mockReturnValue({
       data: {
         items: [
           { ...baseDevice, id: "2", name: "Zulu" },
@@ -313,13 +316,43 @@ describe("DevicesTable responsive contract", () => {
       isLoading: false,
     });
 
-    render(<MemoryRouter><DevicesTable /></MemoryRouter>);
+    render(
+      <MemoryRouter initialEntries={["/devices?page=4"]}>
+        <DevicesTable mode="user" />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
 
     const cards = Array.from(
       screen.getByTestId("device-cards").querySelectorAll('[data-slot="card-title"]'),
     );
     expect(cards.map((card) => card.textContent)).toEqual(["Zulu", "Alpha"]);
-    expect(screen.queryByText(/Shift/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Dispositivo" }));
+    await user.click(screen.getByRole("menuitem", { name: "Desc" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("page=1");
+    expect(screen.getByTestId("location")).toHaveTextContent("sortBy=name");
+    expect(screen.getByTestId("location")).toHaveTextContent("sortOrder=desc");
+  });
+
+  it("does not expose sorting for columns unsupported by the server", () => {
+    render(<MemoryRouter><DevicesTable /></MemoryRouter>);
+
+    expect(screen.queryByRole("button", { name: "Lote" })).not.toBeInTheDocument();
+  });
+
+  it("uses the shared search and export actions", async () => {
+    exportDevicesMock.mockResolvedValue(undefined);
+    render(<MemoryRouter><DevicesTable /></MemoryRouter>);
+
+    expect(
+      screen.getByPlaceholderText("Buscar en todos los campos..."),
+    ).toHaveAttribute("data-list-toolbar-search-control");
+    await userEvent.click(screen.getByRole("button", { name: "Excel" }));
+    expect(exportDevicesMock).toHaveBeenCalledWith(
+      "excel",
+      expect.objectContaining({ page: 1, sortBy: "name", sortOrder: "asc" }),
+      expect.anything(),
+    );
   });
 
   it("clears active sorting and filters back to stable defaults", async () => {

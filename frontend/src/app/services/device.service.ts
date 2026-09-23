@@ -19,6 +19,9 @@ import {
   formatDeviceLocation,
   getDeviceLocationSourceLabel,
 } from "../components/devices/deviceMap";
+import { formatDateTime } from "@/utils/date.utils";
+import { fetchAllPages } from "@/lib/fetchAllPages";
+import { downloadReport, toFilenamePart } from "@/lib/downloadReport";
 
 const BASE_URL = "/devices";
 
@@ -43,6 +46,23 @@ interface DeviceOperationsResponseApi {
   per_page?: number;
   perPage?: number;
   pages: number;
+}
+
+export type DeviceOperationSortBy =
+  | "time"
+  | "id"
+  | "operation_type"
+  | "status";
+
+export interface DeviceOperationFilters {
+  page: number;
+  perPage: number;
+  startDate?: Date;
+  endDate?: Date;
+  operationType?: string;
+  search?: string;
+  sortBy?: DeviceOperationSortBy;
+  sortOrder?: "asc" | "desc";
 }
 
 interface ScopedGuestRelationApi {
@@ -215,7 +235,8 @@ export const deviceService = {
     params.append("page", filters.page.toString());
     params.append("per_page", filters.perPage.toString());
 
-    if (filters.search) params.append("search", filters.search);
+    const search = filters.search?.trim().slice(0, 64);
+    if (search) params.append("search", search);
     if (filters.isActive !== undefined)
       params.append("is_active", filters.isActive.toString());
     if (filters.environmentId)
@@ -228,6 +249,12 @@ export const deviceService = {
     if (filters.batch) params.append("batch", filters.batch);
     if (filters.manufactureDate)
       params.append("manufacture_date", filters.manufactureDate);
+    if (search || filters.manufactureDate) {
+      params.append(
+        "utc_offset_minutes",
+        String(-new Date().getTimezoneOffset()),
+      );
+    }
     if (filters.status && filters.status !== "all")
       params.append("status", filters.status);
     if (filters.enabled !== undefined && filters.enabled !== "all") {
@@ -307,8 +334,9 @@ export const deviceService = {
     options?: { generatedBy?: string },
   ): Promise<void> => {
     const params = { ...filters, perPage: 10000, page: 1 };
-    const response = await deviceService.getAll(params);
-    const items = response.items;
+    const items = await fetchAllPages((page, perPage) =>
+      deviceService.getAll({ ...params, page, perPage }),
+    );
 
     const columns = [
       "Serial",
@@ -339,36 +367,18 @@ export const deviceService = {
 
     const generatedBy = options?.generatedBy || "Usuario";
 
-    if (format === "excel") {
-      const { exportToExcel } = await import("@/lib/export.utils");
-      await exportToExcel({
-        title: "Reporte de Dispositivos",
-        filename: "dispositivos",
-        generatedBy,
-        columns,
-        data,
-      });
-    } else {
-      const { exportToPdf } = await import("@/lib/export.utils");
-      exportToPdf({
-        title: "Reporte de Dispositivos",
-        filename: "dispositivos",
-        generatedBy,
-        columns,
-        data,
-      });
-    }
+    await downloadReport(format, {
+      title: "Reporte de Dispositivos",
+      filename: "dispositivos",
+      generatedBy,
+      columns,
+      data,
+    });
   },
 
   getOperations: async (
     deviceId: string,
-    filters: {
-      page: number;
-      perPage: number;
-      startDate?: Date;
-      endDate?: Date;
-      operationType?: string;
-    },
+    filters: DeviceOperationFilters,
   ): Promise<{
     items: DeviceOperation[];
     total: number;
@@ -386,6 +396,16 @@ export const deviceService = {
       params.append("end_date", filters.endDate.toISOString());
     if (filters.operationType && filters.operationType !== "all")
       params.append("operation_type", filters.operationType);
+    const search = filters.search?.trim().slice(0, 64);
+    if (search) params.append("search", search);
+    if (filters.sortBy) params.append("sort_by", filters.sortBy);
+    if (filters.sortOrder) params.append("sort_order", filters.sortOrder);
+    if (search || filters.startDate || filters.endDate) {
+      params.append(
+        "utc_offset_minutes",
+        String(-new Date().getTimezoneOffset()),
+      );
+    }
 
     const { data } = await appApi.get<DeviceOperationsResponseApi>(
       `${BASE_URL}/operations/by-device/${deviceId}`,
@@ -394,6 +414,30 @@ export const deviceService = {
       },
     );
     return mapDeviceOperationsResponse(data);
+  },
+
+  exportOperations: async (
+    deviceId: string,
+    deviceName: string,
+    format: "excel" | "pdf",
+    filters: DeviceOperationFilters,
+    options?: { generatedBy?: string },
+  ): Promise<void> => {
+    const items = await fetchAllPages((page, perPage) =>
+      deviceService.getOperations(deviceId, { ...filters, page, perPage }),
+    );
+    await downloadReport(format, {
+      title: `Operaciones - ${deviceName}`,
+      filename: `operaciones_${toFilenamePart(deviceName)}`,
+      generatedBy: options?.generatedBy || "Usuario",
+      columns: ["Fecha/Hora", "ID", "Tipo", "Estado"],
+      data: items.map((operation) => [
+        formatDateTime(operation.time),
+        operation.id,
+        operation.operation_type,
+        operation.status,
+      ]),
+    });
   },
 
   getAccessContext: async (deviceId: string): Promise<DeviceAccessContext> => {

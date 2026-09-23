@@ -8,6 +8,8 @@ import {
   mapDeviceOperation,
 } from "./device.service";
 
+const downloadReportMock = vi.hoisted(() => vi.fn());
+
 vi.mock("@/api/appApi", () => ({
   appApi: {
     delete: vi.fn(),
@@ -15,6 +17,11 @@ vi.mock("@/api/appApi", () => ({
     patch: vi.fn(),
     post: vi.fn(),
   },
+}));
+
+vi.mock("@/lib/downloadReport", () => ({
+  downloadReport: downloadReportMock,
+  toFilenamePart: (value: string) => value.replace(/[^A-Za-z0-9_-]+/g, "_"),
 }));
 
 beforeEach(() => {
@@ -39,6 +46,154 @@ describe("deviceService.getAll", () => {
     };
     expect(config.params.get("sort_by")).toBe("lastConnection");
     expect(config.params.get("sort_order")).toBe("desc");
+  });
+
+  it("sends the local UTC offset for search and manufacture-date filters", async () => {
+    vi.mocked(appApi.get).mockResolvedValue({
+      data: { items: [], total: 0, pages: 0, page: 1, perPage: 20 },
+    });
+    const offset = -new Date().getTimezoneOffset();
+
+    await deviceService.getAll({
+      page: 1,
+      perPage: 20,
+      search: "23/09/2026",
+      manufactureDate: "2026-09-23",
+      sortBy: "name",
+      sortOrder: "asc",
+    });
+
+    const config = vi.mocked(appApi.get).mock.calls[0][1] as {
+      params: URLSearchParams;
+    };
+    expect(config.params.get("utc_offset_minutes")).toBe(String(offset));
+  });
+
+  it("exports every server page with the active filters and sort", async () => {
+    vi.mocked(appApi.get)
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: "first", serial: "A", name: "First" }],
+          total: 10001,
+          pages: 2,
+          page: 1,
+          perPage: 10000,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: "last", serial: "Z", name: "Last" }],
+          total: 10001,
+          pages: 2,
+          page: 2,
+          perPage: 10000,
+        },
+      });
+
+    await deviceService.export(
+      "excel",
+      {
+        page: 9,
+        perPage: 10,
+        search: "visible",
+        sortBy: "serial",
+        sortOrder: "desc",
+      },
+      { generatedBy: "Tester" },
+    );
+
+    expect(appApi.get).toHaveBeenCalledTimes(2);
+    const secondParams = (vi.mocked(appApi.get).mock.calls[1][1] as {
+      params: URLSearchParams;
+    }).params;
+    expect(Object.fromEntries(secondParams)).toMatchObject({
+      page: "2",
+      per_page: "10000",
+      search: "visible",
+      sort_by: "serial",
+      sort_order: "desc",
+    });
+    expect(downloadReportMock).toHaveBeenCalledWith(
+      "excel",
+      expect.objectContaining({ data: expect.arrayContaining([expect.arrayContaining(["A"]), expect.arrayContaining(["Z"])]) }),
+    );
+  });
+});
+
+describe("deviceService.getOperations", () => {
+  it("serializes server search, date range, sorting, and UTC offset", async () => {
+    vi.mocked(appApi.get).mockResolvedValue({
+      data: { items: [], total: 0, pages: 0, page: 1, per_page: 20 },
+    });
+
+    await deviceService.getOperations("device-1", {
+      page: 2,
+      perPage: 20,
+      search: "23/09/2026",
+      startDate: new Date("2026-09-01T00:00:00.000Z"),
+      endDate: new Date("2026-09-23T23:59:59.000Z"),
+      sortBy: "operation_type",
+      sortOrder: "asc",
+    });
+
+    const config = vi.mocked(appApi.get).mock.calls[0][1] as {
+      params: URLSearchParams;
+    };
+    expect(Object.fromEntries(config.params)).toMatchObject({
+      page: "2",
+      per_page: "20",
+      search: "23/09/2026",
+      sort_by: "operation_type",
+      sort_order: "asc",
+      utc_offset_minutes: String(-new Date().getTimezoneOffset()),
+    });
+  });
+
+  it("exports all matching operation pages", async () => {
+    vi.mocked(appApi.get)
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: "first", time: "2026-09-01T00:00:00Z", operation_type: "A", status: "ok" }],
+          total: 10001,
+          pages: 2,
+          page: 1,
+          per_page: 10000,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          items: [{ id: "last", time: "2026-09-02T00:00:00Z", operation_type: "Z", status: "ok" }],
+          total: 10001,
+          pages: 2,
+          page: 2,
+          per_page: 10000,
+        },
+      });
+
+    await deviceService.exportOperations(
+      "device-1",
+      "Device One",
+      "pdf",
+      {
+        page: 1,
+        perPage: 20,
+        search: "ok",
+        sortBy: "id",
+        sortOrder: "asc",
+      },
+    );
+
+    expect(appApi.get).toHaveBeenCalledTimes(2);
+    expect(downloadReportMock).toHaveBeenCalledWith(
+      "pdf",
+      expect.objectContaining({
+        filename: "operaciones_Device_One",
+        data: expect.arrayContaining([
+          expect.arrayContaining(["first"]),
+          expect.arrayContaining(["last"]),
+        ]),
+      }),
+    );
   });
 });
 

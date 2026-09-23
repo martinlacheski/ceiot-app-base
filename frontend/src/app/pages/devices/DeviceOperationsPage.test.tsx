@@ -9,6 +9,7 @@ import DeviceOperationsPage from "./DeviceOperationsPage";
 const refetchOperations = vi.fn();
 const refetchDevice = vi.fn();
 const getOperationsMock = vi.hoisted(() => vi.fn());
+const exportOperationsMock = vi.hoisted(() => vi.fn());
 const queryState: {
   data?: { items: DeviceOperation[]; pages: number; total: number };
   isLoading: boolean;
@@ -31,7 +32,10 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 vi.mock("@/app/services/device.service", () => ({
-  deviceService: { getOperations: getOperationsMock },
+  deviceService: {
+    getOperations: getOperationsMock,
+    exportOperations: exportOperationsMock,
+  },
 }));
 
 vi.mock("@/app/hooks/useDevices", () => ({
@@ -46,15 +50,18 @@ vi.mock("@/auth/store/auth.store", () => ({
 vi.mock("@/components/ui/date-range-picker", () => ({
   DatePickerWithRange: ({
     onUpdate,
+    initialDateFrom,
   }: {
     onUpdate: (value: { range: { from: Date; to: Date } }) => void;
+    initialDateFrom?: Date;
   }) => (
     <button
+      data-initial-from={initialDateFrom?.toISOString() ?? "none"}
       onClick={() =>
         onUpdate({
           range: {
-            from: new Date("2026-07-01T00:00:00Z"),
-            to: new Date("2026-07-02T00:00:00Z"),
+            from: new Date(2026, 6, 1),
+            to: new Date(2026, 6, 2),
           },
         })
       }
@@ -154,6 +161,7 @@ describe("DeviceOperationsPage responsive presentation", () => {
     refetchOperations.mockReset();
     refetchDevice.mockReset();
     getOperationsMock.mockReset();
+    exportOperationsMock.mockReset();
     vi.restoreAllMocks();
   });
 
@@ -254,32 +262,85 @@ describe("DeviceOperationsPage responsive presentation", () => {
     expect(within(cards[0]).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByText(/pago|monto|moneda|proveedor/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Excel" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "PDF" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Excel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PDF" })).toBeInTheDocument();
   });
 
-  it("preserves filtered row parity, navigation, search, date, and pagination outcomes", async () => {
+  it("sends URL-backed search, dates, sorting and pagination to the server", async () => {
     const user = userEvent.setup();
     queryState.data = { items: operations, pages: 2, total: 40 };
-    renderPage("/app/devices/device-1/operations?search=SENSOR_DATA&page=1&size=20");
+    renderPage("/app/devices/device-1/operations?search=SENSOR_DATA&page=1&size=20&startDate=2026-07-03&endDate=2026-07-04&sortBy=status&sortOrder=asc");
 
-    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(screen.getAllByText("SENSOR_DATA")).toHaveLength(2);
-    expect(screen.queryByText("KEEP_ACTIVE")).not.toBeInTheDocument();
+    expect(screen.getAllByText("KEEP_ACTIVE")).toHaveLength(2);
+
+    queryOptions.queryFn();
+    expect(getOperationsMock).toHaveBeenCalledWith(
+      "device-1",
+      expect.objectContaining({
+        page: 1,
+        perPage: 20,
+        search: "SENSOR_DATA",
+        sortBy: "status",
+        sortOrder: "asc",
+        startDate: expect.any(Date),
+        endDate: expect.any(Date),
+      }),
+    );
 
     await user.click(screen.getByRole("button", { name: "Limpiar búsqueda" }));
     expect(screen.getByLabelText("Ubicación actual")).not.toHaveTextContent("search=");
 
+    await user.click(screen.getByRole("button", { name: /Filtros/ }));
     await user.click(screen.getByRole("button", { name: "Rango de fechas" }));
-    expect(queryOptions.queryKey).toContainEqual({
-      from: new Date("2026-07-01T00:00:00Z"),
-      to: new Date("2026-07-02T00:00:00Z"),
-    });
-
-    expect(queryOptions.queryKey).not.toContain("DISPENSE_ACK");
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("startDate=2026-07-01");
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("endDate=2026-07-02");
 
     await user.click(screen.getByRole("button", { name: "Página siguiente" }));
     expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("page=2");
+  });
+
+  it("resets active date filters and remounts the uncontrolled date picker", async () => {
+    const user = userEvent.setup();
+    renderPage("/app/devices/device-1/operations?startDate=2026-07-03&endDate=2026-07-04");
+
+    await user.click(screen.getByRole("button", { name: /Filtros/ }));
+    let datePicker = screen.getByRole("button", { name: "Rango de fechas" });
+    expect(datePicker).toHaveAttribute(
+      "data-initial-from",
+      new Date(2026, 6, 3).toISOString(),
+    );
+    await user.click(screen.getByRole("button", { name: "Limpiar todos" }));
+    datePicker = screen.getByRole("button", { name: "Rango de fechas" });
+    expect(datePicker).toHaveAttribute("data-initial-from", "none");
+    expect(screen.queryByRole("button", { name: "Limpiar todos" })).not.toBeInTheDocument();
+  });
+
+  it("exports all matching operations through the service", async () => {
+    exportOperationsMock.mockResolvedValue(undefined);
+    renderPage("/app/devices/device-1/operations?search=SUCCESS&sortBy=id&sortOrder=asc");
+
+    await userEvent.click(screen.getByRole("button", { name: "Excel" }));
+    expect(exportOperationsMock).toHaveBeenCalledWith(
+      "device-1",
+      "Dispensador Norte",
+      "excel",
+      expect.objectContaining({ search: "SUCCESS", sortBy: "id", sortOrder: "asc" }),
+      expect.anything(),
+    );
+  });
+
+  it("drives server sorting from sortable table headers", async () => {
+    const user = userEvent.setup();
+    renderPage("/app/devices/device-1/operations?page=3");
+
+    await user.click(screen.getByRole("button", { name: "Estado" }));
+    await user.click(screen.getByRole("menuitem", { name: "Asc" }));
+
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("page=1");
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("sortBy=status");
+    expect(screen.getByLabelText("Ubicación actual")).toHaveTextContent("sortOrder=asc");
   });
 
   it("preserves the route-state back destination", async () => {
@@ -324,13 +385,12 @@ describe("DeviceOperationsPage responsive presentation", () => {
   it("uses valid request defaults for invalid page and size URL parameters", () => {
     renderPage("/app/devices/device-1/operations?page=abc&size=0");
 
-    expect(queryOptions.queryKey).toEqual([
+    expect(queryOptions.queryKey).toEqual(expect.arrayContaining([
       "device-operations",
       "device-1",
-      expect.anything(),
       1,
       20,
-    ]);
+    ]));
     queryOptions.queryFn();
     expect(getOperationsMock).toHaveBeenCalledWith(
       "device-1",

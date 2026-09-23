@@ -1,13 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
   type ColumnDef,
   flexRender,
   getCoreRowModel,
-  getFilteredRowModel,
-  getSortedRowModel,
   type PaginationState,
   type Row,
-  type SortingState,
   useReactTable,
 } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
@@ -17,18 +14,23 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router";
-import { ArrowLeft, Loader2, X } from "lucide-react";
-import { addDays } from "date-fns";
-import { formatDateTime } from "@/utils/date.utils";
+import { ArrowLeft, Loader2 } from "lucide-react";
+import { format, isValid, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
 import { ListErrorState } from "@/components/custom/ListErrorState";
+import { ListSearchInput } from "@/components/custom/ListSearchInput";
+import { ListExportActions } from "@/components/custom/ListExportActions";
+import {
+  ListFiltersPanel,
+  ListFiltersTrigger,
+} from "@/components/custom/ListFiltersAccordion";
+import { CENTERED_CELL_CLASS } from "@/components/custom/tableAlignment";
 import {
   Table,
   TableBody,
@@ -47,9 +49,37 @@ import {
 } from "@/components/ui/card";
 
 import { useDevice } from "@/app/hooks/useDevices";
-import { deviceService } from "@/app/services/device.service";
+import {
+  deviceService,
+  type DeviceOperationSortBy,
+} from "@/app/services/device.service";
 import type { DeviceOperation } from "@/app/types/device.types";
+import { useAuthStore } from "@/auth/store/auth.store";
+import { useListFilters } from "@/hooks/useListFilters";
+import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { formatDateTime } from "@/utils/date.utils";
 import { toPositiveInt } from "@/utils/url-params";
+import { applySortingUpdate, toSortingState } from "@/lib/serverSorting";
+
+const OPERATION_SORT_FIELDS: readonly DeviceOperationSortBy[] = [
+  "time",
+  "id",
+  "operation_type",
+  "status",
+];
+const DEFAULT_SORT = { sortBy: "time", sortOrder: "desc" } as const;
+
+function parseSortBy(value: string | null): DeviceOperationSortBy {
+  return OPERATION_SORT_FIELDS.includes(value as DeviceOperationSortBy)
+    ? (value as DeviceOperationSortBy)
+    : DEFAULT_SORT.sortBy;
+}
+
+function parseDate(value: string | null): Date | undefined {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const date = parseISO(value);
+  return isValid(date) ? date : undefined;
+}
 
 function OperationCard({ row }: { row: Row<DeviceOperation> }) {
   const operation = row.original;
@@ -90,19 +120,20 @@ export default function DeviceOperationsPage() {
   const location = useLocation();
   const backTo = (location.state as { from?: string })?.from || "/app/devices";
   const [searchParams, setSearchParams] = useSearchParams();
+  const filtersPanel = useListFilters();
+  const user = useAuthStore((state) => state.user);
 
-  // URL State
   const page = toPositiveInt(searchParams.get("page"), 1);
   const size = toPositiveInt(searchParams.get("size"), 20);
   const search = searchParams.get("search") || "";
+  const startDateParam = searchParams.get("startDate");
+  const endDateParam = searchParams.get("endDate");
+  const startDate = parseDate(startDateParam);
+  const endDate = parseDate(endDateParam);
+  const sortBy = parseSortBy(searchParams.get("sortBy"));
+  const sortOrder = searchParams.get("sortOrder") === "asc" ? "asc" : "desc";
+  const dateRangeKey = `${startDateParam || ""}:${endDateParam || ""}`;
 
-  // Date State
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: addDays(new Date(), -7),
-    to: new Date(),
-  });
-
-  // Fetch Device Info
   const {
     data: device,
     isLoading: isLoadingDevice,
@@ -110,7 +141,6 @@ export default function DeviceOperationsPage() {
     refetch: refetchDevice,
   } = useDevice(id || "");
 
-  // Fetch Operations
   const {
     data: operationsData,
     isLoading: isLoadingOps,
@@ -120,175 +150,154 @@ export default function DeviceOperationsPage() {
     queryKey: [
       "device-operations",
       id,
-      dateRange,
       page,
       size,
+      search,
+      startDateParam,
+      endDateParam,
+      sortBy,
+      sortOrder,
     ],
     queryFn: () =>
       deviceService.getOperations(device!.id, {
         page,
         perPage: size,
-        startDate: dateRange?.from,
-        endDate: dateRange?.to,
+        search: search || undefined,
+        startDate,
+        endDate,
+        sortBy,
+        sortOrder,
       }),
-    enabled: !!device?.id && !!dateRange?.from,
+    enabled: !!device?.id,
   });
 
   useEffect(() => {
-    if (
-      !operationsData ||
-      operationsData.total < 1 ||
-      operationsData.pages < 1 ||
-      page <= operationsData.pages
-    ) {
+    if (!operationsData || operationsData.total < 1 || page <= operationsData.pages) {
       return;
     }
+    const next = new URLSearchParams(searchParams);
+    next.set("page", String(operationsData.pages));
+    setSearchParams(next, { replace: true });
+  }, [operationsData, page, searchParams, setSearchParams]);
 
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("page", String(operationsData.pages));
-    setSearchParams(nextParams, { replace: true });
-  }, [
-    operationsData?.pages,
-    operationsData?.total,
-    page,
-    searchParams,
-    setSearchParams,
-  ]);
-
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  // Handlers
   const updateParams = (updates: Record<string, string | null>) => {
-    const newParams = new URLSearchParams(searchParams);
+    const next = new URLSearchParams(searchParams);
     Object.entries(updates).forEach(([key, value]) => {
-      if (value === null || value === "" || value === "all") {
-        newParams.delete(key);
-      } else {
-        newParams.set(key, String(value));
-      }
+      if (value === null || value === "") next.delete(key);
+      else next.set(key, value);
     });
-    if (!updates.page) {
-      newParams.set("page", "1");
-    }
-    setSearchParams(newParams);
+    if (!("page" in updates)) next.set("page", "1");
+    setSearchParams(next);
   };
 
-  const filteredOperations = useMemo(() => {
-    const items = operationsData?.items || [];
+  const hasActiveFilters =
+    !!search ||
+    !!startDate ||
+    !!endDate ||
+    sortBy !== DEFAULT_SORT.sortBy ||
+    sortOrder !== DEFAULT_SORT.sortOrder;
 
-    if (!search) {
-      return items;
-    }
+  const resetAll = () => {
+    const next = new URLSearchParams();
+    next.set("page", "1");
+    next.set("size", String(size));
+    setSearchParams(next);
+  };
 
-    const searchLower = search.toLowerCase();
-    return items.filter((operation) => {
-      return (
-        operation.id.toLowerCase().includes(searchLower) ||
-        operation.operation_type.toLowerCase().includes(searchLower) ||
-        operation.status.toLowerCase().includes(searchLower) ||
-        formatDateTime(operation.time).toLowerCase().includes(searchLower)
-      );
+  const handleDateUpdate = ({ range }: { range: DateRange }) => {
+    updateParams({
+      startDate: range.from ? format(range.from, "yyyy-MM-dd") : null,
+      endDate: range.to ? format(range.to, "yyyy-MM-dd") : null,
+      page: "1",
     });
-  }, [operationsData?.items, search]);
+  };
+
+  const handleExport = async (exportFormat: "excel" | "pdf") => {
+    if (!device) return;
+    await deviceService.exportOperations(
+      device.id,
+      device.name,
+      exportFormat,
+      {
+        page: 1,
+        perPage: 10000,
+        search: search || undefined,
+        startDate,
+        endDate,
+        sortBy,
+        sortOrder,
+      },
+      { generatedBy: getExportGeneratedBy(user) },
+    );
+  };
 
   const columns = useMemo<ColumnDef<DeviceOperation>[]>(
     () => [
       {
         accessorKey: "time",
         header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Fecha/Hora"
-            className="justify-center"
-          />
+          <DataTableColumnHeader column={column} title="Fecha/Hora" align="center" />
         ),
-        cell: ({ row }) => (
-          <div className="text-center">{formatDateTime(row.original.time)}</div>
-        ),
+        cell: ({ row }) => formatDateTime(row.original.time),
       },
       {
         accessorKey: "id",
         header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="ID"
-            className="justify-center"
-          />
+          <DataTableColumnHeader column={column} title="ID" align="center" />
         ),
-        cell: ({ row }) => (
-          <div className="text-center font-mono text-xs font-medium">
-            {row.original.id}
-          </div>
-        ),
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span>,
       },
       {
         accessorKey: "operation_type",
         header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Tipo"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => (
-          <div className="text-center">{row.original.operation_type}</div>
+          <DataTableColumnHeader column={column} title="Tipo" align="center" />
         ),
       },
       {
         accessorKey: "status",
         header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Estado"
-            className="justify-center"
-          />
+          <DataTableColumnHeader column={column} title="Estado" align="center" />
         ),
-        cell: ({ row }) => (
-          <div className="flex justify-center">
-            <Badge variant="outline">{row.original.status}</Badge>
-          </div>
-        ),
+        cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
       },
     ],
     [],
   );
 
   const paginationState: PaginationState = useMemo(
-    () => ({
-      pageIndex: page - 1,
-      pageSize: size,
-    }),
+    () => ({ pageIndex: page - 1, pageSize: size }),
     [page, size],
   );
 
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
-    data: filteredOperations,
+    data: operationsData?.items || [],
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onSortingChange: (updater) => {
-      if (typeof updater === "function") {
-        setSorting(updater(sorting));
-      } else {
-        setSorting(updater);
-      }
-    },
     state: {
-      sorting,
       pagination: paginationState,
+      sorting: toSortingState({ sortBy, sortOrder }),
     },
-    manualSorting: false,
     manualPagination: true,
+    manualSorting: true,
     pageCount: operationsData?.pages || 0,
-    onPaginationChange: (updater) => {
-      const next =
-        typeof updater === "function" ? updater(paginationState) : updater;
-
+    onSortingChange: (updater) => {
+      const next = applySortingUpdate(
+        updater,
+        { sortBy, sortOrder },
+        OPERATION_SORT_FIELDS,
+        DEFAULT_SORT,
+      );
       updateParams({
-        page: (next.pageIndex + 1).toString(),
-        size: next.pageSize.toString(),
+        page: "1",
+        sortBy: next.sortBy,
+        sortOrder: next.sortOrder,
+      });
+    },
+    onPaginationChange: (updater) => {
+      const next = typeof updater === "function" ? updater(paginationState) : updater;
+      updateParams({
+        page: String(next.pageIndex + 1),
+        size: String(next.pageSize),
       });
     },
   });
@@ -314,21 +323,19 @@ export default function DeviceOperationsPage() {
 
   if (!device) {
     return (
-      <div className="space-y-4">
-        <div className="flex gap-4">
-          <Button
-            variant="outline"
-            size="icon"
-            className="min-h-11 min-w-11"
-            onClick={() => navigate(backTo)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="sr-only">Volver</span>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Error</h1>
-            <p className="text-muted-foreground">Dispositivo no encontrado</p>
-          </div>
+      <div className="flex gap-4">
+        <Button
+          variant="outline"
+          size="icon"
+          className="min-h-11 min-w-11"
+          onClick={() => navigate(backTo)}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="sr-only">Volver</span>
+        </Button>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Error</h1>
+          <p className="text-muted-foreground">Dispositivo no encontrado</p>
         </div>
       </div>
     );
@@ -345,7 +352,6 @@ export default function DeviceOperationsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="flex gap-4 sm:flex-row">
         <Button
           variant="outline"
@@ -366,125 +372,101 @@ export default function DeviceOperationsPage() {
         </div>
       </div>
 
-      {/* Filters Section */}
       <div className="space-y-4">
-        <div className="flex items-center gap-4">
-          {/* Search */}
-          <div className="relative flex-1 max-w-sm">
-            <Input
-              placeholder="Buscar operaciones..."
-              value={search}
-              onChange={(e) =>
-                updateParams({ search: e.target.value, page: "1" })
-              }
-              className="h-11 pr-12"
-            />
-            {search && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-1/2 size-11 -translate-y-1/2"
-                onClick={() => updateParams({ search: null })}
-              >
-                <X className="size-4" />
-                <span className="sr-only">Limpiar búsqueda</span>
-              </Button>
-            )}
-          </div>
-
-          {/* Date Range */}
-          <DatePickerWithRange
-            initialDateFrom={dateRange?.from}
-            initialDateTo={dateRange?.to}
-            onUpdate={(values) => setDateRange(values.range)}
-            align="end"
-            showCompare={false}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <ListSearchInput
+            value={search}
+            onChange={(value) => updateParams({ search: value, page: "1" })}
+            onClear={() => updateParams({ search: null, page: "1" })}
+            className="w-full md:max-w-sm md:flex-1"
+          />
+          <ListFiltersTrigger
+            open={filtersPanel.open}
+            onOpenChange={filtersPanel.setOpen}
+            hasActiveFilters={hasActiveFilters}
           />
         </div>
+        <ListFiltersPanel
+          open={filtersPanel.open}
+          onOpenChange={filtersPanel.setOpen}
+          hasActiveFilters={hasActiveFilters}
+          onReset={resetAll}
+        >
+          <DatePickerWithRange
+            key={dateRangeKey}
+            initialDateFrom={startDate}
+            initialDateTo={endDate}
+            onUpdate={handleDateUpdate}
+            align="start"
+            showCompare={false}
+          />
+        </ListFiltersPanel>
       </div>
 
-      <div className="space-y-4">
-        <section
-          aria-label="Operaciones del dispositivo"
-          className="grid gap-3 md:hidden"
-        >
-          {isLoadingOps ? (
-            <div
-              aria-label="Cargando operaciones"
-              className="flex h-24 items-center justify-center"
-            >
-              <Loader2 className="size-6 animate-spin text-primary" />
-            </div>
-          ) : rows.length ? (
-            rows.map((row) => <OperationCard key={row.id} row={row} />)
-          ) : (
-            <div className="flex h-24 items-center justify-center text-muted-foreground">
-              No se encontraron operaciones.
-            </div>
-          )}
-        </section>
+      <ListExportActions onExport={handleExport} disabled={isLoadingOps} />
 
-        <div className="hidden rounded-md border md:block">
-          <Table>
-            <TableHeader>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </TableHead>
+      <section aria-label="Operaciones del dispositivo" className="grid gap-3 md:hidden">
+        {isLoadingOps ? (
+          <div aria-label="Cargando operaciones" className="flex h-24 items-center justify-center">
+            <Loader2 className="size-6 animate-spin text-primary" />
+          </div>
+        ) : rows.length ? (
+          rows.map((row) => <OperationCard key={row.id} row={row} />)
+        ) : (
+          <div className="flex h-24 items-center justify-center text-muted-foreground">
+            No se encontraron operaciones.
+          </div>
+        )}
+      </section>
+
+      <div className="hidden rounded-md border md:block">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id} className="text-center">
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isLoadingOps ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center">
+                  <Loader2 className="mx-auto size-6 animate-spin text-primary" />
+                </TableCell>
+              </TableRow>
+            ) : rows.length ? (
+              rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id} className={CENTERED_CELL_CLASS}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
                   ))}
                 </TableRow>
-              ))}
-            </TableHeader>
-            <TableBody>
-              {isLoadingOps ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center"
-                  >
-                    <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                  </TableCell>
-                </TableRow>
-              ) : rows.length ? (
-                rows.map((row) => (
-                  <TableRow key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    No se encontraron operaciones.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-
-        <DataTablePagination
-          table={table}
-          totalItems={operationsData?.total || 0}
-          entityName="operaciones"
-        />
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                  No se encontraron operaciones.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
+
+      <DataTablePagination
+        table={table}
+        totalItems={operationsData?.total || 0}
+        entityName="operaciones"
+      />
     </div>
   );
 }

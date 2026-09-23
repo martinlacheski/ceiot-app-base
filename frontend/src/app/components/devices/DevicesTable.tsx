@@ -35,11 +35,9 @@ import {
   Edit,
   Filter,
   Trash2,
-  FileSpreadsheet,
   FileText,
   RotateCw,
   Eye,
-  X,
   Loader2,
   List,
   MapPin,
@@ -67,6 +65,8 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
 import { ListErrorState } from "@/components/custom/ListErrorState";
+import { ListSearchInput } from "@/components/custom/ListSearchInput";
+import { ListExportActions } from "@/components/custom/ListExportActions";
 import { useNavigate, useSearchParams } from "react-router";
 import { deviceService } from "@/app/services/device.service";
 import {
@@ -104,6 +104,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { applySortingUpdate, toSortingState } from "@/lib/serverSorting";
 
 const DEVICE_STATUS_LABELS: Record<Device["status"], string> = {
   new: "NUEVO",
@@ -113,12 +114,13 @@ const DEVICE_STATUS_LABELS: Record<Device["status"], string> = {
   unpaired: "DESVINCULADO",
 };
 
-const DEVICE_SORT_FIELDS = new Set<string>(Object.values(DEVICE_SORT_BY));
+const DEVICE_SORT_FIELDS = Object.values(DEVICE_SORT_BY) as DeviceSortBy[];
+const DEVICE_SORT_FIELD_SET = new Set<string>(DEVICE_SORT_FIELDS);
 const DEFAULT_SORT_BY: DeviceSortBy = DEVICE_SORT_BY.NAME;
 const DEFAULT_SORT_ORDER: DeviceSortOrder = "asc";
 
 function parseSortBy(value: string | null): DeviceSortBy {
-  return value && DEVICE_SORT_FIELDS.has(value)
+  return value && DEVICE_SORT_FIELD_SET.has(value)
     ? (value as DeviceSortBy)
     : DEFAULT_SORT_BY;
 }
@@ -416,7 +418,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
   const deleteDevice = useDeleteDevice();
 
   // Export
-  const handleExport = (format: "excel" | "pdf") => {
+  const handleExport = (format: "excel" | "pdf") =>
     deviceService.export(format, {
       page: 1,
       perPage: 1000,
@@ -435,7 +437,6 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     }, {
       generatedBy: getExportGeneratedBy(user),
     });
-  };
 
   // Handlers
   const handleEdit = useCallback(
@@ -525,6 +526,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
   const columns: ColumnDef<Device>[] = useMemo(() => {
     const locationColumn: ColumnDef<Device> = {
       id: "location",
+      enableSorting: false,
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
@@ -571,6 +573,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     const commonColumns: ColumnDef<Device>[] = [
       {
         id: "actions",
+        enableSorting: false,
         header: () => <div className="text-center">Acciones</div>,
         cell: ({ row }) => {
           const device = row.original;
@@ -682,6 +685,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     const adminSpecificColumns: ColumnDef<Device>[] = [
       {
         id: "info",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -742,6 +746,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
       {
         id: "deviceTypeName",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -768,6 +773,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
       {
         accessorKey: "batch",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -894,6 +900,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
       {
         id: "owner",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -915,6 +922,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
       {
         id: "environmentName",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -929,6 +937,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
       {
         id: "deviceTypeName",
+        enableSorting: false,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -1004,9 +1013,24 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     state: {
       rowSelection,
       pagination: paginationState,
+      sorting: toSortingState({ sortBy, sortOrder }),
     },
     onRowSelectionChange: setRowSelection,
     manualPagination: true,
+    manualSorting: true,
+    onSortingChange: (updater) => {
+      const next = applySortingUpdate(
+        updater,
+        { sortBy, sortOrder },
+        DEVICE_SORT_FIELDS,
+        { sortBy: DEFAULT_SORT_BY, sortOrder: DEFAULT_SORT_ORDER },
+      );
+      updateParams({
+        page: "1",
+        sortBy: next.sortBy,
+        sortOrder: next.sortOrder,
+      });
+    },
     pageCount: data?.pages ?? -1,
     onPaginationChange: (updater) => {
       const next =
@@ -1033,26 +1057,12 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       <div className="space-y-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
           {/* Search */}
-          <div className="relative w-full md:max-w-sm md:flex-1">
-            <Input
-              placeholder="Buscar en todos los campos..."
-              value={search}
-              onChange={(e) =>
-                updateParams({ search: e.target.value, page: "1" })
-              }
-              className="pr-8"
-            />
-            {search && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-                onClick={() => updateParams({ search: null })}
-              >
-                <X className="size-4" />
-              </Button>
-            )}
-          </div>
+          <ListSearchInput
+            value={search}
+            onChange={(value) => updateParams({ search: value, page: "1" })}
+            onClear={() => updateParams({ search: null, page: "1" })}
+            className="w-full md:max-w-sm md:flex-1"
+          />
 
           <div className="flex flex-wrap items-center gap-2 md:flex-1">
             <Button
@@ -1316,30 +1326,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         </Accordion>
       </div>
 
-      <div className="flex justify-end">
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => handleExport("excel")}
-          >
-            <FileSpreadsheet className="size-4 text-green-600" />
-            <span className="hidden sm:inline">Excel</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => handleExport("pdf")}
-          >
-            <FileText className="size-4 text-red-600" />
-            <span className="hidden sm:inline">PDF</span>
-          </Button>
-        </div>
-      </div>
+      <ListExportActions onExport={handleExport} disabled={isLoading} />
 
-      <div className="hidden rounded-md border lg:block">
+      <div className="hidden rounded-md border md:block">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -1399,7 +1388,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         </Table>
       </div>
 
-      <div className="flex flex-col gap-3 lg:hidden" data-testid="device-cards">
+      <div className="flex flex-col gap-3 md:hidden" data-testid="device-cards">
         {isLoading ? (
           <div className="flex min-h-24 items-center justify-center rounded-md border">
             <Loader2 className="size-6 animate-spin text-primary" />
