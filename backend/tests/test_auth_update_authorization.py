@@ -88,7 +88,7 @@ def test_basic_user_can_update_own_profile_and_account_fields(
         ("is_active", False, "is_active"),
         ("is_verified", True, "is_verified"),
         ("is_admin", True, "is_admin"),
-        ("password", "weak", "password"),
+        ("password", "StrongPass123", "password"),
     ],
 )
 def test_basic_user_cannot_update_own_privileged_fields(

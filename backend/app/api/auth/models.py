@@ -135,6 +135,14 @@ class UserUpdate(SQLModel):
     city_id: Optional[uuid.UUID] = None
     address: Optional[str] = None
 
+    @field_validator("password")
+    @classmethod
+    def validate_optional_password(cls, password: Optional[str]) -> Optional[str]:
+        if password is None or not password.strip():
+            return None
+        return validate_password_policy(password)
+
+
 class UserPasswordUpdate(SQLModel):
     old_password: Optional[str] = None
     new_password: str
