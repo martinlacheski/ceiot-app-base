@@ -33,7 +33,7 @@ def location_token_fixture(client: TestClient, session: Session):
     session.refresh(user)
 
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={
             "username": username,
             "password": "testpassword"
@@ -44,7 +44,7 @@ def location_token_fixture(client: TestClient, session: Session):
 
 def test_create_country(client: TestClient, location_token: str):
     response = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Argentina"}
     )
@@ -58,7 +58,7 @@ def test_create_country(client: TestClient, location_token: str):
 
 def test_create_country_unauthorized(client: TestClient):
     response = client.post(
-        "/location/countries",
+        "/api/location/countries",
         json={"name": "Brazil"}
     )
     assert response.status_code == 401
@@ -67,13 +67,13 @@ def test_create_country_unauthorized(client: TestClient):
 def test_create_country_duplicate(client: TestClient, location_token: str):
     # First creation
     client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Chile"}
     )
     # Second creation (Duplicate)
     response = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Chile"} # Case sensitive check usually? No, we implemented lazy check? 
         # We implemented case INSENSITIVE check.
@@ -83,7 +83,7 @@ def test_create_country_duplicate(client: TestClient, location_token: str):
 
     # Case insensitive check
     response = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "chile"} 
     )
@@ -93,7 +93,7 @@ def test_create_country_duplicate(client: TestClient, location_token: str):
 def test_get_countries(client: TestClient, location_token: str):
     # Ensure standard GET works
     response = client.get(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert response.status_code == 200
@@ -105,7 +105,7 @@ def test_get_countries(client: TestClient, location_token: str):
 def test_update_country(client: TestClient, location_token: str):
     # Create
     create_res = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Peru"}
     )
@@ -113,7 +113,7 @@ def test_update_country(client: TestClient, location_token: str):
 
     # Update
     response = client.put(
-        f"/location/countries/{country_id}",
+        f"/api/location/countries/{country_id}",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Republic of Peru"}
     )
@@ -124,7 +124,7 @@ def test_update_country(client: TestClient, location_token: str):
 def test_delete_country_logical(client: TestClient, location_token: str):
     # Create
     create_res = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "To Delete"}
     )
@@ -132,21 +132,22 @@ def test_delete_country_logical(client: TestClient, location_token: str):
 
     # Delete
     response = client.delete(
-        f"/location/countries/{country_id}",
+        f"/api/location/countries/{country_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert response.status_code == 200
 
-    # Get should fail
+    # Logical delete: the record stays retrievable by id, marked inactive
     get_res = client.get(
-        f"/location/countries/{country_id}",
+        f"/api/location/countries/{country_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
-    assert get_res.status_code == 404
+    assert get_res.status_code == 200
+    assert get_res.json()["isActive"] is False
 
     # Re-create should now FAIL with 409 Conflict (Inactive Duplicate)
     create_again = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "To Delete"}
     )
@@ -158,7 +159,7 @@ def test_delete_country_logical(client: TestClient, location_token: str):
 def test_state_crud(client: TestClient, location_token: str):
     # Setup Country
     c_res = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "US"}
     )
@@ -166,7 +167,7 @@ def test_state_crud(client: TestClient, location_token: str):
 
     # Create State
     s_res = client.post(
-        "/location/states",
+        "/api/location/states",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "California", "country_id": country_id}
     )
@@ -175,7 +176,7 @@ def test_state_crud(client: TestClient, location_token: str):
 
     # Get States
     list_res = client.get(
-        f"/location/states?country_id={country_id}",
+        f"/api/location/states?country_id={country_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert list_res.status_code == 200
@@ -183,7 +184,7 @@ def test_state_crud(client: TestClient, location_token: str):
 
     # Update State
     upd_res = client.put(
-        f"/location/states/{state_id}",
+        f"/api/location/states/{state_id}",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "CA"}
     )
@@ -192,7 +193,7 @@ def test_state_crud(client: TestClient, location_token: str):
 
     # Delete State
     del_res = client.delete(
-        f"/location/states/{state_id}",
+        f"/api/location/states/{state_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert del_res.status_code == 200
@@ -201,14 +202,14 @@ def test_state_crud(client: TestClient, location_token: str):
 def test_city_crud(client: TestClient, location_token: str):
     # Setup Country & State
     c_res = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "France"}
     )
     country_id = c_res.json()["id"]
 
     s_res = client.post(
-        "/location/states",
+        "/api/location/states",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Île-de-France", "country_id": country_id}
     )
@@ -216,7 +217,7 @@ def test_city_crud(client: TestClient, location_token: str):
 
     # Create City
     ct_res = client.post(
-        "/location/cities",
+        "/api/location/cities",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Paris", "postal_code": "75000", "state_id": state_id}
     )
@@ -225,7 +226,7 @@ def test_city_crud(client: TestClient, location_token: str):
 
     # Get Cities
     list_res = client.get(
-        f"/location/cities?state_id={state_id}",
+        f"/api/location/cities?state_id={state_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert list_res.status_code == 200
@@ -233,16 +234,16 @@ def test_city_crud(client: TestClient, location_token: str):
 
     # Update City
     upd_res = client.put(
-        f"/location/cities/{city_id}",
+        f"/api/location/cities/{city_id}",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"postal_code": "75001"}
     )
     assert upd_res.status_code == 200
-    assert upd_res.json()["postal_code"] == "75001"
+    assert upd_res.json()["postalCode"] == "75001"
 
     # Delete City
     del_res = client.delete(
-        f"/location/cities/{city_id}",
+        f"/api/location/cities/{city_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert del_res.status_code == 200
@@ -251,37 +252,38 @@ def test_city_crud(client: TestClient, location_token: str):
 def test_pagination_is_active_filter(client: TestClient, location_token: str):
     # 1. Create Active Country
     client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Active One"}
     )
 
     # 2. Create Inactive Country (Create then Delete)
     del_res = client.post(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "Inactive One"}
     )
     inactive_id = del_res.json()["id"]
     client.delete(
-        f"/location/countries/{inactive_id}",
+        f"/api/location/countries/{inactive_id}",
         headers={"Authorization": f"Bearer {location_token}"}
     )
 
-    # 3. Fetch Default (Should be Active only)
+    # 3. Fetch without isActive: the API applies no filter (the frontend
+    # requests isActive=true explicitly by default).
     res_default = client.get(
-        "/location/countries",
+        "/api/location/countries",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert res_default.status_code == 200
     items_default = res_default.json()["items"]
     names_default = [item["name"] for item in items_default]
     assert "Active One" in names_default
-    assert "Inactive One" not in names_default
+    assert "Inactive One" in names_default
 
     # 4. Fetch Active Explicitly
     res_active = client.get(
-        "/location/countries?is_active=true",
+        "/api/location/countries?is_active=true",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert res_active.status_code == 200
@@ -292,7 +294,7 @@ def test_pagination_is_active_filter(client: TestClient, location_token: str):
 
     # 5. Fetch Inactive Explicitly
     res_inactive = client.get(
-        "/location/countries?is_active=false",
+        "/api/location/countries?is_active=false",
         headers={"Authorization": f"Bearer {location_token}"}
     )
     assert res_inactive.status_code == 200

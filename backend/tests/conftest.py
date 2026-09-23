@@ -144,7 +144,7 @@ def test_user_fixture(session: Session):
 @pytest.fixture(name="token")
 def token_fixture(client: TestClient, test_user: User):
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={
             "username": test_user.username,
             "password": "testpassword",

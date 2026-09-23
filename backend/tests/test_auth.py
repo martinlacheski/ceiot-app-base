@@ -6,7 +6,7 @@ from app.core.security import create_access_token
 
 def test_register(client: TestClient, token: str):
     response = client.post(
-        "/auth/create",
+        "/api/auth/create",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": "new@example.com",
@@ -29,7 +29,7 @@ def test_register(client: TestClient, token: str):
 
 def test_login(client: TestClient, test_user: User):
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={
             "username": test_user.username,
             "password": "testpassword"
@@ -47,7 +47,7 @@ def test_login(client: TestClient, test_user: User):
 
 def test_get_all_users(client: TestClient, token: str):
     response = client.get(
-        "/auth/",
+        "/api/auth/",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
@@ -58,7 +58,7 @@ def test_get_all_users(client: TestClient, token: str):
 
 def test_update_user(client: TestClient, token: str, test_user: User):
     response = client.put(
-        f"/auth/update/{test_user.id}",
+        f"/api/auth/update/{test_user.id}",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "username": "newusername",
@@ -76,14 +76,14 @@ def test_update_user(client: TestClient, token: str, test_user: User):
 
 def test_delete_user(client: TestClient, token: str, test_user: User):
     response = client.delete(
-        f"/auth/delete/{test_user.id}",
+        f"/api/auth/delete/{test_user.id}",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
 
     # Verify soft delete
     response = client.get(
-        f"/auth/{test_user.id}",
+        f"/api/auth/{test_user.id}",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
@@ -94,7 +94,7 @@ def test_delete_user(client: TestClient, token: str, test_user: User):
 def test_change_password(client: TestClient, token: str, test_user: User):
     # 1. Success case
     response = client.patch(
-        "/auth/password",
+        "/api/auth/password",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "old_password": "testpassword",
@@ -109,7 +109,7 @@ def test_change_password(client: TestClient, token: str, test_user: User):
 
     # 2. Failure: Wrong old password
     response = client.patch(
-        "/auth/password",
+        "/api/auth/password",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "old_password": "WrongPassword",
@@ -123,7 +123,7 @@ def test_change_password(client: TestClient, token: str, test_user: User):
     # 3. Failure: Password mismatch (though frontend handles this, backend assumes payload is valid per pydantic, logic might check it too or pydantic validator)
     # Checking if backend validates mismatch if pydantic model enforces it
     response = client.patch(
-        "/auth/password",
+        "/api/auth/password",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "old_password": "NewPassword123!",  # Current is now NewPassword123!
@@ -141,7 +141,7 @@ def test_verify_reset_token(client: TestClient, test_user: User):
     token_data = {"sub": test_user.email, "type": "reset_password"}
     valid_token, _ = create_access_token(data=token_data)
 
-    response = client.get(f"/auth/verify-reset-token/{valid_token}")
+    response = client.get(f"/api/auth/verify-reset-token/{valid_token}")
     assert response.status_code == 200
     assert response.json()["valid"] is True
 
@@ -149,12 +149,12 @@ def test_verify_reset_token(client: TestClient, test_user: User):
     token_data_invalid = {"sub": test_user.email, "type": "access_token"}
     invalid_token, _ = create_access_token(data=token_data_invalid)
 
-    response = client.get(f"/auth/verify-reset-token/{invalid_token}")
+    response = client.get(f"/api/auth/verify-reset-token/{invalid_token}")
     assert response.status_code == 400
     assert "Token inválido" in response.json()["detail"]
 
     # 3. Invalid signature (garbage)
-    response = client.get("/auth/verify-reset-token/invalidtokenstring")
+    response = client.get("/api/auth/verify-reset-token/invalidtokenstring")
     assert response.status_code == 400
 
 
@@ -163,7 +163,7 @@ def test_verify_email(client: TestClient, test_user: User):
     token_data = {"sub": test_user.email, "type": "verification"}
     valid_token, _ = create_access_token(data=token_data)
 
-    response = client.get(f"/auth/verify-email?token={valid_token}")
+    response = client.get(f"/api/auth/verify-email?token={valid_token}")
     assert response.status_code == 200
     assert "verificado exitosamente" in response.json()["message"]
 
@@ -171,7 +171,7 @@ def test_verify_email(client: TestClient, test_user: User):
     token_data_invalid = {"sub": test_user.email, "type": "access_token"}
     invalid_token, _ = create_access_token(data=token_data_invalid)
 
-    response = client.get(f"/auth/verify-email?token={invalid_token}")
+    response = client.get(f"/api/auth/verify-email?token={invalid_token}")
     assert response.status_code == 400
 
 
@@ -192,7 +192,7 @@ def test_resend_verification(client: TestClient, session: Session):
     session.commit()
 
     response = client.post(
-        "/auth/resend-verification",
+        "/api/auth/resend-verification",
         json={"identifier": "unverified@example.com"}
     )
     assert response.status_code == 200
@@ -201,7 +201,7 @@ def test_resend_verification(client: TestClient, session: Session):
 
 def test_forgot_password(client: TestClient, test_user: User):
     response = client.post(
-        "/auth/forgot-password",
+        "/api/auth/forgot-password",
         json={"email": test_user.email}
     )
     assert response.status_code == 200
@@ -215,7 +215,7 @@ def test_reset_password(client: TestClient, test_user: User):
 
     # 2. Successful reset
     response = client.post(
-        "/auth/reset-password",
+        "/api/auth/reset-password",
         json={
             "token": valid_token,
             "new_password": "NewResetPassword1!",
@@ -227,7 +227,7 @@ def test_reset_password(client: TestClient, test_user: User):
 
     # 3. Verify login works with new password
     login_res = client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={
             "username": test_user.username,
             "password": "NewResetPassword1!"
@@ -240,7 +240,7 @@ def test_register_reactivation(client: TestClient, token: str):
     email = "reactivate@example.com"
     username = "reactivate_user"
     client.post(
-        "/auth/create",
+        "/api/auth/create",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": email,
@@ -255,21 +255,21 @@ def test_register_reactivation(client: TestClient, token: str):
     
     # Get user id via search
     response = client.get(
-        f"/auth/?search={username}",
+        f"/api/auth/?search={username}",
         headers={"Authorization": f"Bearer {token}"}
     )
     user_id = response.json()["items"][0]["id"]
 
     # 2. Delete the user (Soft Delete)
     response = client.delete(
-        f"/auth/delete/{user_id}",
+        f"/api/auth/delete/{user_id}",
          headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
 
     # 3. Try to register again
     response = client.post(
-        "/auth/create",
+        "/api/auth/create",
         headers={"Authorization": f"Bearer {token}"},
         json={
             "email": email,

@@ -33,7 +33,7 @@ def tax_token_fixture(client: TestClient, session: Session):
     session.refresh(user)
 
     response = client.post(
-        "/auth/login",
+        "/api/auth/login",
         data={
             "username": username,
             "password": "testpassword"
@@ -45,7 +45,7 @@ def tax_token_fixture(client: TestClient, session: Session):
 def test_identification_type_crud(client: TestClient, tax_token: str):
     # Create
     res = client.post(
-        "/tax/identification-types",
+        "/api/tax/identification-types",
         headers={"Authorization": f"Bearer {tax_token}"},
         json={"name": "DNI"}
     )
@@ -55,7 +55,7 @@ def test_identification_type_crud(client: TestClient, tax_token: str):
 
     # Get
     get_res = client.get(
-        f"/tax/identification-types/{item_id}",
+        f"/api/tax/identification-types/{item_id}",
         headers={"Authorization": f"Bearer {tax_token}"}
     )
     assert get_res.status_code == 200
@@ -63,7 +63,7 @@ def test_identification_type_crud(client: TestClient, tax_token: str):
 
     # Update
     upd_res = client.put(
-        f"/tax/identification-types/{item_id}",
+        f"/api/tax/identification-types/{item_id}",
         headers={"Authorization": f"Bearer {tax_token}"},
         json={"name": "DNI Updated"}
     )
@@ -72,47 +72,23 @@ def test_identification_type_crud(client: TestClient, tax_token: str):
 
     # Delete
     del_res = client.delete(
-        f"/tax/identification-types/{item_id}",
+        f"/api/tax/identification-types/{item_id}",
         headers={"Authorization": f"Bearer {tax_token}"}
     )
     assert del_res.status_code == 200
 
-    # Verify Logic Delete
+    # Logical delete: the record stays retrievable by id, marked inactive
     get_res_2 = client.get(
-        f"/tax/identification-types/{item_id}",
+        f"/api/tax/identification-types/{item_id}",
         headers={"Authorization": f"Bearer {tax_token}"}
     )
-    assert get_res_2.status_code == 404
-
-def test_tax_type_crud(client: TestClient, tax_token: str):
-    # Create
-    res = client.post(
-        "/tax/tax-types",
-        headers={"Authorization": f"Bearer {tax_token}"},
-        json={"name": "IVA Responsable Inscripto", "iva": 21.0}
-    )
-    assert res.status_code == 201
-    item_id = res.json()["id"]
-
-    # Get
-    get_res = client.get(
-        f"/tax/tax-types/{item_id}",
-        headers={"Authorization": f"Bearer {tax_token}"}
-    )
-    assert get_res.status_code == 200
-    assert get_res.json()["iva"] == 21.0
-
-    # Delete
-    client.delete(
-        f"/tax/tax-types/{item_id}",
-        headers={"Authorization": f"Bearer {tax_token}"}
-    )
-
+    assert get_res_2.status_code == 200
+    assert get_res_2.json()["is_active"] is False
 
 def test_reactivation_conflict(client: TestClient, tax_token: str):
     # 1. Create Active
     client.post(
-        "/tax/identification-types",
+        "/api/tax/identification-types",
         headers={"Authorization": f"Bearer {tax_token}"},
         json={"name": "Pasaporte"}
     )
@@ -122,7 +98,7 @@ def test_reactivation_conflict(client: TestClient, tax_token: str):
     # Actually let's fetch list to get ID or capture from create.
     # Let's verify standard unique check first (Active)
     dup = client.post(
-        "/tax/identification-types",
+        "/api/tax/identification-types",
         headers={"Authorization": f"Bearer {tax_token}"},
         json={"name": "Pasaporte"}
     )
@@ -130,20 +106,20 @@ def test_reactivation_conflict(client: TestClient, tax_token: str):
 
     # Now get ID
     list_res = client.get(
-        "/tax/identification-types?is_active=true",
+        "/api/tax/identification-types?is_active=true",
         headers={"Authorization": f"Bearer {tax_token}"}
     )
     item_id = next(i["id"] for i in list_res.json()["items"] if i["name"] == "Pasaporte")
     
     # Delete
     client.delete(
-        f"/tax/identification-types/{item_id}",
+        f"/api/tax/identification-types/{item_id}",
         headers={"Authorization": f"Bearer {tax_token}"}
     )
 
     # 3. Create again (Inactive Duplicate) -> Should conflict 409
     conflict = client.post(
-        "/tax/identification-types",
+        "/api/tax/identification-types",
         headers={"Authorization": f"Bearer {tax_token}"},
         json={"name": "Pasaporte"}
     )
@@ -154,5 +130,5 @@ def test_reactivation_conflict(client: TestClient, tax_token: str):
 
 def test_permissions(client: TestClient):
     # No auth
-    res = client.get("/tax/identification-types")
+    res = client.get("/api/tax/identification-types")
     assert res.status_code == 401

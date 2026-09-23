@@ -77,6 +77,7 @@ class LocationCityCreate(LocationCityBase):
 class LocationCityRead(CamelModel):
     id: uuid.UUID
     name: str
+    postal_code: Optional[str] = None
     is_active: bool
     state: Optional[LocationStateRead] = None
 
