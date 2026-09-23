@@ -90,16 +90,17 @@ describe("Navbar contact navigation", () => {
       [LOCALES.PT_BR]: "Privacidade",
       [LOCALES.EN]: "Privacy",
     } as const;
+    const paths = { [LOCALES.ES]: "/privacidad/", [LOCALES.PT_BR]: "/pt-br/privacidade/", [LOCALES.EN]: "/en/privacy/" } as const;
 
     for (const locale of landingLocales) {
       const content = getLandingContent(locale);
       const { Navbar } = await loadComponents();
       const container = await createAstroContainer();
       const html = await container.renderToString(Navbar, { props: { content } });
-      const anchors = html.match(new RegExp(`<a[^>]*href="/privacidad/"[^>]*>${labels[locale]}</a>`, "g")) ?? [];
+      const anchors = html.match(new RegExp(`<a[^>]*href="${paths[locale]}"[^>]*>${labels[locale]}</a>`, "g")) ?? [];
 
       expect(anchors).toHaveLength(2);
-      expect(content.footer.links).toContainEqual({ href: "/privacidad/", label: labels[locale] });
+      expect(content.footer.links).toContainEqual({ href: paths[locale], label: labels[locale] });
     }
   });
 });

@@ -1,0 +1,22 @@
+---
+import PrivacyPolicyPage from "../../components/PrivacyPolicyPage.astro";
+import { getLandingContent, LOCALES } from "../../i18n/content";
+import { getPrivacyContent } from "../../i18n/privacy";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const content = getLandingContent(LOCALES.EN);
+const privacy = getPrivacyContent(LOCALES.EN);
+---
+
+<BaseLayout
+  content={content}
+  metadata={{
+    title: privacy.seoTitle,
+    description: privacy.description,
+    canonicalPath: privacy.path,
+    alternatePage: "privacy",
+    includeJsonLd: false,
+  }}
+>
+  <PrivacyPolicyPage content={content} />
+</BaseLayout>

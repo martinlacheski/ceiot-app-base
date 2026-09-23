@@ -1,8 +1,16 @@
 ---
 import type { LandingContent } from "../i18n/content";
 import BrandIcon from "./BrandIcon.astro";
-interface Props { content: LandingContent }
-const { content } = Astro.props;
+interface Props {
+  content: LandingContent;
+  /** Replaces the language links (e.g. to point at the same page in each language). */
+  localeLinks?: LandingContent["nav"]["locales"];
+}
+const { content, localeLinks } = Astro.props;
+const localeHrefs = new Set(content.nav.locales.map((item) => item.href));
+const footerLinks = localeLinks
+  ? [...localeLinks, ...content.footer.links.filter((link) => !localeHrefs.has(link.href))]
+  : content.footer.links;
 ---
 <footer class="bg-card/70">
   <div class="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-10 xl:px-8">
@@ -12,7 +20,7 @@ const { content } = Astro.props;
         <p class="text-sm text-muted-foreground">{content.footer.tagline}</p>
       </div>
       <div class="flex flex-wrap gap-4" aria-label={content.nav.localeLabel}>
-        {content.footer.links.map((link) => <a class="text-sm text-muted-foreground hover:text-foreground" href={link.href}>{link.label}</a>)}
+        {footerLinks.map((link) => <a class="text-sm text-muted-foreground hover:text-foreground" href={link.href}>{link.label}</a>)}
       </div>
     </div>
     <p class="text-center text-sm text-muted-foreground">© {new Date().getFullYear()} {content.footer.legalLine}</p>

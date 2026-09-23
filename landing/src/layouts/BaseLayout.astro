@@ -12,6 +12,7 @@ interface Props {
     robots?: string;
     canonicalPath?: string;
     includeAlternates?: boolean;
+    alternatePage?: "home" | "privacy";
     includeJsonLd?: boolean;
   };
 }
@@ -21,7 +22,7 @@ const pageTitle = metadata?.title ?? content.seo.title;
 const pageDescription = metadata?.description ?? content.seo.description;
 const canonical = buildAbsoluteUrl(metadata?.canonicalPath ?? content.path);
 const socialImage = buildAbsoluteUrl(content.seo.ogImage);
-const alternates = metadata?.includeAlternates === false ? [] : buildAlternateLinks();
+const alternates = metadata?.includeAlternates === false ? [] : buildAlternateLinks(undefined, metadata?.alternatePage);
 const jsonLdGraph = metadata?.includeJsonLd === false ? [] : buildJsonLdGraph(content);
 const ogLocale = getOpenGraphLocale(content.locale);
 const ogAlternateLocales = metadata?.includeAlternates === false ? [] : getAlternateOpenGraphLocales(content.locale);

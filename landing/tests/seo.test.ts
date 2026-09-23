@@ -22,6 +22,15 @@ describe("landing SEO metadata", () => {
     ]);
   });
 
+  it("builds hreflang alternates for the three privacy routes", () => {
+    expect(buildAlternateLinks(SITE, "privacy")).toEqual([
+      { hreflang: "es", href: `${SITE}/privacidad/` },
+      { hreflang: "pt-BR", href: `${SITE}/pt-br/privacidade/` },
+      { hreflang: "en", href: `${SITE}/en/privacy/` },
+      { hreflang: "x-default", href: `${SITE}/privacidad/` },
+    ]);
+  });
+
   it("publishes generic Organization and WebSite structured data", () => {
     const graph = buildJsonLdGraph(getLandingContent(LOCALES.EN), SITE);
     expect(graph).toHaveLength(2);

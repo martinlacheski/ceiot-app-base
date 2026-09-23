@@ -1,5 +1,6 @@
 import { PUBLIC_SITE_URL } from "../config/publicUrls";
 import { landingLocales, LOCALES, type LandingContent, type Locale } from "../i18n/content";
+import { PRIVACY_PATHS } from "../i18n/privacy";
 import { getBrandLogoImage } from "./assets";
 
 interface AlternateLink { hreflang: string; href: string }
@@ -29,11 +30,12 @@ export function buildAbsoluteUrl(path: string, siteUrl = SITE_URL): string | und
   return siteUrl ? new URL(path, `${siteUrl}/`).toString() : undefined;
 }
 
-export function buildAlternateLinks(siteUrl = SITE_URL): AlternateLink[] {
+export function buildAlternateLinks(siteUrl = SITE_URL, page: "home" | "privacy" = "home"): AlternateLink[] {
   if (!siteUrl) return [];
+  const routes = page === "privacy" ? PRIVACY_PATHS : ROUTE_BY_LOCALE;
   return [
-    ...landingLocales.map((locale) => ({ hreflang: HREFLANG_BY_LOCALE[locale], href: buildAbsoluteUrl(ROUTE_BY_LOCALE[locale], siteUrl)! })),
-    { hreflang: "x-default", href: buildAbsoluteUrl("/", siteUrl)! },
+    ...landingLocales.map((locale) => ({ hreflang: HREFLANG_BY_LOCALE[locale], href: buildAbsoluteUrl(routes[locale], siteUrl)! })),
+    { hreflang: "x-default", href: buildAbsoluteUrl(routes[LOCALES.ES], siteUrl)! },
   ];
 }
 

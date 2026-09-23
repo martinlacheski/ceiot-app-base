@@ -260,7 +260,7 @@ const CONTENT: Record<Locale, LandingContent> = {
     footer: {
       tagline: "Monitoramento Ambiental IoT",
       legalLine: "Monitoramento Ambiental IoT · Todos os direitos reservados.",
-      links: [...locales, { href: "/privacidad/", label: "Privacidade" }],
+      links: [...locales, { href: "/pt-br/privacidade/", label: "Privacidade" }],
     },
   },
   en: {
@@ -345,7 +345,7 @@ const CONTENT: Record<Locale, LandingContent> = {
     footer: {
       tagline: "IoT Environmental Monitoring",
       legalLine: "IoT Environmental Monitoring · All rights reserved.",
-      links: [...locales, { href: "/privacidad/", label: "Privacy" }],
+      links: [...locales, { href: "/en/privacy/", label: "Privacy" }],
     },
   },
 };
