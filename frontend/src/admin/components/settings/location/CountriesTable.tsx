@@ -307,7 +307,7 @@ export function CountriesTable({ actions }: Props) {
       };
 
       if (format === "pdf") {
-        exportToPdf(exportOptions);
+        await exportToPdf(exportOptions);
       } else {
         await exportToExcel(exportOptions);
       }

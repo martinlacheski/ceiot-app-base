@@ -353,7 +353,7 @@ export function CitiesTable({ stateId: propStateId }: Props) {
       if (format === "excel") {
         await exportToExcel(exportOptions);
       } else {
-        exportToPdf(exportOptions);
+        await exportToPdf(exportOptions);
       }
 
       toast.success("Reporte generado correctamente", { id: toastId });

@@ -238,7 +238,7 @@ export const environmentService = {
       });
     } else {
       const { exportToPdf } = await import("@/lib/export.utils");
-      exportToPdf({
+      await exportToPdf({
         title: "Reporte de Establecimientos",
         filename: "establecimientos",
         generatedBy,

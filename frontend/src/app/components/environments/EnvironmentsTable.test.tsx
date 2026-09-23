@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation, useNavigate } from "react-router";
 
+import { toast } from "sonner";
+import { environmentService } from "@/app/services/environment.service";
+
 import type { Environment } from "@/app/types/environment.types";
 import { EnvironmentMobileCard, EnvironmentsTable } from "./EnvironmentsTable";
 
@@ -35,6 +38,7 @@ vi.mock("@/admin/hooks/useUsers", () => ({
 vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: () => ({ user: { id: "admin-1", isAdmin: true } }),
 }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 vi.mock("@/app/services/environment.service", () => ({
   environmentService: { export: vi.fn() },
 }));
@@ -179,6 +183,13 @@ describe("EnvironmentsTable server-side sorting", () => {
       screen.getByRole("button", { name: "PDF" }),
     );
     expect(exportActions?.parentElement).toHaveClass("flex", "justify-end");
+  });
+
+  it("shows export failure after awaiting the report promise", async () => {
+    vi.mocked(environmentService.export).mockRejectedValueOnce(new Error("asset failed"));
+    render(<MemoryRouter><EnvironmentsTable /></MemoryRouter>);
+    await userEvent.setup().click(screen.getByRole("button", { name: "PDF" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Error al generar el reporte"));
   });
 
   it("uses centered sortable headers to update the server sort in the URL", async () => {

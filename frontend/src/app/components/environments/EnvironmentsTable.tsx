@@ -77,6 +77,7 @@ import { showConfirmDialog } from "@/store/confirm.store";
 import { EnvironmentDetailDialog } from "./EnvironmentDetailDialog";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
+import { toast } from "sonner";
 import { toPositiveInt } from "@/utils/url-params";
 import {
   Card,
@@ -351,22 +352,28 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
   const updateEnvironment = useUpdateEnvironment();
 
   // Export
-  const handleExport = (format: "excel" | "pdf") => {
-    environmentService.export(format, {
-      page: 1,
-      perPage: 1000,
-      search,
-      isActive: statusFilter === "all" ? undefined : statusFilter === "active",
-      typeId,
-      userId: ownerId,
-      countryId,
-      stateId,
-      cityId,
-      sortBy,
-      sortOrder,
-    }, {
-      generatedBy: getExportGeneratedBy(user),
-    });
+  const handleExport = async (format: "excel" | "pdf") => {
+    try {
+      await environmentService.export(
+        format,
+        {
+          page: 1,
+          perPage: 1000,
+          search,
+          isActive: statusFilter === "all" ? undefined : statusFilter === "active",
+          typeId,
+          userId: ownerId,
+          countryId,
+          stateId,
+          cityId,
+          sortBy,
+          sortOrder,
+        },
+        { generatedBy: getExportGeneratedBy(user) },
+      );
+    } catch {
+      toast.error("Error al generar el reporte");
+    }
   };
 
   // Handlers

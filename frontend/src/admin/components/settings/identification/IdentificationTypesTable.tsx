@@ -333,7 +333,7 @@ export function IdentificationTypesTable() {
       };
 
       if (format === "pdf") {
-        exportToPdf(exportOptions);
+        await exportToPdf(exportOptions);
       } else {
         await exportToExcel(exportOptions);
       }
