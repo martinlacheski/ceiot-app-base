@@ -48,17 +48,15 @@ def create_device_admin(session: Session) -> User:
 
 
 @pytest.mark.asyncio
-async def test_device_type_bootstrap_assigns_read_only_codes(async_engine, async_session: AsyncSession):
+async def test_default_device_type_bootstrap_assigns_read_only_code(async_engine, async_session: AsyncSession):
     async with async_engine.begin() as connection:
         await connection.run_sync(SQLModel.metadata.create_all)
 
     repo = DeviceTypeRepository(async_session)
 
     default_type = await repo.ensure_default_exists()
-    other_type = await repo.ensure_legacy_other_exists()
 
     assert default_type.code == "relay_1"
-    assert other_type.code == "other"
 
 
 def test_device_type_catalog_crud_flow(client: TestClient, session: Session):

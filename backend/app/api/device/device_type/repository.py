@@ -9,9 +9,6 @@ from app.api.device.device_type.constants import (
     DEFAULT_DEVICE_TYPE_CODE,
     DEFAULT_DEVICE_TYPE_ID,
     DEFAULT_DEVICE_TYPE_NAME,
-    LEGACY_OTHER_DEVICE_TYPE_CODE,
-    LEGACY_OTHER_DEVICE_TYPE_ID,
-    LEGACY_OTHER_DEVICE_TYPE_NAME,
 )
 from app.api.device.device_type.models import (
     DeviceTypeCatalog,
@@ -53,9 +50,6 @@ class DeviceTypeRepository:
     async def get_default(self) -> Optional[DeviceTypeCatalog]:
         return await self.get_by_id(DEFAULT_DEVICE_TYPE_ID)
 
-    async def get_legacy_other(self) -> Optional[DeviceTypeCatalog]:
-        return await self.get_by_id(LEGACY_OTHER_DEVICE_TYPE_ID)
-
     async def ensure_default_exists(self) -> DeviceTypeCatalog:
         existing = await self.get_default()
         if existing:
@@ -83,33 +77,6 @@ class DeviceTypeRepository:
         await self.db.refresh(default_type)
         return default_type
 
-    async def ensure_legacy_other_exists(self) -> DeviceTypeCatalog:
-        existing = await self.get_legacy_other()
-        if existing:
-            changed = False
-            if not existing.is_active:
-                existing.is_active = True
-                changed = True
-            if existing.id == LEGACY_OTHER_DEVICE_TYPE_ID and existing.code != LEGACY_OTHER_DEVICE_TYPE_CODE:
-                existing.code = LEGACY_OTHER_DEVICE_TYPE_CODE
-                changed = True
-            if changed:
-                self.db.add(existing)
-                await self.db.commit()
-                await self.db.refresh(existing)
-            return existing
-
-        other_type = DeviceTypeCatalog(
-            id=LEGACY_OTHER_DEVICE_TYPE_ID,
-            name=LEGACY_OTHER_DEVICE_TYPE_NAME,
-            code=LEGACY_OTHER_DEVICE_TYPE_CODE,
-            is_active=True,
-        )
-        self.db.add(other_type)
-        await self.db.commit()
-        await self.db.refresh(other_type)
-        return other_type
-
     async def resolve_catalog_type(
         self,
         *,
@@ -119,12 +86,6 @@ class DeviceTypeRepository:
         if device_type_id is not None:
             if device_type_id == DEFAULT_DEVICE_TYPE_ID:
                 resolved = await self.ensure_default_exists()
-                if resolved.is_active or not require_active:
-                    return resolved
-                return None
-
-            if device_type_id == LEGACY_OTHER_DEVICE_TYPE_ID:
-                resolved = await self.ensure_legacy_other_exists()
                 if resolved.is_active or not require_active:
                     return resolved
                 return None

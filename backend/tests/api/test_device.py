@@ -162,31 +162,27 @@ def test_create_device_admin(client: TestClient, admin_token: str):
     assert device_id in ids
 
 
-def test_create_device_with_catalog_other_returns_catalog_type(
-    client: TestClient,
-    admin_token: str,
+def test_create_device_with_legacy_other_is_rejected(
+    client: TestClient, admin_token: str, session: Session
 ):
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    serial = DeviceService.generate_serial()
-
+    other = DeviceTypeCatalog(
+        id=LEGACY_OTHER_DEVICE_TYPE_ID,
+        name=LEGACY_OTHER_DEVICE_TYPE_NAME,
+        is_active=False,
+    )
+    session.add(other)
+    session.commit()
     response = client.post(
         "/api/devices",
         json={
-            "serial": serial,
+            "serial": DeviceService.generate_serial(),
             "name": "Legacy Other Device",
             "deviceTypeId": str(LEGACY_OTHER_DEVICE_TYPE_ID),
-            "model": "Legacy-V1",
         },
-        headers=headers,
+        headers={"Authorization": f"Bearer {admin_token}"},
     )
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["deviceTypeId"] == str(LEGACY_OTHER_DEVICE_TYPE_ID)
-    assert payload["type"]["id"] == str(LEGACY_OTHER_DEVICE_TYPE_ID)
-    assert payload["type"]["name"] == LEGACY_OTHER_DEVICE_TYPE_NAME
-    assert "dispenserData" not in payload
-    assert "deviceType" not in payload
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid device type reference"}
 
 
 def test_create_device_rejects_inactive_device_type_id(
@@ -277,7 +273,7 @@ def test_uniqueness_check(client: TestClient, admin_token: str):
     assert r2.status_code == 409
 
 
-def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token: str):
+def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token: str, session: Session):
     headers = {"Authorization": f"Bearer {admin_token}"}
 
     default_response = client.post(
@@ -289,18 +285,24 @@ def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token:
         },
         headers=headers,
     )
-    other_response = client.post(
-        "/api/devices",
-        json={
-            "serial": DeviceService.generate_serial(),
-            "name": "Other Type Device",
-            "deviceTypeId": str(LEGACY_OTHER_DEVICE_TYPE_ID),
-        },
-        headers=headers,
+    other = DeviceTypeCatalog(
+        id=LEGACY_OTHER_DEVICE_TYPE_ID,
+        name=LEGACY_OTHER_DEVICE_TYPE_NAME,
+        is_active=False,
     )
+    session.add(other)
+    session.commit()
+    other_device = Device(
+        serial=DeviceService.generate_serial(),
+        name="Other Type Device",
+        device_type_id=LEGACY_OTHER_DEVICE_TYPE_ID,
+        status=DeviceStatus.NEW,
+    )
+    session.add(other_device)
+    session.commit()
+    session.refresh(other_device)
 
     assert default_response.status_code == 200
-    assert other_response.status_code == 200
 
     response = client.get(
         f"/api/devices?device_type_id={LEGACY_OTHER_DEVICE_TYPE_ID}",
@@ -311,7 +313,7 @@ def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token:
     payload = response.json()
     assert payload["total"] >= 1
     returned_ids = {item["id"] for item in payload["items"]}
-    assert other_response.json()["id"] in returned_ids
+    assert str(other_device.id) in returned_ids
     assert default_response.json()["id"] not in returned_ids
 
 
