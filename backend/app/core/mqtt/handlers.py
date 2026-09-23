@@ -204,7 +204,7 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 if device:
                     await _persist_device_runtime_report(repo, device, data)
 
-            has_sensor_data = any(key in data for key in _SENSOR_READING_KEYS)
+            has_sensor_data = "sensors" in data or any(key in data for key in _SENSOR_READING_KEYS)
             op_type = (
                 DeviceOperationType.SENSOR_DATA
                 if has_sensor_data
@@ -227,7 +227,7 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 sensor_repo = SensorRepository(session)
                 sensor_service = SensorService(sensor_repo)
 
-                await sensor_service.save_reading(
+                reading = await sensor_service.save_reading(
                     device_serial=serial,
                     device_id=device.id if device else None,
                     power_supply_state=data.get("power_supply_state"),
@@ -267,10 +267,22 @@ async def process_sensor_message_pub(topic: str, payload: str):
                             "last_error",
                             "command",
                             "status",
+                            "sensors",
                         ]
                     },
                 )
                 logger.info(f"📊 Lectura de sensor guardada: {serial}")
+
+                if "sensors" in data:
+                    try:
+                        await sensor_service.save_sensor_telemetry(
+                            device_id=device.id if device else None,
+                            device_serial=serial,
+                            sensors=data["sensors"],
+                            time=reading.time,
+                        )
+                    except Exception:
+                        logger.exception("Failed to ingest sensor-key telemetry for device %r", serial)
 
     except Exception as e:
         logger.error(f"❌ Error al procesar sensor pub: {e}")

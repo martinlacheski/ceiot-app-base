@@ -1,4 +1,4 @@
-from app.api.sensor.models import SensorReading
+from app.api.sensor.models import SensorReading, Telemetry
 from app.api.sensor.repository import SensorRepository
 from typing import Optional, Dict, Any
 import logging
@@ -7,6 +7,52 @@ import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _finite_number(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(value)
+    except OverflowError:
+        return False
+
+
+def validate_sensor_values(
+    sensors: Any,
+    capabilities: list[tuple[str, str, float, float]],
+) -> dict[str, dict[str, int | float]]:
+    """Discard invalid keys/measurements without losing valid sibling values."""
+    if not isinstance(sensors, dict):
+        logger.warning("Invalid sensors payload: expected an object")
+        return {}
+
+    allowed: dict[str, dict[str, tuple[float, float]]] = {}
+    for key, code, minimum, maximum in capabilities:
+        allowed.setdefault(key, {})[code] = (minimum, maximum)
+
+    valid: dict[str, dict[str, int | float]] = {}
+    for key, measurements in sensors.items():
+        if key not in allowed:
+            logger.warning("Unknown or inactive device sensor key %r; dropping key", key)
+            continue
+        if not isinstance(measurements, dict):
+            logger.warning("Invalid measurements for sensor key %r: expected an object", key)
+            continue
+        accepted: dict[str, int | float] = {}
+        for code, value in measurements.items():
+            limits = allowed[key].get(code)
+            if limits is None:
+                logger.warning("Sensor key %r does not measure variable %r; dropping value", key, code)
+            elif not _finite_number(value):
+                logger.warning("Invalid value for sensor key %r variable %r: %r; dropping value", key, code, value)
+            elif not limits[0] <= value <= limits[1]:
+                logger.warning("Out-of-range value for sensor key %r variable %r: %r; allowed [%s, %s]", key, code, value, *limits)
+            else:
+                accepted[code] = value
+        if accepted:
+            valid[key] = accepted
+    return valid
 
 
 def _validate_environmental_value(
@@ -37,6 +83,29 @@ def _validate_environmental_value(
 class SensorService:
     def __init__(self, repository: SensorRepository):
         self.repository = repository
+
+    async def save_sensor_telemetry(
+        self,
+        *,
+        device_id: uuid.UUID | None,
+        device_serial: str,
+        sensors: Any,
+        time: datetime | None = None,
+    ) -> Telemetry | None:
+        if device_id is None:
+            logger.warning("Cannot ingest sensor telemetry for unknown device %r", device_serial)
+            return None
+        capabilities = await self.repository.get_active_sensor_capabilities(device_id)
+        values = validate_sensor_values(sensors, capabilities)
+        if not values:
+            return None
+        telemetry = Telemetry(
+            device_id=device_id,
+            device_serial=device_serial,
+            values=values,
+            **({"time": time} if time is not None else {}),
+        )
+        return await self.repository.create_telemetry(telemetry)
     
     async def save_reading(
         self,

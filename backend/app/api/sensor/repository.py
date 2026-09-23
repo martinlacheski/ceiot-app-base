@@ -2,7 +2,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 import uuid
 
 from sqlalchemy import and_, func, select
-from app.api.sensor.models import SensorReading
+from app.api.sensor.models import SensorReading, Telemetry
+from app.api.sensor_catalog.models import DeviceSensor, Sensor, SensorVariable, Variable
 from typing import Optional, List
 from datetime import datetime, timedelta
 from app.core.time import utc_now
@@ -17,6 +18,35 @@ class SensorRepository:
         self.session.add(reading)
         await self.session.commit()
         return reading
+
+    async def get_active_sensor_capabilities(
+        self, device_id: uuid.UUID
+    ) -> list[tuple[str, str, float, float]]:
+        """Load installed sensor keys and their per-model variable ranges in one query."""
+        result = await self.session.execute(
+            select(
+                DeviceSensor.key,
+                Variable.code,
+                SensorVariable.min_value,
+                SensorVariable.max_value,
+            )
+            .join(Sensor, Sensor.id == DeviceSensor.sensor_id)
+            .join(SensorVariable, SensorVariable.sensor_id == Sensor.id)
+            .join(Variable, Variable.id == SensorVariable.variable_id)
+            .where(
+                DeviceSensor.device_id == device_id,
+                DeviceSensor.is_active.is_(True),
+                DeviceSensor.removed_at.is_(None),
+                Sensor.is_active.is_(True),
+                Variable.is_active.is_(True),
+            )
+        )
+        return [(key, code, minimum, maximum) for key, code, minimum, maximum in result.all()]
+
+    async def create_telemetry(self, telemetry: Telemetry) -> Telemetry:
+        self.session.add(telemetry)
+        await self.session.commit()
+        return telemetry
     
     async def get_latest_by_device(
         self, 
