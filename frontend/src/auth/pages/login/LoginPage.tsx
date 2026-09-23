@@ -170,8 +170,10 @@ export const LoginPage = () => {
           <form className="p-6 md:p-8" onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
               <div className="flex flex-col items-center text-center">
+                <h1 className="mb-4 text-xl font-bold text-balance md:text-2xl">
+                  Monitoreo Ambiental IoT
+                </h1>
                 <Logo size="large" />
-                {/* <h1 className="text-xl font-bold mt-4">Bienvenido</h1> */}
                 {errorMessage && (
                   <div className="w-full p-3 mb-4 text-sm text-red-500 bg-red-100 rounded-md dark:bg-red-900/30 dark:text-red-400">
                     {errorMessage}

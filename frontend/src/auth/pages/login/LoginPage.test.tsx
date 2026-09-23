@@ -105,6 +105,14 @@ describe("LoginPage", () => {
     expect(screen.queryByRole("link", { name: /Volver al inicio/i })).not.toBeInTheDocument();
   });
 
+  it("shows the product title above the icon-only logo", () => {
+    renderComponent();
+
+    const title = screen.getByRole("heading", { level: 1, name: "Monitoreo Ambiental IoT" });
+    const logo = screen.getByRole("img", { name: /monitoreo ambiental iot/i });
+    expect(title.compareDocumentPosition(logo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("links the consent notice to the landing privacy policy only", () => {
     renderComponent();
 
