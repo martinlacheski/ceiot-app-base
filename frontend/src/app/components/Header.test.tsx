@@ -126,7 +126,7 @@ describe("Header Component", () => {
 
     // Check Link
     const infoLink = screen.getByRole("menuitem", {
-      name: /Información Personal/i,
+      name: "Mi perfil",
     });
     expect(infoLink).toHaveAttribute("href", "/app/profile");
   });

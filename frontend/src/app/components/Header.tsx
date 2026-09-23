@@ -58,7 +58,7 @@ export const Header = () => {
                   <DropdownMenuItem asChild>
                     <Link to="/app/profile" className="cursor-pointer">
                       <UserIcon className="mr-2 h-4 w-4" />
-                      <span>Información Personal</span>
+                      <span>Mi perfil</span>
                     </Link>
                   </DropdownMenuItem>
 

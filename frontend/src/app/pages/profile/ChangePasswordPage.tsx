@@ -2,6 +2,7 @@ import { useAuthStore } from "@/auth/store/auth.store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FormPageLayout } from "@/components/custom/FormPageLayout";
 import {
   FULL_PAGE_FORM_ACTION_BUTTON_CLASS,
   FULL_PAGE_FORM_ACTIONS_CLASS,
@@ -108,20 +109,15 @@ export const ChangePasswordPage = () => {
   };
 
   return (
-    <div className="container mx-auto py-10 max-w-md animate-fade-in">
-      <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
-        <div className="flex flex-col space-y-1.5 p-6">
-          <h3 className="text-2xl font-semibold leading-none tracking-tight">
-            {isSocialAuth ? "Establecer Contraseña" : "Cambiar Contraseña"}
-          </h3>
-          <p className="text-sm text-muted-foreground">
-            {isSocialAuth
-              ? "Establece una contraseña para poder iniciar sesión con tu correo electrónico y contraseña."
-              : "Ingresa tu nueva contraseña asegurándote de cumplir los requisitos."}
-          </p>
-        </div>
-        <div className="p-6 pt-0">
-          <div className="grid gap-4 py-4">
+    <FormPageLayout
+      title={isSocialAuth ? "Establecer Contraseña" : "Cambiar Contraseña"}
+      subtitle={
+        isSocialAuth
+          ? "Establece una contraseña para poder iniciar sesión con tu correo electrónico y contraseña."
+          : "Ingresa tu nueva contraseña asegurándote de cumplir los requisitos."
+      }
+    >
+      <div className="grid gap-4 py-4">
             {!isSocialAuth && (
               <div className="space-y-2">
                 <Label htmlFor="oldPassword">Contraseña Actual</Label>
@@ -252,9 +248,8 @@ export const ChangePasswordPage = () => {
                 {passwordError}
               </p>
             )}
-          </div>
-        </div>
-        <div className={`${FULL_PAGE_FORM_ACTIONS_CLASS} p-6 pt-0`}>
+      </div>
+      <div className={FULL_PAGE_FORM_ACTIONS_CLASS}>
           <Button
             variant="outline"
             className={FULL_PAGE_FORM_ACTION_BUTTON_CLASS}
@@ -275,8 +270,7 @@ export const ChangePasswordPage = () => {
           >
             {FULL_PAGE_FORM_SAVE_LABEL}
           </Button>
-        </div>
       </div>
-    </div>
+    </FormPageLayout>
   );
 };

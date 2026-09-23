@@ -152,12 +152,19 @@ describe("slice 3 full-page form actions", () => {
 
   it("renders Change Password actions and preserves validation, callback, and navigation", async () => {
     changePassword.mockResolvedValue({ success: true, message: "Updated" });
-    renderWithRouter(<ChangePasswordPage />);
+    const { container } = renderWithRouter(<ChangePasswordPage />);
 
     const save = screen.getByRole("button", { name: "Guardar Cambios" });
-    const back = screen.getByRole("button", { name: "Volver" });
+    const back = screen.getAllByRole("button", { name: "Volver" }).at(-1)!;
     expect(save).toBeDisabled();
     expectResponsivePair(back, save);
+    expect(screen.getByRole("heading", { name: "Cambiar Contraseña" })).toHaveClass(
+      "text-xl",
+      "lg:text-2xl",
+      "xl:text-3xl",
+    );
+    expect(container.querySelector("button svg.lucide-arrow-left")).toBeInTheDocument();
+    expect(container.querySelector(".max-w-md")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Contraseña Actual"), {
       target: { value: "OldPassword1" },

@@ -520,6 +520,7 @@ export const ProfilePage = () => {
       key={user?.id}
       title="Mi Perfil"
       subtitle="Gestiona tu información personal"
+      hideBackButton
     >
       <ProfileFormFields />
     </FormPageLayout>

@@ -34,7 +34,10 @@ describe("MapPage", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Mapa de Dispositivos")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mapa" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Visualización geográfica de todos los dispositivos"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Dispositivos")).toBeInTheDocument();
 
     expect(screen.getByRole("link", { name: /Dispositivo 1/i })).toHaveAttribute(

@@ -105,7 +105,7 @@ describe("SidebarHeader", () => {
     await user.click(screen.getByRole("button", { name: /Admin Demo/i }));
 
     expect(
-      screen.getByRole("menuitem", { name: /Información Personal/i }),
+      screen.getByRole("menuitem", { name: "Mi perfil" }),
     ).toHaveAttribute("href", "/app/profile");
     expect(
       screen.getByRole("menuitem", { name: /Cambiar Contraseña/i }),

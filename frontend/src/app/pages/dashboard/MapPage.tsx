@@ -38,8 +38,8 @@ export default function MapPage() {
 
   return (
     <PageHeader
-      title="Mapa de Dispositivos"
-      subtitle="Visualización geográfica de los dispositivos IoT"
+      title="Mapa"
+      subtitle="Visualización geográfica de todos los dispositivos"
     >
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="gap-2 py-3">

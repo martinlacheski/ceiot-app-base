@@ -78,12 +78,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: "Inicio",
       to: "/app",
     },
+    { icon: MapPin, label: "Mapa", to: "/app/map" },
     { icon: Users, label: "Mi perfil", to: "/app/profile" },
     { icon: Store, label: "Establecimientos", to: "/app/environments" },
-    ...(!isAdmin
-      ? [{ icon: ScanQrCode, label: "Dispositivos", to: "/app/devices" }]
-      : []),
-    { icon: MapPin, label: "Mapa", to: "/app/map" },
+    ...(isAdmin
+      ? [
+          { icon: ScanQrCode, label: "Dispositivos", to: "/admin/devices" },
+          {
+            icon: ScanQrCode,
+            label: "Vista de dispositivos",
+            to: "/app/devices",
+          },
+          { icon: Users, label: "Usuarios", to: "/admin/users" },
+        ]
+      : [{ icon: ScanQrCode, label: "Dispositivos", to: "/app/devices" }]),
     // { icon: FileText, label: "Reportes", to: "/app/reports" },
     // { icon: Bell, label: "Notificaciones", to: "/notifications" },
     // { icon: MessageSquare, label: "Mensajes", to: "/messages" },
@@ -94,13 +102,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             icon: Settings,
             label: "Ajustes",
             children: [
-              { icon: Users, label: "Usuarios", to: "/admin/users" },
               {
                 icon: LockKeyhole,
                 label: "Permisos",
                 to: "/admin/permissions",
               },
-              { icon: ScanQrCode, label: "Dispositivos", to: "/admin/devices" },
               {
                 icon: Store,
                 label: "Tipos de Establecimientos",
