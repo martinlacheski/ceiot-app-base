@@ -51,12 +51,18 @@ vi.mock("@/components/ui/date-range-picker", () => ({
   DatePickerWithRange: ({
     onUpdate,
     initialDateFrom,
+    mobileLayout,
+    triggerClassName,
   }: {
     onUpdate: (value: { range: { from: Date; to: Date } }) => void;
     initialDateFrom?: Date;
+    mobileLayout?: boolean;
+    triggerClassName?: string;
   }) => (
     <button
       data-initial-from={initialDateFrom?.toISOString() ?? "none"}
+      data-mobile-layout={String(mobileLayout)}
+      className={triggerClassName}
       onClick={() =>
         onUpdate({
           range: {
@@ -138,6 +144,8 @@ function renderPage(
             </>
           }
         />
+        <Route path="/admin/devices/:id/operations" element={<><DeviceOperationsPage /><LocationProbe /></>} />
+        <Route path="/admin/devices" element={<div>Admin devices</div>} />
         <Route path="/return" element={<div>Listado de dispositivos</div>} />
       </Routes>
     </MemoryRouter>,
@@ -317,6 +325,14 @@ describe("DeviceOperationsPage responsive presentation", () => {
     expect(screen.queryByRole("button", { name: "Limpiar todos" })).not.toBeInTheDocument();
   });
 
+  it("uses the full-screen mobile date layout and a full-width trigger", async () => {
+    renderPage();
+    await userEvent.click(screen.getByRole("button", { name: /Filtros/ }));
+    const picker = screen.getByRole("button", { name: "Rango de fechas" });
+    expect(picker).toHaveAttribute("data-mobile-layout", "true");
+    expect(picker).toHaveClass("w-full", "sm:w-auto");
+  });
+
   it("exports all matching operations through the service", async () => {
     exportOperationsMock.mockResolvedValue(undefined);
     renderPage("/app/devices/device-1/operations?search=SUCCESS&sortBy=id&sortOrder=asc");
@@ -349,6 +365,12 @@ describe("DeviceOperationsPage responsive presentation", () => {
 
     await user.click(screen.getByRole("button", { name: "Volver" }));
     expect(screen.getByText("Listado de dispositivos")).toBeInTheDocument();
+  });
+
+  it("returns to admin devices when opened directly via the admin route", async () => {
+    renderPage("/admin/devices/device-1/operations");
+    await userEvent.click(screen.getByRole("button", { name: "Volver" }));
+    expect(screen.getByText("Admin devices")).toBeInTheDocument();
   });
 
   it("keeps missing-device navigation accessible", () => {

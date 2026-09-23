@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/accordion";
 import {
   Edit,
-  Filter,
   Trash2,
   FileText,
   RotateCw,
@@ -67,6 +66,8 @@ import { DataTablePagination } from "@/components/custom/DataTablePagination";
 import { ListErrorState } from "@/components/custom/ListErrorState";
 import { ListSearchInput } from "@/components/custom/ListSearchInput";
 import { ListExportActions } from "@/components/custom/ListExportActions";
+import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
+import { ListFiltersTrigger } from "@/components/custom/ListFiltersAccordion";
 import { useNavigate, useSearchParams } from "react-router";
 import { deviceService } from "@/app/services/device.service";
 import {
@@ -157,7 +158,7 @@ export function DeviceMobileCard({
 }: DeviceMobileCardProps) {
   const canEdit =
     mode === "admin" || device.environment?.ownerId === currentUserId;
-  const canViewOperations = mode === "user";
+  const canViewOperations = true;
   const canManageActivation = mode === "admin";
   const hasSecondaryActions =
     canEdit || canViewOperations || canManageActivation;
@@ -212,7 +213,7 @@ export function DeviceMobileCard({
         ) : null}
         <div
           className="flex w-full min-w-0 items-center justify-between gap-2"
-          aria-label="Conectividad y última conexión"
+          aria-label="Estado y última conexión"
         >
           <DevicePresenceBadge
             className="shrink-0"
@@ -609,16 +610,17 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
                   </Tooltip>
                 ) : null}
 
-                {mode === "user" && (
+                {(
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         variant="ghost"
                         size="icon"
                         className="size-8"
+                        aria-label="Ver operaciones"
                         onClick={() =>
-                          navigate(`/app/devices/${device.id}/operations`, {
-                            state: { from: "/app/devices" },
+                          navigate(`${mode === "admin" ? "/admin" : "/app"}/devices/${device.id}/operations`, {
+                            state: { from: mode === "admin" ? "/admin/devices" : "/app/devices" },
                           })
                         }
                       >
@@ -892,8 +894,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         ),
       },
       {
-        id: "owner",
-        enableSorting: false,
+        id: DEVICE_SORT_BY.OWNER,
+        accessorFn: (device) => device.environment?.ownerName,
+        enableSorting: true,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -914,8 +917,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         },
       },
       {
-        id: "environmentName",
-        enableSorting: false,
+        id: DEVICE_SORT_BY.ENVIRONMENT_NAME,
+        accessorFn: (device) => device.environment?.name,
+        enableSorting: true,
         header: ({ column }) => (
           <DataTableColumnHeader
             column={column}
@@ -957,6 +961,23 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
         ),
       },
       locationColumn,
+      {
+        id: DEVICE_SORT_BY.BROKER_CONNECTED,
+        accessorFn: (device) => device.brokerConnected,
+        enableSorting: true,
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title="Estado"
+            className="w-full flex justify-center"
+          />
+        ),
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <DevicePresenceBadge brokerConnected={row.original.brokerConnected} />
+          </div>
+        ),
+      },
       {
         id: "lastConnection",
         header: ({ column }) => (
@@ -1049,38 +1070,25 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
     <div className="w-full space-y-4">
       {/* Filters section */}
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-          {/* Search */}
-          <ListSearchInput
-            value={search}
-            onChange={(value) => updateParams({ search: value, page: "1" })}
-            onClear={() => updateParams({ search: null, page: "1" })}
-            className="w-full md:max-w-sm md:flex-1"
-          />
-
-          <div className="flex flex-wrap items-center gap-2 md:flex-1">
-            <Button
-            variant={
-              accordionValue === "advance-filters" ? "secondary" : "default"
-            }
-            onClick={() =>
-              setAccordionValue(
-                accordionValue === "advance-filters" ? "" : "advance-filters",
-              )
-            }
-          >
-            <Filter className="mr-2 size-4" />
-            Filtros
-            {hasActiveFilters && (
-              <Badge variant="secondary" className="ml-2">
-                !
-              </Badge>
-            )}
-            </Button>
-
-            <div>{actions}</div>
-          </div>
-        </div>
+        <ListToolbarLayout
+          search={
+            <ListSearchInput
+              value={search}
+              onChange={(value) => updateParams({ search: value, page: "1" })}
+              onClear={() => updateParams({ search: null, page: "1" })}
+            />
+          }
+          primaryActions={
+            <>
+              <ListFiltersTrigger
+                open={accordionValue === "advance-filters"}
+                onOpenChange={(open) => setAccordionValue(open ? "advance-filters" : "")}
+                hasActiveFilters={hasActiveFilters}
+              />
+              <div>{actions}</div>
+            </>
+          }
+        />
 
         <Accordion
           type="single"
@@ -1125,7 +1133,9 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
                         <SelectItem value="enabled">Habilitado</SelectItem>
                         <SelectItem value="isActive">Estado</SelectItem>
                         <SelectItem value="lastConnection">Última conexión</SelectItem>
-                        <SelectItem value="brokerConnected">Conectividad</SelectItem>
+                        <SelectItem value="brokerConnected">Estado</SelectItem>
+                        {mode === "user" && <SelectItem value="environmentName">Establecimiento</SelectItem>}
+                        {mode === "user" && <SelectItem value="owner">Propietario</SelectItem>}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1398,8 +1408,8 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
               onView={handleView}
               onEdit={handleEdit}
               onOperations={(device) =>
-                navigate(`/app/devices/${device.id}/operations`, {
-                  state: { from: "/app/devices" },
+                navigate(`${mode === "admin" ? "/admin" : "/app"}/devices/${device.id}/operations`, {
+                  state: { from: mode === "admin" ? "/admin/devices" : "/app/devices" },
                 })
               }
               onDelete={handleDelete}

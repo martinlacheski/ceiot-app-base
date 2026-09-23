@@ -171,6 +171,8 @@ async def get_devices(
         "lastConnection",
         "brokerConnected",
         "deviceTypeName",
+        "environmentName",
+        "owner",
     ] = Query("name"),
     sort_order: Literal["asc", "desc"] = Query("asc"),
     utc_offset_minutes: int = Query(0, ge=-840, le=840),

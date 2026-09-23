@@ -119,7 +119,10 @@ export default function DeviceOperationsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const backTo = (location.state as { from?: string })?.from || "/app/devices";
+  const defaultBackTo = location.pathname.startsWith("/admin/")
+    ? "/admin/devices"
+    : "/app/devices";
+  const backTo = (location.state as { from?: string })?.from || defaultBackTo;
   const [searchParams, setSearchParams] = useSearchParams();
   const filtersPanel = useListFilters();
   const user = useAuthStore((state) => state.user);
@@ -385,6 +388,8 @@ export default function DeviceOperationsPage() {
             onUpdate={handleDateUpdate}
             align="start"
             showCompare={false}
+            mobileLayout
+            triggerClassName="w-full sm:w-auto"
           />
         </ListFiltersPanel>
       </div>

@@ -90,6 +90,8 @@ class DeviceRepository:
             "lastConnection",
             "brokerConnected",
             "deviceTypeName",
+            "environmentName",
+            "owner",
         ] = "name",
         sort_order: Literal["asc", "desc"] = "asc",
         connected_serials: frozenset[str] | None = None,
@@ -379,11 +381,35 @@ class DeviceRepository:
                     DeviceTypeCatalog.id == Device.device_type_id,
                 )
             sort_expression = DeviceTypeCatalog.name
+        elif sort_by == "environmentName":
+            if search_pattern is None:
+                query = query.outerjoin(
+                    Environment,
+                    Environment.id == Device.environment_id,
+                )
+            sort_expression = Environment.name
+        elif sort_by == "owner":
+            # No uniqueness constraint enforces one owner per environment. A
+            # correlated aggregate keeps one device row even with bad legacy data.
+            owner_full_name = func.nullif(
+                func.trim(User.first_name + " " + User.last_name), ""
+            )
+            sort_expression = (
+                select(func.min(func.coalesce(owner_full_name, User.username)))
+                .join(EnvironmentUser, EnvironmentUser.user_id == User.id)
+                .where(
+                    EnvironmentUser.environment_id == Device.environment_id,
+                    EnvironmentUser.is_owner.is_(True),
+                    EnvironmentUser.is_active.is_(True),
+                )
+                .correlate(Device)
+                .scalar_subquery()
+            )
         else:
             sort_expression = sort_expressions[sort_by]
         direction = sort_expression.desc if sort_order == "desc" else sort_expression.asc
         ordered_expression = direction()
-        if sort_by in {"model", "manufactureDate", "lastConnection", "deviceTypeName"}:
+        if sort_by in {"model", "manufactureDate", "lastConnection", "deviceTypeName", "environmentName", "owner"}:
             ordered_expression = ordered_expression.nullslast()
         query = query.order_by(ordered_expression, Device.id.asc())
 

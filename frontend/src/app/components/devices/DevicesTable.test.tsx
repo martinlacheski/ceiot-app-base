@@ -119,7 +119,7 @@ describe("DeviceMobileCard", () => {
     expect(screen.queryByText("ACTIVO")).not.toBeInTheDocument();
 
     const connectionRow = screen.getByLabelText(
-      "Conectividad y última conexión",
+      "Estado y última conexión",
     );
     expect(within(connectionRow).getByText("En línea")).toBeInTheDocument();
     expect(
@@ -145,7 +145,7 @@ describe("DeviceMobileCard", () => {
     expect(screen.getByText("MANTENIMIENTO")).toBeInTheDocument();
 
     const fallbackConnectionRow = screen.getByLabelText(
-      "Conectividad y última conexión",
+      "Estado y última conexión",
     );
     expect(
       within(fallbackConnectionRow).getByText("Fuera de línea"),
@@ -166,7 +166,7 @@ describe("DeviceMobileCard", () => {
     );
 
     const unavailableConnectionRow = screen.getByLabelText(
-      "Conectividad y última conexión",
+      "Estado y última conexión",
     );
     expect(
       within(unavailableConnectionRow).getByText("No disponible"),
@@ -185,7 +185,7 @@ describe("DeviceMobileCard", () => {
     expect(screen.getByRole("button", { name: "Ver detalle" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Más acciones para Surtidor Norte" }));
     expect(screen.getByRole("menuitem", { name: "Editar" })).toBeInTheDocument();
-    expect(screen.queryByRole("menuitem", { name: "Operaciones" })).not.toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Operaciones" })).toBeInTheDocument();
     await user.click(screen.getByRole("menuitem", { name: "Eliminar" }));
     expect(handlers.onDelete).toHaveBeenCalledWith("device-1");
 
@@ -216,6 +216,14 @@ describe("DeviceMobileCard", () => {
     await user.click(screen.getByRole("button", { name: "Más acciones para Surtidor Norte" }));
     expect(screen.queryByRole("menuitem", { name: "Editar" })).not.toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Operaciones" })).toBeInTheDocument();
+  });
+
+  it("offers Operations to admins on mobile", async () => {
+    const user = userEvent.setup();
+    render(<DeviceMobileCard device={baseDevice} mode="admin" currentUserId="admin-1" {...handlers} />);
+    await user.click(screen.getByRole("button", { name: "Más acciones para Surtidor Norte" }));
+    await user.click(screen.getByRole("menuitem", { name: "Operaciones" }));
+    expect(handlers.onOperations).toHaveBeenCalledWith(baseDevice);
   });
 });
 
@@ -358,6 +366,27 @@ describe("DevicesTable responsive contract", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("page=1");
   });
 
+  it.each([
+    ["Propietario", "owner"],
+    ["Establecimiento", "environmentName"],
+    ["Estado", "brokerConnected"],
+  ])("sorts %s from the user list through the server", async (label, sortBy) => {
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/devices?page=3"]}><DevicesTable mode="user" /><NavigationProbe /></MemoryRouter>);
+    await user.click(screen.getByRole("button", { name: label }));
+    await user.click(screen.getByRole("menuitem", { name: "Asc" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(`sortBy=${sortBy}`);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=1");
+    expect(useDevicesMock).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy }), expect.anything());
+  });
+
+  it("routes admin desktop Operations to the admin page", async () => {
+    useDevicesMock.mockReturnValue({ data: { items: [baseDevice], total: 1, pages: 1 }, isLoading: false });
+    render(<MemoryRouter initialEntries={["/admin/devices"]}><DevicesTable mode="admin" /><NavigationProbe /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Ver operaciones" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/admin/devices/device-1/operations");
+  });
+
   it("does not expose sorting for columns unsupported by the server", () => {
     render(<MemoryRouter><DevicesTable /></MemoryRouter>);
 
@@ -377,6 +406,13 @@ describe("DevicesTable responsive contract", () => {
       expect.objectContaining({ page: 1, sortBy: "name", sortOrder: "asc" }),
       expect.anything(),
     );
+  });
+
+  it("uses the shared 44px list toolbar for search and actions", () => {
+    render(<MemoryRouter><DevicesTable actions={<button>Nuevo dispositivo</button>} /></MemoryRouter>);
+    expect(screen.getByTestId("list-toolbar-search")).toHaveClass("[&_[data-list-toolbar-search-control]]:min-h-11");
+    expect(screen.getByTestId("list-toolbar-actions")).toHaveClass("[&_button]:min-h-11");
+    expect(within(screen.getByTestId("list-toolbar-actions")).getByRole("button", { name: "Nuevo dispositivo" })).toBeInTheDocument();
   });
 
   it("clears active sorting and filters back to stable defaults", async () => {

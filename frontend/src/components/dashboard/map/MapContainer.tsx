@@ -10,6 +10,14 @@ import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
 import { getConnectionStatusLabel } from "@/utils/status-labels";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 interface MapContainerProps {
   devices: DeviceMapItem[];
@@ -20,6 +28,7 @@ export function MapContainer({ devices }: MapContainerProps) {
   const [selectedDevice, setSelectedDevice] = useState<DeviceMapItem | null>(
     null,
   );
+  const isSmallScreen = useMediaQuery("(max-width: 767px)");
 
   // Center of Argentina
   const defaultCenter = { lat: -38.4161, lng: -63.6167 };
@@ -80,7 +89,7 @@ export function MapContainer({ devices }: MapContainerProps) {
             );
           })}
 
-          {selectedDevice && (
+          {selectedDevice && !isSmallScreen && (
             <InfoWindow
               position={{
                 lat: selectedDevice.location.lat,
@@ -145,6 +154,45 @@ export function MapContainer({ devices }: MapContainerProps) {
           )}
         </Map>
       </APIProvider>
+      <Sheet
+        open={isSmallScreen && selectedDevice !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDevice(null);
+        }}
+      >
+        <SheetContent
+          side="bottom"
+          closeLabel="Cerrar"
+          className="max-h-[70vh] overflow-y-auto rounded-t-xl"
+        >
+          {selectedDevice && (
+            <>
+              <SheetHeader className="pr-12">
+                <SheetTitle>{selectedDevice.name}</SheetTitle>
+                <SheetDescription>
+                  {selectedDevice.location.address}, {selectedDevice.location.city}
+                </SheetDescription>
+              </SheetHeader>
+              <div className="px-4 pb-6">
+                <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2 py-1 text-xs font-medium text-green-800 data-[status=offline]:bg-red-100 data-[status=offline]:text-red-800" data-status={selectedDevice.status}>
+                  {getConnectionStatusLabel(selectedDevice.status)}
+                </span>
+                <Button
+                  className="mt-3 min-h-11 w-full text-white hover:text-white/90"
+                  onClick={() =>
+                    navigate(`/app/devices/${selectedDevice.id}`, {
+                      state: { from: "/app/map" },
+                    })
+                  }
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Ver detalles
+                </Button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

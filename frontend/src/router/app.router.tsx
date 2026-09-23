@@ -272,6 +272,10 @@ export const appRouter = createBrowserRouter([
             element: <DevicesPage />,
           },
           {
+            path: ":id/operations",
+            element: <DeviceOperationsPage />,
+          },
+          {
             path: "create",
             element: <CreateDevicePage />,
           },

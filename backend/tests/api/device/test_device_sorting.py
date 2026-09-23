@@ -123,6 +123,8 @@ def test_device_sort_query_parameters_are_strict_literals():
         "lastConnection",
         "brokerConnected",
         "deviceTypeName",
+        "environmentName",
+        "owner",
     }
     assert set(get_args(hints["sort_order"])) == {"asc", "desc"}
 

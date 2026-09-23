@@ -158,25 +158,25 @@ describe("EnvironmentsTable server-side sorting", () => {
     });
   });
 
-  it("keeps search on its own row and aligns filters with the primary action", () => {
+  it("aligns search, filters and the primary action in one shared toolbar with 44px controls", () => {
     render(
       <MemoryRouter>
         <EnvironmentsTable actions={<button>Nuevo Establecimiento</button>} />
       </MemoryRouter>,
     );
 
-    const searchRow = screen.getByTestId("environment-search-row");
-    const actionsRow = screen.getByTestId("environment-actions-row");
+    const toolbar = screen.getByTestId("list-toolbar");
+    const search = within(toolbar).getByPlaceholderText("Buscar en todos los campos...");
+    const filters = within(toolbar).getByRole("button", { name: /Filtros/ });
+    const create = within(toolbar).getByRole("button", { name: "Nuevo Establecimiento" });
 
-    expect(within(searchRow).getByPlaceholderText("Buscar en todos los campos...")).toBeInTheDocument();
-    expect(within(searchRow).queryByRole("button", { name: /Filtros/ })).not.toBeInTheDocument();
-    expect(within(actionsRow).getByRole("button", { name: /Filtros/ })).toBeInTheDocument();
-    expect(within(actionsRow).getByRole("button", { name: "Nuevo Establecimiento" })).toBeInTheDocument();
-    expect(actionsRow).toHaveClass("flex-wrap", "gap-2");
-    expect(actionsRow).not.toHaveClass("justify-between");
-    expect(
-      within(actionsRow).getByRole("button", { name: "Nuevo Establecimiento" }).parentElement,
-    ).not.toHaveClass("ml-auto");
+    expect(toolbar).toHaveClass("md:flex-row", "md:items-center");
+    expect(search).toHaveAttribute("data-list-toolbar-search-control");
+    expect(within(toolbar).getByTestId("list-toolbar-search")).toContainElement(search);
+    expect(within(toolbar).getByTestId("list-toolbar-actions")).toContainElement(filters);
+    expect(within(toolbar).getByTestId("list-toolbar-actions")).toContainElement(create);
+    expect(filters).toHaveClass("min-h-11");
+    expect(create.closest('[data-testid="list-toolbar-actions"]')).toHaveClass("[&_button]:min-h-11");
 
     const exportActions = screen.getByRole("button", { name: "Excel" }).parentElement;
     expect(exportActions).toContainElement(

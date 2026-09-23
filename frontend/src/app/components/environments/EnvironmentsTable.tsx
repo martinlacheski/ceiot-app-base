@@ -15,7 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ListSearchInput } from "@/components/custom/ListSearchInput";
+import { ListToolbarLayout } from "@/components/custom/ListToolbarLayout";
 
 import {
   Tooltip,
@@ -36,7 +37,6 @@ import {
   FileText,
   MapPin,
   Eye,
-  X,
   Loader2,
   RotateCw,
   MoreVertical,
@@ -695,54 +695,40 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
 
   return (
     <div className="w-full space-y-4">
-      {/* Filters section */}
       <div className="space-y-4">
-        <div className="relative w-full" data-testid="environment-search-row">
-            <Input
-              placeholder="Buscar en todos los campos..."
+        <ListToolbarLayout
+          search={
+            <ListSearchInput
               value={search}
-              onChange={(e) =>
-                updateParams({ search: e.target.value, page: "1" })
-              }
-              className="pr-8"
+              onChange={(value) => updateParams({ search: value, page: "1" })}
+              onClear={() => updateParams({ search: null })}
             />
-            {search && (
+          }
+          primaryActions={
+            <>
               <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-                onClick={() => updateParams({ search: null })}
+                className="min-h-11"
+                variant={
+                  accordionValue === "advance-filters" ? "secondary" : "default"
+                }
+                onClick={() =>
+                  setAccordionValue(
+                    accordionValue === "advance-filters" ? "" : "advance-filters",
+                  )
+                }
               >
-                <X className="size-4" />
+                <Filter className="mr-2 size-4" />
+                Filtros
+                {hasActiveFilters && (
+                  <Badge variant="secondary" className="ml-2">
+                    !
+                  </Badge>
+                )}
               </Button>
-            )}
-        </div>
-
-        <div
-          className="flex w-full flex-wrap items-center gap-2"
-          data-testid="environment-actions-row"
-        >
-          <Button
-            variant={
-              accordionValue === "advance-filters" ? "secondary" : "default"
-            }
-            onClick={() =>
-              setAccordionValue(
-                accordionValue === "advance-filters" ? "" : "advance-filters",
-              )
-            }
-          >
-            <Filter className="mr-2 size-4" />
-            Filtros
-            {hasActiveFilters && (
-              <Badge variant="secondary" className="ml-2">
-                !
-              </Badge>
-            )}
-          </Button>
-
-          <div className="min-w-0">{actions}</div>
-        </div>
+              {actions}
+            </>
+          }
+        />
 
         <Accordion
           type="single"
@@ -949,7 +935,7 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
           <Button
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="min-h-11 gap-2"
             onClick={() => handleExport("excel")}
           >
             <FileSpreadsheet className="size-4 text-green-600" />
@@ -958,7 +944,7 @@ export function EnvironmentsTable({ actions }: EnvironmentsTableProps) {
           <Button
             variant="outline"
             size="sm"
-            className="gap-2"
+            className="min-h-11 gap-2"
             onClick={() => handleExport("pdf")}
           >
             <FileText className="size-4 text-red-600" />
