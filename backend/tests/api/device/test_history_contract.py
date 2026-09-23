@@ -1,7 +1,7 @@
 """History API contract and pure filtering regressions (no database needed)."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from app.api.device.history.service import _matches_search, _sorted_entries
 from app.api.device.history.service import DeviceHistoryService, HistoryScope
@@ -132,3 +132,38 @@ def test_history_detail_success_camel_case_and_filter_forwarding(client, token, 
     assert calls["operations"]["status"].value == "success"
     assert calls["operations"]["operation_type"].value == "SENSOR_DATA"
     assert calls["operations"]["sort_by"] == "operation_type"
+
+
+def test_history_detail_dates_are_validated_and_forwarded(client, token, monkeypatch):
+    calls = {}
+
+    async def fake_scope(self, user):
+        return HistoryScope()
+
+    async def has_history(self, scope, serial, environment_id=None):
+        return True
+
+    async def fake_readings(self, scope, **kwargs):
+        calls["readings"] = kwargs
+        return {"items": [], "total": 0, "page": 1, "per_page": 10, "pages": 0}
+
+    async def fake_operations(self, scope, **kwargs):
+        calls["operations"] = kwargs
+        return {"items": [], "total": 0, "page": 1, "per_page": 10, "pages": 0}
+
+    monkeypatch.setattr(DeviceHistoryService, "resolve_scope", fake_scope)
+    monkeypatch.setattr(DeviceHistoryService, "has_history", has_history)
+    monkeypatch.setattr(DeviceHistoryService, "list_sensor_readings", fake_readings)
+    monkeypatch.setattr(DeviceHistoryService, "list_operations", fake_operations)
+    headers = {"Authorization": f"Bearer {token}"}
+    for suffix, key in (("sensor-readings", "readings"), ("operations", "operations")):
+        path = f"/api/devices/history/devices/SN-1/{suffix}"
+        response = client.get(path, params={"date_from": "2026-09-01", "date_to": "2026-09-02",
+                                            "utc_offset_minutes": 120}, headers=headers)
+        assert response.status_code == 200
+        assert calls[key]["date_from"] == date(2026, 9, 1)
+        assert calls[key]["date_to"] == date(2026, 9, 2)
+        assert calls[key]["utc_offset_minutes"] == 120
+        assert client.get(path, params={"date_from": "not-a-date"}, headers=headers).status_code == 422
+        assert client.get(path, params={"date_from": "2026-09-03", "date_to": "2026-09-02"},
+                          headers=headers).status_code == 422

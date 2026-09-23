@@ -16,6 +16,7 @@ from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.device.device_type.models import DeviceTypeCatalog
 from app.api.device.models import Device, DeviceStatus
 from app.api.device.operations.models import (
+    DeviceOperation,
     DeviceOperationStatus,
     DeviceOperationType,
 )
@@ -25,6 +26,7 @@ from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.environment.environment_type.models import EnvironmentType
 from app.api.location.models import LocationCity, LocationCountry, LocationState
 from app.api.sensor.repository import SensorRepository
+from app.api.sensor.models import SensorReading
 from app.api.sensor.service import SensorService
 
 pytestmark = pytest.mark.asyncio
@@ -396,4 +398,109 @@ async def test_history_environment_guest_sees_operations_but_not_telemetry(
                                      {"id": relation.id})
             await connection.execute(text('DELETE FROM "user" WHERE id = :id'),
                                      {"id": guest.id})
+        await admin_engine.dispose()
+
+
+async def test_detail_date_range_uses_local_day_before_count_and_pagination(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    instants = [datetime(2026, 9, 1, 21, 59, tzinfo=timezone.utc),
+                datetime(2026, 9, 1, 22, 0, tzinfo=timezone.utc),
+                datetime(2026, 9, 2, 21, 59, tzinfo=timezone.utc),
+                datetime(2026, 9, 2, 22, 0, tzinfo=timezone.utc)]
+    reading_ids = []
+    operation_ids = []
+    async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+        for instant in instants:
+            reading = SensorReading(
+                time=instant, device_id=history_rows.device_id,
+                device_serial=history_rows.device_serial,
+                environment_id=history_rows.old_environment_id,
+                temperature_c=20.0,
+            )
+            operation = DeviceOperation(
+                time=instant, environment_id=history_rows.old_environment_id,
+                operation_type=DeviceOperationType.SENSOR_DATA,
+                device_serial=history_rows.device_serial,
+                status=DeviceOperationStatus.SUCCESS,
+            )
+            session.add_all([reading, operation])
+            reading_ids.append(reading.id)
+            operation_ids.append(operation.id)
+        await session.commit()
+    await admin_engine.dispose()
+
+    role_engine = rls_engine_factory(pool_size=1)
+    async with AsyncSession(role_engine, expire_on_commit=False) as session:
+        await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                              {"uid": str(history_rows.old_owner_id)})
+        service = DeviceHistoryService(session)
+        scope = await service.resolve_scope(User(
+            id=history_rows.old_owner_id, email="owner@example.com", username="owner", password="unused"))
+        for fetch, expected_ids in ((service.list_sensor_readings, reading_ids),
+                                    (service.list_operations, operation_ids)):
+            first = await fetch(scope, serial=history_rows.device_serial,
+                                date_from=datetime(2026, 9, 2).date(), date_to=datetime(2026, 9, 2).date(),
+                                utc_offset_minutes=120, page=1, per_page=1)
+            second = await fetch(scope, serial=history_rows.device_serial,
+                                 date_from=datetime(2026, 9, 2).date(), date_to=datetime(2026, 9, 2).date(),
+                                 utc_offset_minutes=120, page=2, per_page=1)
+            assert first["total"] == second["total"] == 2
+            assert first["pages"] == second["pages"] == 2
+            assert {first["items"][0].id, second["items"][0].id} == set(expected_ids[1:3])
+
+
+async def test_is_former_is_per_snapshot_environment_under_rls(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+        await SensorService(SensorRepository(session)).save_reading(
+            device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            temperature_c=20.0,
+        )
+        await session.commit()
+
+    async def listed_as_old_owner(*, only_former=True):
+        role_engine = rls_engine_factory(pool_size=1)
+        async with AsyncSession(role_engine, expire_on_commit=False) as session:
+            await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                                  {"uid": str(history_rows.old_owner_id)})
+            user = User(id=history_rows.old_owner_id, email="owner@example.com",
+                        username="owner", password="unused")
+            result = await DeviceHistoryService(session).list_devices(
+                user, only_former=only_former, search=history_rows.device_serial)
+        await role_engine.dispose()
+        return {item["environment_id"]: item for item in result["items"]}
+
+    try:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("UPDATE device SET environment_id = NULL WHERE id = :id"),
+                                     {"id": history_rows.device_id})
+        unlinked = await listed_as_old_owner()
+        assert unlinked[history_rows.old_environment_id]["is_former"] is True
+
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("UPDATE device SET environment_id = :env WHERE id = :id"),
+                                     {"env": history_rows.new_environment_id, "id": history_rows.device_id})
+        moved_other_owner = await listed_as_old_owner()
+        assert moved_other_owner[history_rows.old_environment_id]["is_former"] is True
+
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+                temperature_c=21.0,
+            )
+            await session.execute(text("UPDATE environmentuser SET user_id = :owner WHERE environment_id = :env"),
+                                  {"owner": history_rows.old_owner_id,
+                                   "env": history_rows.new_environment_id})
+            await session.commit()
+        moved_same_owner = await listed_as_old_owner()
+        assert moved_same_owner[history_rows.old_environment_id]["is_former"] is True
+        assert history_rows.new_environment_id not in moved_same_owner
+        all_entries = await listed_as_old_owner(only_former=False)
+        assert all_entries[history_rows.old_environment_id]["is_former"] is True
+        assert all_entries[history_rows.new_environment_id]["is_former"] is False
+    finally:
         await admin_engine.dispose()

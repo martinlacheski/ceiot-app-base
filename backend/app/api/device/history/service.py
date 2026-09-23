@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.auth.models import User
-from app.api.device.history.query_utils import format_local, formatted_time, ordered, text_search
+from app.api.device.history.query_utils import (format_local, formatted_time,
+    local_date_conditions, ordered, text_search)
 from app.api.device.history.serial import OPERATION_SERIAL, READING_SERIAL
 from app.api.device.models import Device
 from app.api.device.operations.models import DeviceOperation
@@ -162,8 +163,7 @@ class DeviceHistoryService:
             Environment.id.in_(env_ids)))).all())
         current = {(row.serial, row.environment_id): row.name for row in
                    (await self.session.execute(select(Device.serial, Device.environment_id, Device.name).where(
-                       Device.environment_id.in_(env_ids), Device.serial.in_(serials),
-                       Device.is_active.is_(True)))).all()}
+                       Device.environment_id.in_(env_ids), Device.serial.in_(serials)))).all()}
         owners = {}
         if include_owner:
             for env_id, user_id, first, last, username in (await self.session.execute(select(
@@ -172,13 +172,12 @@ class DeviceHistoryService:
                 EnvironmentUser.environment_id.in_(env_ids), EnvironmentUser.is_owner.is_(True),
                 EnvironmentUser.is_active.is_(True)))).all():
                 owners[env_id] = (user_id, f"{first or ''} {last or ''}".strip() or username)
-        current_serials = {key[0] for key in current}
         result = []
         for key, item in entries.items():
             owner_id, owner_name = owners.get(item["environment_id"], (None, None))
             result.append({**item, "environment_name": names.get(item["environment_id"]),
                            "device_name": current.get(key),
-                           "is_former": key not in current if scope.unrestricted else item["serial"] not in current_serials,
+                           "is_former": key not in current,
                            "owner_id": owner_id, "owner_name": owner_name})
         return result
 
@@ -206,12 +205,14 @@ class DeviceHistoryService:
         return bool(await self.list_entries(scope, environment_id, serial))
 
     async def list_sensor_readings(self, scope, *, serial, environment_id=None, filters=None,
-                                   search=None, sort_by="time", sort_order="desc",
+                                   search=None, date_from=None, date_to=None,
+                                   sort_by="time", sort_order="desc",
                                    utc_offset_minutes=0, page=1, per_page=100):
         filters = filters or ReadingFilters()
         query = select(SensorReading).where(SensorReading.device_serial == serial,
             scope.condition(SensorReading.environment_id, SensorReading.time, environment_id,
-                            members_only=True), *filters.conditions())
+                            members_only=True), *filters.conditions(),
+            *local_date_conditions(SensorReading.time, date_from, date_to, utc_offset_minutes))
         match = text_search(search, formatted_time(SensorReading.time, utc_offset_minutes),
             SensorReading.device_serial, SensorReading.device_type, SensorReading.power_supply_state,
             SensorReading.temperature_c, SensorReading.relative_humidity_pct, SensorReading.pressure_hpa,
@@ -232,10 +233,12 @@ class DeviceHistoryService:
                 "pages": (total + per_page - 1) // per_page}
 
     async def list_operations(self, scope, *, serial, environment_id=None, status=None,
-                              operation_type=None, search=None, sort_by="time", sort_order="desc",
+                              operation_type=None, search=None, date_from=None, date_to=None,
+                              sort_by="time", sort_order="desc",
                               utc_offset_minutes=0, page=1, per_page=20):
         query = select(DeviceOperation).where(DeviceOperation.device_serial == serial,
-            scope.condition(DeviceOperation.environment_id, DeviceOperation.time, environment_id))
+            scope.condition(DeviceOperation.environment_id, DeviceOperation.time, environment_id),
+            *local_date_conditions(DeviceOperation.time, date_from, date_to, utc_offset_minutes))
         if status is not None:
             query = query.where(DeviceOperation.status == status)
         if operation_type is not None:

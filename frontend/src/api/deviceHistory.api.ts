@@ -6,7 +6,7 @@ export interface HistoryDevice { serial: string; deviceName?: string | null; env
 export interface HistoryReading { id: string; time: string; deviceSerial: string; deviceType: string | null; powerSupplyState: boolean | null; temperatureC: number | null; relativeHumidityPct: number | null; pressureHpa: number | null; uptime: number | null; firmwareVersion: string | null; resetReason: string | null; heapFree: number | null; wifiRssi: number | null; wifiSsid: string | null; wifiIp: string | null; lastError: string | null; deviceDatetime: string | null }
 export interface HistoryOperation { id: string; time: string; deviceSerial: string | null; operationType: string; status: string }
 export type HistorySortOrder = "asc" | "desc";
-export interface HistoryCommon { environmentId?: string; search?: string; sortBy?: string; sortOrder?: HistorySortOrder; page?: number; perPage?: number }
+export interface HistoryCommon { environmentId?: string; search?: string; sortBy?: string; sortOrder?: HistorySortOrder; page?: number; perPage?: number; dateFrom?: string; dateTo?: string }
 export interface HistoryDevicesParams extends HistoryCommon { onlyFormer?: boolean; lastSeenFrom?: string; lastSeenTo?: string; ownerId?: string }
 export interface HistoryReadingsParams extends HistoryCommon { tempMin?: number; tempMax?: number; humidityMin?: number; humidityMax?: number; pressureMin?: number; pressureMax?: number; hasError?: boolean; firmwareVersion?: string }
 export interface HistoryOperationsParams extends HistoryCommon { status?: string; operationType?: string }
@@ -35,13 +35,15 @@ export const deviceHistoryApi = {
     owner_id: params.ownerId || undefined,
   }),
   readings: (serial: string, params: HistoryReadingsParams) => page<HistoryReading>(`${serialPath(serial)}/sensor-readings`, {
-    ...common(params), temp_min: params.tempMin, temp_max: params.tempMax,
+    ...common(params), date_from: params.dateFrom || undefined, date_to: params.dateTo || undefined,
+    temp_min: params.tempMin, temp_max: params.tempMax,
     humidity_min: params.humidityMin, humidity_max: params.humidityMax,
     pressure_min: params.pressureMin, pressure_max: params.pressureMax,
     has_error: params.hasError, firmware_version: params.firmwareVersion || undefined,
   }),
   operations: (serial: string, params: HistoryOperationsParams) => page<HistoryOperation>(`${serialPath(serial)}/operations`, {
-    ...common(params), status: params.status || undefined,
+    ...common(params), date_from: params.dateFrom || undefined, date_to: params.dateTo || undefined,
+    status: params.status || undefined,
     operation_type: params.operationType || undefined,
   }),
 };

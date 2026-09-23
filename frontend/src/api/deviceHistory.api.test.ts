@@ -31,4 +31,14 @@ describe("deviceHistoryApi", () => {
     expect(request.params).toMatchObject({ environment_id: "env-2", operation_type: "SENSOR_DATA", status: "success" });
     expect(Object.keys(request.params).join(" ")).not.toMatch(/payment|amount|revenue/);
   });
+
+  it("sends inclusive local date bounds to both detail endpoints", async () => {
+    get.mockResolvedValue({ data: { items: [], total: 0, page: 1, perPage: 10, pages: 0 } });
+    const dates = { dateFrom: "2026-09-01", dateTo: "2026-09-02" };
+    await deviceHistoryApi.readings("SN-1", { environmentId: "env-1", ...dates });
+    await deviceHistoryApi.operations("SN-1", { environmentId: "env-1", ...dates });
+    for (const [, request] of get.mock.calls) {
+      expect(request.params).toMatchObject({ date_from: dates.dateFrom, date_to: dates.dateTo, utc_offset_minutes: -new Date().getTimezoneOffset() });
+    }
+  });
 });

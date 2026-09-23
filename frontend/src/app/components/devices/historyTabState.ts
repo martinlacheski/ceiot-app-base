@@ -15,13 +15,3 @@ export function parseHistoryNumber(value: string): number | undefined {
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
 }
-
-export function filterHistoryDateRange<T extends { time: string }>(rows: T[], from?: string, to?: string): T[] {
-  if (!from && !to) return rows;
-  return rows.filter((row) => {
-    const date = new Date(row.time);
-    if (Number.isNaN(date.getTime())) return false;
-    const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    return (!from || day >= from) && (!to || day <= to);
-  });
-}

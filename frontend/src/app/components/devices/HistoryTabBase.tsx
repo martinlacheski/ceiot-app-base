@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { HistoryResultsTable, type HistoryColumn } from "./HistoryResultsTable";
-import { filterHistoryDateRange, useResettingPage } from "./historyTabState";
+import { useResettingPage } from "./historyTabState";
 import { isHistoryForbidden, isHistoryNotFound } from "./historyErrors";
 import { ListSearchInput } from "@/components/custom/ListSearchInput";
 import { ListExportActions } from "@/components/custom/ListExportActions";
@@ -25,7 +25,7 @@ export interface HistoryTabBaseProps<T extends { time: string }> {
   dateSelector: ReactNode;
   columns: HistoryColumn<T>[];
   filterFields: (setFilter: (key: string, value?: string) => void, filters: Record<string, string>) => ReactNode;
-  fetchRows: (params: { search?: string; sortBy: string; sortOrder: "asc" | "desc"; page: number; perPage: number; filters: Record<string, string> }) => Promise<HistoryPage<T>>;
+  fetchRows: (params: { search?: string; sortBy: string; sortOrder: "asc" | "desc"; page: number; perPage: number; dateFrom?: string; dateTo?: string; filters: Record<string, string> }) => Promise<HistoryPage<T>>;
   mobile: (rows: T[]) => ReactNode;
 }
 export function HistoryTabBase<T extends { time: string }>({ kind, serial, environmentId, dateFrom, dateTo, dateSelector, columns, filterFields, fetchRows, mobile }: HistoryTabBaseProps<T>) {
@@ -37,18 +37,10 @@ export function HistoryTabBase<T extends { time: string }>({ kind, serial, envir
   const search = searchBox.debounced.trim().slice(0, 64) || undefined;
   const resetKey = JSON.stringify([search, filters, sort, dateFrom, dateTo]);
   const { pagination, setPagination } = useResettingPage(resetKey);
-  const hasDates = Boolean(dateFrom || dateTo);
   const query = useQuery({
     queryKey: ["device-history", kind, serial, environmentId, search, filters, sort, dateFrom, dateTo, pagination],
-    queryFn: async () => {
-      if (hasDates) {
-        const all = await fetchAllPages((page, perPage) => fetchRows({ search, ...sort, page, perPage, filters }));
-        const rows = filterHistoryDateRange(all, dateFrom, dateTo);
-        return { items: rows.slice(pagination.pageIndex * pagination.pageSize, (pagination.pageIndex + 1) * pagination.pageSize), total: rows.length, allRows: rows };
-      }
-      const result = await fetchRows({ search, ...sort, page: pagination.pageIndex + 1, perPage: pagination.pageSize, filters });
-      return { items: result.items, total: result.total, allRows: undefined };
-    },
+    queryFn: () => fetchRows({ search, ...sort, dateFrom, dateTo,
+      page: pagination.pageIndex + 1, perPage: pagination.pageSize, filters }),
     placeholderData: keepPreviousData,
   });
   const setFilter = (key: string, value?: string) => setFilters((previous) => {
@@ -57,9 +49,8 @@ export function HistoryTabBase<T extends { time: string }>({ kind, serial, envir
     return next;
   });
   const exportRows = async (format: "excel" | "pdf") => {
-    const rows = query.data?.allRows ?? await fetchAllPages((page, perPage) => fetchRows({ search, ...sort, page, perPage, filters }));
-    const filtered = filterHistoryDateRange(rows, dateFrom, dateTo);
-    await downloadReport(format, { title: kind === "telemetry" ? `Telemetría: ${serial}` : `Operaciones: ${serial}`, filename: `${kind}-${serial}`, generatedBy: getExportGeneratedBy(user), columns: columns.map((column) => column.title), data: filtered.map((row) => columns.map((column) => String(column.value(row)))) });
+    const rows = await fetchAllPages((page, perPage) => fetchRows({ search, ...sort, dateFrom, dateTo, page, perPage, filters }));
+    await downloadReport(format, { title: kind === "telemetry" ? `Telemetría: ${serial}` : `Operaciones: ${serial}`, filename: `${kind}-${serial}`, generatedBy: getExportGeneratedBy(user), columns: columns.map((column) => column.title), data: rows.map((row) => columns.map((column) => String(column.value(row)))) });
   };
   return <div className="space-y-3">
     <ListToolbarLayout search={<ListSearchInput value={searchBox.value} onChange={searchBox.setValue} onClear={searchBox.clear} />} primaryActions={<><ListFiltersTrigger open={filtersPanel.open} onOpenChange={filtersPanel.setOpen} hasActiveFilters={Object.keys(filters).length > 0} />{dateSelector}</>} />

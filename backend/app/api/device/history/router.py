@@ -56,6 +56,8 @@ async def list_history_sensor_readings(
     current_user: User = Depends(get_current_user),
     environment_id: uuid.UUID | None = None,
     search: str | None = Query(None, max_length=64),
+    date_from: date | None = None,
+    date_to: date | None = None,
     temp_min: float | None = None,
     temp_max: float | None = None,
     humidity_min: float | None = None,
@@ -70,6 +72,8 @@ async def list_history_sensor_readings(
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=MAX_PAGE_SIZE),
 ):
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(422, "date_from must not be after date_to")
     service = DeviceHistoryService(session)
     scope = await service.resolve_scope(current_user)
     if not await service.has_history(scope, serial, environment_id):
@@ -78,6 +82,7 @@ async def list_history_sensor_readings(
         search=search, filters=ReadingFilters(temp_min=temp_min, temp_max=temp_max,
         humidity_min=humidity_min, humidity_max=humidity_max, pressure_min=pressure_min,
         pressure_max=pressure_max, has_error=has_error, firmware_version=firmware_version),
+        date_from=date_from, date_to=date_to,
         sort_by=sort_by, sort_order=sort_order, utc_offset_minutes=utc_offset_minutes,
         page=page, per_page=per_page)
 
@@ -91,17 +96,22 @@ async def list_history_operations(
     status: DeviceOperationStatus | None = None,
     operation_type: DeviceOperationType | None = None,
     search: str | None = Query(None, max_length=64),
+    date_from: date | None = None,
+    date_to: date | None = None,
     sort_by: OperationSort = "time",
     sort_order: SortOrder = "desc",
     utc_offset_minutes: int = Query(0, ge=-840, le=840),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=MAX_PAGE_SIZE),
 ):
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise HTTPException(422, "date_from must not be after date_to")
     service = DeviceHistoryService(session)
     scope = await service.resolve_scope(current_user)
     if not await service.has_history(scope, serial, environment_id):
         raise HTTPException(404, "No history for this device")
     return await service.list_operations(scope, serial=serial, environment_id=environment_id,
-        status=status, operation_type=operation_type, search=search, sort_by=sort_by,
+        status=status, operation_type=operation_type, search=search,
+        date_from=date_from, date_to=date_to, sort_by=sort_by,
         sort_order=sort_order, utc_offset_minutes=utc_offset_minutes, page=page,
         per_page=per_page)
