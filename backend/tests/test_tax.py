@@ -22,7 +22,7 @@ def tax_token_fixture(client: TestClient, session: Session):
         password=hash_password("testpassword"),
         is_verified=True,
         permissions=[
-            "tax:read", "tax:create", "tax:update", "tax:delete"
+            "identification_type:read", "identification_type:create", "identification_type:update", "identification_type:delete"
         ],
         first_name="Tax",
         last_name="Admin",
