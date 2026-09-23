@@ -6,6 +6,8 @@ services:
       - 127.0.0.1:${MQTT_LISTENER_TCP:?MQTT_LISTENER_TCP is required}:1883
       - 127.0.0.1:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
       - 127.0.0.1:${MQTT_LISTENER_WS:?MQTT_LISTENER_WS is required}:8083
+      # Dashboard/management API, loopback only; 18083 on the host is often taken by other stacks.
+      - 127.0.0.1:${EMQX_DASHBOARD_PORT:-28183}:18083
     env_file:
       - .env
     volumes:

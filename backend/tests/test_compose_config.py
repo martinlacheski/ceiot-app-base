@@ -176,12 +176,12 @@ class ComposeConfigTest(unittest.TestCase):
             self.assertEqual(port["host_ip"], "127.0.0.1")
             self.assertEqual(str(port["published"]), published)
 
-        mqtt_ports = {1883: "11884", 8883: "18884", 8083: "18084"}
+        mqtt_ports = {1883: "11884", 8883: "18884", 8083: "18084", 18083: "28183"}
         for target, published in mqtt_ports.items():
             port = self.published_port(services["emqx"], target)
             self.assertEqual(port["host_ip"], "127.0.0.1")
             self.assertEqual(str(port["published"]), published)
-        self.assertEqual(len(services["emqx"]["ports"]), 3)
+        self.assertEqual(len(services["emqx"]["ports"]), 4)
 
     def test_database_urls_always_target_internal_dns_and_backend_waits_for_health(self):
         config = self.render_config()
