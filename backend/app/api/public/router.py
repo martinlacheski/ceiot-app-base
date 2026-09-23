@@ -14,16 +14,15 @@ from collections import deque
 from collections.abc import Iterable
 from threading import Lock
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 
 from app.api.device.models import Device, DeviceStatus
 from app.api.environment.environment.models import Environment
 from app.api.location.models import LocationCity, LocationState
-from app.core.db import get_async_session
+from app.core.dependencies import SystemAsyncDBSession
 from app.core.email import EmailService
 
 router = APIRouter()
@@ -66,16 +65,6 @@ contact_rate_limiter = PublicContactRateLimiter(limit=5, window_seconds=600)
 # ---------------------------------------------------------------------------
 # Response schema — minimal, no sensitive fields
 # ---------------------------------------------------------------------------
-
-
-class PublicDeviceResponse(BaseModel):
-    """Minimal device info safe to expose publicly."""
-
-    id: str
-    name: str
-    lat: float
-    lng: float
-    status: str  # "online", "offline", "alert"
 
 
 class PublicContactRequest(BaseModel):
@@ -159,13 +148,10 @@ def _parse_location(location: str) -> tuple[float, float] | None:
     return None
 
 
-def _device_status_to_public(status: DeviceStatus) -> str:
-    """Map internal DeviceStatus to public-facing status string."""
-    if status == DeviceStatus.ACTIVE:
-        return "online"
-    if status == DeviceStatus.MAINTENANCE:
-        return "alert"
-    return "offline"
+_PUBLIC_MAP_COUNTED_STATUSES = frozenset(
+    {DeviceStatus.PAIRED, DeviceStatus.ACTIVE, DeviceStatus.MAINTENANCE}
+)
+PUBLIC_MAP_LOCATIONS_CACHE_CONTROL = "public, max-age=60"
 
 
 def _build_public_map_location(
@@ -198,11 +184,14 @@ def _build_public_map_locations(devices: Iterable[Device]) -> list[PublicMapLoca
         if (
             not environment
             or not environment.is_active
-            or not environment.is_public_map_visible
             or not environment.location
         ):
             continue
-        if not device.enabled or device.status != DeviceStatus.ACTIVE:
+        if (
+            not device.enabled
+            or not device.is_active
+            or device.status not in _PUBLIC_MAP_COUNTED_STATUSES
+        ):
             continue
 
         coords = _parse_location(environment.location)
@@ -238,60 +227,6 @@ def _get_public_request_ip(request: Request) -> str:
 
 
 @router.get(
-    "/map/devices",
-    response_model=list[PublicDeviceResponse],
-    tags=["public"],
-    summary="Public device map data",
-    description=(
-        "Public endpoint — no authentication required. "
-        "Returns minimal device location data for public map display. "
-        "Only devices paired to an environment with parseable coordinates are included."
-    ),
-)
-async def get_public_devices(
-    session: AsyncSession = Depends(get_async_session),
-) -> list[PublicDeviceResponse]:
-    """
-    Public endpoint — no authentication required.
-    Returns minimal device location data for public map display.
-    """
-    # Fetch all active, paired devices together with their environment
-    statement = (
-        select(Device)
-        .options(selectinload(Device.environment))
-        .where(
-            col(Device.is_active).is_(True),
-            col(Device.environment_id).is_not(None),
-        )
-    )
-    result = await session.exec(statement)
-    devices = result.all()
-
-    public_devices: list[PublicDeviceResponse] = []
-    for device in devices:
-        env: Environment | None = device.environment
-        if not env or not env.location:
-            continue
-
-        coords = _parse_location(env.location)
-        if coords is None:
-            continue
-
-        lat, lng = coords
-        public_devices.append(
-            PublicDeviceResponse(
-                id=str(device.id),
-                name=device.name,
-                lat=lat,
-                lng=lng,
-                status=_device_status_to_public(device.status),
-            )
-        )
-
-    return public_devices
-
-
-@router.get(
     "/map/locations",
     response_model=list[PublicMapLocationResponse],
     tags=["public"],
@@ -299,11 +234,14 @@ async def get_public_devices(
     description=(
         "Public endpoint — no authentication required. "
         "Returns a sanitized establishment/location projection for the landing map. "
-        "Only explicitly public, active environments with at least one active, enabled device and parseable coordinates are included."
+        "Every active environment with at least one enabled, active device in paired, "
+        "active, or maintenance status and parseable coordinates is included. "
+        "Online/offline presence is not exposed or considered."
     ),
 )
 async def get_public_map_locations(
-    session: AsyncSession = Depends(get_async_session),
+    response: Response,
+    session: SystemAsyncDBSession,
 ) -> list[PublicMapLocationResponse]:
     statement = (
         select(Device)
@@ -321,6 +259,7 @@ async def get_public_map_locations(
     result = await session.exec(statement)
     devices = result.all()
 
+    response.headers["Cache-Control"] = PUBLIC_MAP_LOCATIONS_CACHE_CONTROL
     return _build_public_map_locations(devices)
 
 

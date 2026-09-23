@@ -251,15 +251,16 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
         city=city,
         type_id=TEST_ENVIRONMENT_TYPE_ID,
         is_active=True,
-        is_public_map_visible=True,
+        is_public_map_visible=False,
     )
     active_device_one = Device(
         serial="SERIAL-001",
         name="Device 1",
         environment=environment,
-        status=DeviceStatus.ACTIVE,
+        status=DeviceStatus.PAIRED,
         is_active=True,
         enabled=True,
+        broker_connected=False,
     )
     active_device_two = Device(
         serial="SERIAL-002",
@@ -268,6 +269,16 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
         status=DeviceStatus.ACTIVE,
         is_active=True,
         enabled=True,
+        broker_connected=False,
+    )
+    maintenance_device = Device(
+        serial="SERIAL-003",
+        name="Device 3",
+        environment=environment,
+        status=DeviceStatus.MAINTENANCE,
+        is_active=True,
+        enabled=True,
+        broker_connected=True,
     )
 
     session.add(country)
@@ -276,6 +287,7 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
     session.add(environment)
     session.add(active_device_one)
     session.add(active_device_two)
+    session.add(maintenance_device)
     session.commit()
 
     response = client.get("/api/public/map/locations")
@@ -289,9 +301,18 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
             "country": "Argentina",
             "latitude": -31.2503,
             "longitude": -61.4867,
-            "activeDeviceCount": 2,
+            "activeDeviceCount": 3,
         }
     ]
+    assert set(response.json()[0]) == {
+        "displayName",
+        "latitude",
+        "longitude",
+        "city",
+        "state",
+        "country",
+        "activeDeviceCount",
+    }
     assert {"id", "serial", "ownerId", "status", "lat", "lng", "name"}.isdisjoint(
         response.json()[0].keys()
     )
@@ -358,6 +379,7 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
             status=DeviceStatus.ACTIVE,
             is_active=True,
             enabled=True,
+            broker_connected=False,
         )
     )
     session.add(
@@ -368,6 +390,7 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
             status=DeviceStatus.MAINTENANCE,
             is_active=True,
             enabled=True,
+            broker_connected=True,
         )
     )
     session.add(
@@ -378,6 +401,36 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
             status=DeviceStatus.ACTIVE,
             is_active=True,
             enabled=False,
+        )
+    )
+    session.add(
+        Device(
+            serial="VISIBLE-INACTIVE",
+            name="Visible inactive",
+            environment=visible_environment,
+            status=DeviceStatus.ACTIVE,
+            is_active=False,
+            enabled=True,
+        )
+    )
+    session.add(
+        Device(
+            serial="VISIBLE-NEW",
+            name="Visible new",
+            environment=visible_environment,
+            status=DeviceStatus.NEW,
+            is_active=True,
+            enabled=True,
+        )
+    )
+    session.add(
+        Device(
+            serial="VISIBLE-UNPAIRED",
+            name="Visible unpaired",
+            environment=visible_environment,
+            status=DeviceStatus.UNPAIRED,
+            is_active=True,
+            enabled=True,
         )
     )
     session.add(
@@ -417,56 +470,37 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
     assert response.status_code == 200
     assert response.json() == [
         {
+            "displayName": "Hidden Store",
+            "city": "Cordoba",
+            "state": "Cordoba",
+            "country": "Argentina",
+            "latitude": -31.41,
+            "longitude": -64.18,
+            "activeDeviceCount": 1,
+        },
+        {
             "displayName": "Visible Store",
             "city": "Cordoba",
             "state": "Cordoba",
             "country": "Argentina",
             "latitude": -31.4167,
             "longitude": -64.1833,
-            "activeDeviceCount": 1,
+            "activeDeviceCount": 2,
         }
     ]
 
 
-def test_public_map_devices_keeps_legacy_projection_compatibility(client: TestClient, session):
-    country = LocationCountry(name="Argentina")
-    state = LocationState(name="Santa Fe", country=country)
-    city = LocationCity(name="Rafaela", postal_code="2300", state=state)
-    environment = Environment(
-        name="Legacy Compatible Store",
-        address="Compat 123",
-        location="-31.2503,-61.4867",
-        description="Legacy public devices coverage",
-        city=city,
-        type_id=TEST_ENVIRONMENT_TYPE_ID,
-        is_active=True,
-        is_public_map_visible=False,
-    )
-    device = Device(
-        serial="LEGACY-001",
-        name="Legacy Device",
-        environment=environment,
-        status=DeviceStatus.ACTIVE,
-        is_active=True,
-        enabled=True,
-    )
-
-    session.add(country)
-    session.add(state)
-    session.add(city)
-    session.add(environment)
-    session.add(device)
-    session.commit()
-
+def test_legacy_public_map_devices_endpoint_is_removed(client: TestClient):
     response = client.get("/api/public/map/devices")
 
+    assert response.status_code == 404
+    paths = client.get("/api/openapi.json").json()["paths"]
+    assert "/api/public/map/devices" not in paths
+    assert "/api/public/map/locations" in paths
+
+
+def test_public_map_locations_sets_short_public_cache_header(client: TestClient):
+    response = client.get("/api/public/map/locations")
+
     assert response.status_code == 200
-    assert response.json() == [
-        {
-            "id": str(device.id),
-            "name": "Legacy Device",
-            "lat": -31.2503,
-            "lng": -61.4867,
-            "status": "online",
-        }
-    ]
+    assert response.headers["cache-control"] == "public, max-age=60"
