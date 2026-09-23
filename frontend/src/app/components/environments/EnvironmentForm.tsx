@@ -758,7 +758,7 @@ function EnvironmentFormContent({
           </div>
 
           {/* Right Column: Map */}
-          <div className="relative isolate h-[560px] w-full overflow-hidden rounded-lg border xl:h-auto xl:min-h-[44rem] xl:min-w-0">
+          <div data-testid="environment-map-container" className="relative isolate h-[560px] w-full overflow-hidden rounded-lg border xl:h-auto xl:min-h-[24rem] xl:min-w-0">
             <Map
               style={{ width: "100%", height: "100%" }}
               defaultCenter={{ lat: -38.416097, lng: -63.616672 }}

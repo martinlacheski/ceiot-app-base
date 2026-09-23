@@ -344,6 +344,14 @@ describe("EnvironmentForm", () => {
     });
   });
 
+  it("does not force the map to the former 44rem minimum height", () => {
+    render(<EnvironmentForm onSubmit={vi.fn()} />);
+
+    const mapContainer = screen.getByTestId("environment-map-container");
+    expect(mapContainer.className).toContain("xl:min-h-[24rem]");
+    expect(mapContainer.className).not.toContain("xl:min-h-[44rem]");
+  });
+
   it("does not render Mercado Pago location, status, or retry affordances", () => {
     render(<EnvironmentForm onSubmit={vi.fn()} />);
 
