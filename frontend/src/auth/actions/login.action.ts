@@ -1,5 +1,6 @@
 import { appApi } from "@/api/appApi";
 import type { AuthResponse } from "../interfaces/auth.response";
+import { withFullName } from "./session-user";
 
 export const loginAction = async (
   username: string,
@@ -15,17 +16,6 @@ export const loginAction = async (
   return {
     ...data,
     token: data.access_token,
-    user: {
-      ...data.user,
-      firstName: data.first_name,
-      lastName: data.last_name,
-      fullName:
-        data.first_name && data.last_name
-          ? `${data.first_name} ${data.last_name}`
-          : undefined,
-      identificationNumber: data.identification_number,
-      birthDate: data.birth_date,
-      phone: data.phone,
-    },
+    user: withFullName(data.user),
   };
 };

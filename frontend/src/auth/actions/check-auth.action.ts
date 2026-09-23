@@ -1,6 +1,7 @@
 import { appApi } from "@/api/appApi";
 import { jwtDecode } from "jwt-decode";
 import type { AuthResponse } from "../interfaces/auth.response";
+import { withFullName } from "./session-user";
 
 export const checkAuthAction = async (): Promise<AuthResponse> => {
   const token = localStorage.getItem("token");
@@ -24,18 +25,7 @@ export const checkAuthAction = async (): Promise<AuthResponse> => {
     return {
       ...data,
       token: data.access_token,
-      user: {
-        ...data.user,
-        firstName: data.first_name,
-        lastName: data.last_name,
-        fullName:
-          data.first_name && data.last_name
-            ? `${data.first_name} ${data.last_name}`
-            : undefined,
-        identificationNumber: data.identification_number,
-        birthDate: data.birth_date,
-        phone: data.phone,
-      },
+      user: withFullName(data.user),
     };
   } catch {
     localStorage.removeItem("token");

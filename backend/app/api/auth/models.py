@@ -158,12 +158,6 @@ class LoginResponse(SQLModel):
     access_token: str
     token_type: str = "bearer"
     expires_at: datetime
-    # Flattened fields for legacy compatibility if needed, or can be removed if frontend primarily uses 'user' object
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    identification_number: Optional[str] = None
-    birth_date: Optional[date] = None
-    phone: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):

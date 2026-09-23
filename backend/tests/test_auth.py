@@ -11,7 +11,7 @@ def test_register(client: TestClient, token: str):
         json={
             "email": "new@example.com",
             "username": "newuser",
-            "password": "newpassword",
+            "password": "NewPassword123",
             "is_admin": False,
             "first_name": "New",
             "last_name": "User",
@@ -39,10 +39,10 @@ def test_login(client: TestClient, test_user: User):
     data = response.json()
     assert "access_token" in data
     assert data["token_type"] == "bearer"
-    assert "first_name" in data
-    assert "last_name" in data
-    assert data["first_name"] == "Test"
-    assert data["last_name"] == "User"
+    # Identity lives only in the nested user; no flattened legacy fields.
+    assert "first_name" not in data
+    assert data["user"]["firstName"] == "Test"
+    assert data["user"]["lastName"] == "User"
 
 
 def test_get_all_users(client: TestClient, token: str):
@@ -71,7 +71,7 @@ def test_update_user(client: TestClient, token: str, test_user: User):
     assert data["email"] == "test@example.com"
     assert data["address"] == "Av. Siempre Viva 742"
     assert "defaultDvemCommissionRate" not in data
-    assert data["updated_at"] is not None
+    assert data["updatedAt"] is not None
 
 
 def test_delete_user(client: TestClient, token: str, test_user: User):
@@ -88,7 +88,7 @@ def test_delete_user(client: TestClient, token: str, test_user: User):
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["is_active"] is False
+    assert data["isActive"] is False
 
 
 def test_change_password(client: TestClient, token: str, test_user: User):
@@ -245,7 +245,7 @@ def test_register_reactivation(client: TestClient, token: str):
         json={
             "email": email,
             "username": username,
-            "password": "password",
+            "password": "Password123",
             "is_admin": False,
             "first_name": "Reactivate",
             "last_name": "User",
@@ -274,7 +274,7 @@ def test_register_reactivation(client: TestClient, token: str):
         json={
             "email": email,
             "username": username,
-            "password": "newpassword",
+            "password": "NewPassword123",
             "is_admin": False,
             "first_name": "Reactivate",
             "last_name": "User",
