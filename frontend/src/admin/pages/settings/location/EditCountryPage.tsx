@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/custom/BackButton";
 import {
   CountryForm,
   type CountryFormValues,
@@ -5,7 +6,6 @@ import {
 import { useUpdateCountry, useCountry } from "@/admin/hooks/useLocations";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -63,11 +63,7 @@ export default function EditCountryPage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/locations/countries">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/locations/countries" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Editar País</h1>
           <p className="text-muted-foreground">

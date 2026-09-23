@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/custom/BackButton";
 import {
   StateForm,
   type StateFormValues,
@@ -6,7 +7,6 @@ import { useLocationState, useUpdateState } from "@/admin/hooks/useLocations";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -57,11 +57,7 @@ export default function EditStatePage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/locations/states">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/locations/states" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Editar Provincia

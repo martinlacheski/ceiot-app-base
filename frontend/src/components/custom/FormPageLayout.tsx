@@ -1,5 +1,4 @@
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/custom/BackButton";
 import { useNavigate } from "react-router";
 import type { ReactNode } from "react";
 
@@ -35,17 +34,7 @@ export function FormPageLayout({
   return (
     <div className="flex h-full w-full min-w-0 max-w-full flex-col gap-4">
       <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
-        {!hideBackButton && (
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleBack}
-            className="shrink-0"
-            aria-label="Volver"
-          >
-            <ArrowLeft />
-          </Button>
-        )}
+        {!hideBackButton && <BackButton onClick={handleBack} />}
         <div className="min-w-0">
           <h2 className="text-xl font-bold tracking-tight break-words lg:text-2xl xl:text-3xl">{title}</h2>
           <p className="text-muted-foreground">{subtitle}</p>

@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/custom/BackButton";
 import {
   UserForm,
   type UserFormValues,
@@ -5,7 +6,6 @@ import {
 import { useUpdateUser, useUser } from "@/admin/hooks/useUsers";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -70,11 +70,7 @@ export default function EditUserPage() {
   return (
     <div className="flex h-full w-full min-w-0 max-w-8xl flex-col gap-4 overflow-x-clip">
       <div className="flex min-w-0 items-start gap-3 sm:gap-4">
-        <Button variant="outline" size="icon" className="size-11 shrink-0" asChild>
-          <Link to="/admin/users">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/users" />
         <div className="min-w-0">
           <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Editar Usuario</h1>
           <p className="text-muted-foreground">

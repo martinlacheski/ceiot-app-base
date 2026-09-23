@@ -1,12 +1,11 @@
+import { BackButton } from "@/components/custom/BackButton";
 import {
   CountryForm,
   type CountryFormValues,
 } from "@/admin/components/settings/location/CountryForm";
 import { useCreateCountry, useUpdateCountry } from "@/admin/hooks/useLocations";
-import { Button } from "@/components/ui/button";
 import { showConfirmDialog } from "@/store/confirm.store";
-import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 export default function CreateCountryPage() {
@@ -48,11 +47,7 @@ export default function CreateCountryPage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/locations/countries">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/locations/countries" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Crear País</h1>
           <p className="text-muted-foreground">

@@ -1,17 +1,11 @@
+import { BackButton } from "@/components/custom/BackButton";
 import { IdentificationTypeForm } from "@/admin/components/settings/identification/IdentificationTypeForm";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import { Link } from "react-router";
 
 export function CreateIdentificationTypePage() {
   return (
     <div className="space-y-6">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/identification-types">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/identification-types" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Nuevo Tipo de Documento

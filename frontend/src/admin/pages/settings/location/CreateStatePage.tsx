@@ -1,13 +1,12 @@
+import { BackButton } from "@/components/custom/BackButton";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   StateForm,
   type StateFormValues,
 } from "@/admin/components/settings/location/StateForm";
 import { useCreateState, useUpdateState } from "@/admin/hooks/useLocations";
-import { Button } from "@/components/ui/button";
 import { showConfirmDialog } from "@/store/confirm.store";
-import { ArrowLeft } from "lucide-react";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 
 export default function CreateStatePage() {
@@ -47,11 +46,7 @@ export default function CreateStatePage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/locations/states">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/locations/states" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Crear Provincia</h1>
           <p className="text-muted-foreground">

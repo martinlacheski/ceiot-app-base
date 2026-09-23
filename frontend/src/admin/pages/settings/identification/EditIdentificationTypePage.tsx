@@ -1,6 +1,6 @@
-import { useParams, Link } from "react-router";
-import { Loader2, ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BackButton } from "@/components/custom/BackButton";
+import { useParams } from "react-router";
+import { Loader2 } from "lucide-react";
 
 import { IdentificationTypeForm } from "@/admin/components/settings/identification/IdentificationTypeForm";
 import { useIdentificationType } from "@/admin/hooks/useIdentification";
@@ -24,11 +24,7 @@ export function EditIdentificationTypePage() {
   return (
     <div className="space-y-6">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/identification-types">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/identification-types" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">
             Editar Tipo de Documento

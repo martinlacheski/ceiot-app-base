@@ -1,7 +1,7 @@
+import { BackButton } from "@/components/custom/BackButton";
 import { useNavigate, useParams } from "react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -354,14 +354,7 @@ export function CreateEnvironmentPage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <div
-            onClick={() => navigate("/app/environments")}
-            className="cursor-pointer"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </div>
-        </Button>
+        <BackButton onClick={() => navigate("/app/environments")} />
         <div>
           <h2 className="text-2xl font-bold tracking-tight">
             {isEditMode ? "Editar Establecimiento" : "Nuevo Establecimiento"}

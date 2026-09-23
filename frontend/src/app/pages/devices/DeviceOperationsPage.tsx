@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/custom/BackButton";
 import { useEffect, useMemo } from "react";
 import {
   type ColumnDef,
@@ -14,11 +15,10 @@ import {
   useLocation,
   useSearchParams,
 } from "react-router";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { format, isValid, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
-import { Button } from "@/components/ui/button";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
@@ -324,15 +324,7 @@ export default function DeviceOperationsPage() {
   if (!device) {
     return (
       <div className="flex gap-4">
-        <Button
-          variant="outline"
-          size="icon"
-          className="min-h-11 min-w-11"
-          onClick={() => navigate(backTo)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="sr-only">Volver</span>
-        </Button>
+        <BackButton onClick={() => navigate(backTo)} />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Error</h1>
           <p className="text-muted-foreground">Dispositivo no encontrado</p>
@@ -353,15 +345,7 @@ export default function DeviceOperationsPage() {
   return (
     <div className="space-y-4">
       <div className="flex gap-4 sm:flex-row">
-        <Button
-          variant="outline"
-          size="icon"
-          className="min-h-11 min-w-11"
-          onClick={() => navigate(backTo)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          <span className="sr-only">Volver</span>
-        </Button>
+        <BackButton onClick={() => navigate(backTo)} />
         <div>
           <h2 className="text-2xl font-bold tracking-tight">
             Operaciones: {device.name}

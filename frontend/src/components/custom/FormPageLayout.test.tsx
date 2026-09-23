@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 
@@ -19,12 +19,15 @@ const renderLayout = (hideBackButton?: boolean) =>
 
 describe("FormPageLayout", () => {
   it("muestra la flecha de volver por defecto", () => {
-    const { container } = renderLayout();
-    expect(container.querySelector("button svg.lucide-arrow-left")).toBeInTheDocument();
+    renderLayout();
+    const back = screen.getByRole("button", { name: "Volver" });
+    expect(back).toHaveClass("size-11");
+    expect(back.textContent).toBe("");
+    expect(back.querySelector("svg.lucide-arrow-left")).toBeInTheDocument();
   });
 
   it("oculta la flecha en una pantalla raíz del sidebar", () => {
-    const { container } = renderLayout(true);
-    expect(container.querySelector("button svg.lucide-arrow-left")).not.toBeInTheDocument();
+    renderLayout(true);
+    expect(screen.queryByRole("button", { name: "Volver" })).not.toBeInTheDocument();
   });
 });

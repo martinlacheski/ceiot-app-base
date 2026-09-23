@@ -1,3 +1,4 @@
+import { BackButton } from "@/components/custom/BackButton";
 import {
   CityForm,
   type CityFormValues,
@@ -6,7 +7,6 @@ import { useLocationCity, useUpdateCity } from "@/admin/hooks/useLocations";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 
@@ -65,11 +65,7 @@ export default function EditCityPage() {
   return (
     <div className="space-y-4 h-full flex flex-col max-w-8xl">
       <div className="flex gap-4 sm:flex-row">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/admin/locations/cities">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton to="/admin/locations/cities" />
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Editar Ciudad</h1>
           <p className="text-muted-foreground">
