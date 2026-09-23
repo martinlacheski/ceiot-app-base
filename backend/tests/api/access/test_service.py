@@ -188,11 +188,8 @@ async def test_service_resolves_effective_guest_access_as_read_only(
             guest_user_id=seed["guest"].id,
             scope_type=ScopeType.ENVIRONMENT,
             scope_id=seed["environment"].id,
-            commission_rate=Decimal("0.1100"),
         )
     )
-    seed["environment"].dvem_commission_rate = Decimal("0.0700")
-    session.add(seed["environment"])
     session.commit()
 
     service = GuestAccessService(GuestAccessRepository(async_session))
@@ -292,7 +289,6 @@ async def test_service_accepts_device_email_invitation_after_user_registration(
 
     assert result["message"] == "Invitación aceptada correctamente"
     assert relation is not None
-    assert relation.commission_rate == Decimal("0")
     assert persisted_invitation is not None
     assert persisted_invitation.status == InvitationStatus.ACCEPTED
 
@@ -442,7 +438,6 @@ async def test_service_owner_can_update_pending_guest_invitation(
     )
 
     assert updated.id == invitation.id
-    assert updated.commission_rate == Decimal("0")
     assert updated.access_starts_at == utc_start_of_day(selected_date)
     assert updated.status == InvitationStatus.PENDING
     assert updated.is_active is True

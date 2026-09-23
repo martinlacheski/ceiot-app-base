@@ -1,5 +1,3 @@
-from decimal import Decimal
-
 import pytest
 from sqlmodel import select
 
@@ -83,7 +81,6 @@ async def test_accept_invitation_creates_scoped_guest_relation_and_not_environme
 
     assert result["message"] == "Invitación aceptada correctamente"
     assert relation is not None
-    assert relation.commission_rate == Decimal("0")
     assert membership is None
 
 

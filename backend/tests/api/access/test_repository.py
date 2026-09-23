@@ -126,7 +126,7 @@ async def test_repository_lists_environment_and_device_guests_as_additive_merge(
 
 
 @pytest.mark.asyncio
-async def test_repository_returns_device_override_for_same_guest(
+async def test_repository_returns_scope_specific_relations_for_same_guest(
     session, async_session
 ):
     seed = seed_scope_graph(session)
@@ -136,7 +136,6 @@ async def test_repository_returns_device_override_for_same_guest(
             guest_user_id=seed["guest_env"].id,
             scope_type=ScopeType.ENVIRONMENT,
             scope_id=seed["environment"].id,
-            commission_rate=Decimal("0.1000"),
         )
     )
     session.add(
@@ -145,7 +144,6 @@ async def test_repository_returns_device_override_for_same_guest(
             guest_user_id=seed["guest_env"].id,
             scope_type=ScopeType.DEVICE,
             scope_id=seed["device"].id,
-            commission_rate=Decimal("0.1800"),
         )
     )
     session.commit()
@@ -164,9 +162,12 @@ async def test_repository_returns_device_override_for_same_guest(
 
     assert env_relation is not None
     assert device_relation is not None
-    assert env_relation.commission_rate == Decimal("0.1000")
-    assert device_relation.commission_rate == Decimal("0.1800")
-
+    assert env_relation.guest_user_id == seed["guest_env"].id
+    assert device_relation.guest_user_id == seed["guest_env"].id
+    assert env_relation.scope_type == ScopeType.ENVIRONMENT
+    assert device_relation.scope_type == ScopeType.DEVICE
+    assert env_relation.scope_id == seed["environment"].id
+    assert device_relation.scope_id == seed["device"].id
 
 
 def test_repository_enforces_unique_active_guest_relation_per_scope(session):
@@ -225,17 +226,8 @@ def test_repository_allows_inactive_guest_relation_history_when_scope_matches(se
     assert len(relations) == 2
 
 
-def test_commission_values_are_stored_on_environment_and_device(session):
-    seed = seed_scope_graph(session)
-    seed["environment"].dvem_commission_rate = Decimal("0.0500")
-    seed["environment"].guest_commission_rate = Decimal("0.3000")
-    seed["device"].dvem_commission_rate = Decimal("0.0800")
-    seed["device"].guest_commission_rate = Decimal("0.2500")
-    session.add(seed["environment"])
-    session.add(seed["device"])
-    session.commit()
+def test_environment_and_device_models_omit_commission_columns():
+    removed_columns = {"dvem_commission_rate", "guest_commission_rate"}
 
-    assert seed["environment"].dvem_commission_rate == Decimal("0.0500")
-    assert seed["environment"].guest_commission_rate == Decimal("0.3000")
-    assert seed["device"].dvem_commission_rate == Decimal("0.0800")
-    assert seed["device"].guest_commission_rate == Decimal("0.2500")
+    assert removed_columns.isdisjoint(Environment.__table__.columns.keys())
+    assert removed_columns.isdisjoint(Device.__table__.columns.keys())

@@ -280,7 +280,6 @@ def test_update_environment_scoped_invitation_preserves_access_start_when_omitte
         email="pending-update@example.com",
         scope_type=ScopeType.ENVIRONMENT,
         scope_id=seed["environment"].id,
-        commission_rate=Decimal("0.1200"),
         access_starts_at=original_access_start,
     )
     session.add(invitation)
@@ -290,17 +289,14 @@ def test_update_environment_scoped_invitation_preserves_access_start_when_omitte
     response = client.patch(
         f"/api/access/scopes/{ScopeType.ENVIRONMENT.value}/{seed['environment'].id}/guest-invitations/{invitation.id}",
         headers={"Authorization": f"Bearer {token}"},
-        json={"commissionRate": "0.1800"},
+        json={},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] == str(invitation.id)
     assert payload["scopeType"] == ScopeType.ENVIRONMENT.value
-    assert "commissionRate" not in payload
     assert payload["accessStartsAt"] == "2026-05-27T14:35:00"
-    session.refresh(invitation)
-    assert invitation.commission_rate == Decimal("0.1200")
 
 
 def test_update_environment_scoped_invitation_allows_explicit_null_to_reset_access_start(
@@ -350,7 +346,6 @@ def test_update_environment_scoped_invitation_ignores_obsolete_commission_field(
         email="pending-invalid-commission@example.com",
         scope_type=ScopeType.ENVIRONMENT,
         scope_id=seed["environment"].id,
-        commission_rate=Decimal("0.1200"),
     )
     session.add(invitation)
     session.commit()
@@ -364,8 +359,7 @@ def test_update_environment_scoped_invitation_ignores_obsolete_commission_field(
 
     assert response.status_code == 200
     assert "commissionRate" not in response.json()
-    session.refresh(invitation)
-    assert invitation.commission_rate == Decimal("0.1200")
+    assert not hasattr(invitation, "commission_rate")
 
 
 def test_update_device_scoped_invitation_uses_device_route_contract(
@@ -378,7 +372,6 @@ def test_update_device_scoped_invitation_uses_device_route_contract(
         email="pending-device-update@example.com",
         scope_type=ScopeType.DEVICE,
         scope_id=seed["device"].id,
-        commission_rate=Decimal("0.1200"),
         access_starts_at=datetime(2026, 5, 27, 14, 35, 0),
     )
     session.add(invitation)
@@ -389,17 +382,13 @@ def test_update_device_scoped_invitation_uses_device_route_contract(
         f"/api/devices/{seed['device'].id}/guest-invitations/{invitation.id}",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "commissionRate": "0.1900",
             "accessStartsAt": datetime(2026, 6, 1, 9, 15, 0).isoformat(),
         },
     )
 
     assert response.status_code == 200
     assert response.json()["scopeType"] == ScopeType.DEVICE.value
-    assert "commissionRate" not in response.json()
     assert response.json()["accessStartsAt"] == "2026-06-01T09:15:00"
-    session.refresh(invitation)
-    assert invitation.commission_rate == Decimal("0.1200")
 
 
 def test_update_scoped_invitation_returns_404_for_wrong_scope(

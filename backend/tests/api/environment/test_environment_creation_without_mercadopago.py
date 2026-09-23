@@ -86,7 +86,7 @@ def test_public_environment_dtos_ignore_legacy_mp_input(dto, values):
     assert "futureProviderField" not in serialized
 
 
-def test_environment_orm_keeps_legacy_columns_defaults_and_non_eager_relationships():
+def test_environment_orm_omits_legacy_mp_columns_and_relationships():
     legacy_columns = {
         "mp_country_id",
         "mp_state_id",
@@ -95,20 +95,10 @@ def test_environment_orm_keeps_legacy_columns_defaults_and_non_eager_relationshi
         "mp_store_last_error",
         "mp_store_synced_at",
     }
-    assert legacy_columns.issubset(Environment.__table__.columns.keys())
-
-    environment = Environment(**normal_environment_values())
-    assert environment.mp_country_id is None
-    assert environment.mp_state_id is None
-    assert environment.mp_city_id is None
-    assert environment.mp_store_status == "pending"
-    assert environment.mp_store_last_error is None
-    assert environment.mp_store_synced_at is None
-
-    relationships = Environment.__mapper__.relationships
-    for relationship_name in ("mp_country", "mp_state", "mp_city"):
-        if relationship_name in relationships:
-            assert relationships[relationship_name].lazy not in {"joined", "selectin"}
+    assert legacy_columns.isdisjoint(Environment.__table__.columns.keys())
+    assert {"mp_country", "mp_state", "mp_city"}.isdisjoint(
+        Environment.__mapper__.relationships.keys()
+    )
 
 
 class LegacyReadRow:

@@ -58,6 +58,10 @@ ALEMBIC_DATABASE_URL=postgresql+psycopg://wrong:wrong@wrong-host:9999/wrong
 }
 
 
+@unittest.skipUnless(
+    (REPO_ROOT / "docker-compose.yml").is_file() and shutil.which("docker"),
+    "Needs the repository root docker-compose.yml and the docker CLI; run on the host.",
+)
 class ComposeConfigTest(unittest.TestCase):
     maxDiff = None
 

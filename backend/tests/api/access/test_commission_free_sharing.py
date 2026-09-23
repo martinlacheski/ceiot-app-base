@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
@@ -58,13 +57,6 @@ def invitation_item_path(seed, scope_type: ScopeType, invitation_id) -> str:
     return f"{invitation_collection_path(seed, scope_type)}/{invitation_id}"
 
 
-def configure_nonzero_guest_rate(session: Session, seed, scope_type: ScopeType) -> None:
-    scope = seed["environment"] if scope_type == ScopeType.ENVIRONMENT else seed["device"]
-    scope.guest_commission_rate = Decimal("0.4321")
-    session.add(scope)
-    session.commit()
-
-
 @pytest.mark.parametrize(
     "schema,payload",
     [
@@ -94,18 +86,17 @@ def test_public_read_schemas_do_not_declare_financial_fields(schema):
 
 
 @pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
-def test_relation_create_is_access_only_and_uses_inert_zero_storage(
+def test_relation_create_is_access_only(
     client: TestClient,
     session: Session,
     scope_type: ScopeType,
 ):
     seed = seed_router_graph(session)
-    configure_nonzero_guest_rate(session, seed, scope_type)
 
     response = client.post(
         relation_collection_path(seed, scope_type),
         headers={"Authorization": f"Bearer {make_token(seed['owner'].id)}"},
-        json={"guestUserId": str(seed["guest"].id), "commissionRate": "0.9876"},
+        json={"guestUserId": str(seed["guest"].id)},
     )
 
     assert response.status_code == 201
@@ -117,36 +108,32 @@ def test_relation_create_is_access_only_and_uses_inert_zero_storage(
             ScopedGuestRelation.guest_user_id == seed["guest"].id,
         )
     ).one()
-    assert relation.commission_rate == Decimal("0")
+    assert relation.scope_type == scope_type
 
 
 @pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
-def test_invitation_create_is_access_only_and_uses_inert_zero_storage(
+def test_invitation_create_is_access_only(
     client: TestClient,
     session: Session,
     scope_type: ScopeType,
 ):
     seed = seed_router_graph(session)
-    configure_nonzero_guest_rate(session, seed, scope_type)
 
     response = client.post(
         invitation_collection_path(seed, scope_type),
         headers={"Authorization": f"Bearer {make_token(seed['owner'].id)}"},
-        json={
-            "email": f"new-{scope_type.value}@example.com",
-            "commission_rate": "0.9876",
-        },
+        json={"email": f"new-{scope_type.value}@example.com"},
     )
 
     assert response.status_code == 201
     assert "commissionRate" not in response.json()
     invitation = session.get(ScopedGuestInvitation, uuid.UUID(response.json()["id"]))
     assert invitation is not None
-    assert invitation.commission_rate == Decimal("0")
+    assert invitation.scope_type == scope_type
 
 
 @pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
-def test_date_only_updates_preserve_historical_financial_metadata(
+def test_date_only_updates_change_access_dates(
     client: TestClient,
     session: Session,
     scope_type: ScopeType,
@@ -159,7 +146,6 @@ def test_date_only_updates_preserve_historical_financial_metadata(
         guest_user_id=seed["guest"].id,
         scope_type=scope_type,
         scope_id=scope_id_for(seed, scope_type),
-        commission_rate=Decimal("0.1234"),
         access_starts_at=original_date,
     )
     invitation = ScopedGuestInvitation(
@@ -167,7 +153,6 @@ def test_date_only_updates_preserve_historical_financial_metadata(
         email=f"historical-{scope_type.value}@example.com",
         scope_type=scope_type,
         scope_id=scope_id_for(seed, scope_type),
-        commission_rate=Decimal("0.5678"),
         access_starts_at=original_date,
     )
     session.add(relation)
@@ -179,28 +164,24 @@ def test_date_only_updates_preserve_historical_financial_metadata(
     relation_response = client.patch(
         relation_item_path(seed, scope_type, seed["guest"].id),
         headers=headers,
-        json={"accessStartsAt": updated_date.isoformat(), "commissionRate": "0.9999"},
+        json={"accessStartsAt": updated_date.isoformat()},
     )
     invitation_response = client.patch(
         invitation_item_path(seed, scope_type, invitation.id),
         headers=headers,
-        json={"accessStartsAt": updated_date.isoformat(), "commissionRate": "0.9999"},
+        json={"accessStartsAt": updated_date.isoformat()},
     )
 
     assert relation_response.status_code == 200
     assert invitation_response.status_code == 200
-    assert "commissionRate" not in relation_response.json()
-    assert "commissionRate" not in invitation_response.json()
     session.refresh(relation)
     session.refresh(invitation)
-    assert relation.commission_rate == Decimal("0.1234")
-    assert invitation.commission_rate == Decimal("0.5678")
     assert relation.access_starts_at == updated_date
     assert invitation.access_starts_at == updated_date
 
 
 @pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
-def test_omitted_date_updates_preserve_dates_and_historical_metadata(
+def test_omitted_date_updates_preserve_access_dates(
     client: TestClient,
     session: Session,
     scope_type: ScopeType,
@@ -212,7 +193,6 @@ def test_omitted_date_updates_preserve_dates_and_historical_metadata(
         guest_user_id=seed["guest"].id,
         scope_type=scope_type,
         scope_id=scope_id_for(seed, scope_type),
-        commission_rate=Decimal("0.1234"),
         access_starts_at=original_date,
     )
     invitation = ScopedGuestInvitation(
@@ -220,7 +200,6 @@ def test_omitted_date_updates_preserve_dates_and_historical_metadata(
         email=f"preserve-{scope_type.value}@example.com",
         scope_type=scope_type,
         scope_id=scope_id_for(seed, scope_type),
-        commission_rate=Decimal("0.5678"),
         access_starts_at=original_date,
     )
     session.add(relation)
@@ -232,12 +211,12 @@ def test_omitted_date_updates_preserve_dates_and_historical_metadata(
     relation_response = client.patch(
         relation_item_path(seed, scope_type, seed["guest"].id),
         headers=headers,
-        json={"commissionRate": "0.9999"},
+        json={},
     )
     invitation_response = client.patch(
         invitation_item_path(seed, scope_type, invitation.id),
         headers=headers,
-        json={"commissionRate": "0.9999"},
+        json={},
     )
 
     assert relation_response.status_code == 200
@@ -246,12 +225,10 @@ def test_omitted_date_updates_preserve_dates_and_historical_metadata(
     session.refresh(invitation)
     assert relation.access_starts_at == original_date
     assert invitation.access_starts_at == original_date
-    assert relation.commission_rate == Decimal("0.1234")
-    assert invitation.commission_rate == Decimal("0.5678")
 
 
 @pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
-def test_acceptance_ignores_historical_invitation_rate_and_preserves_access_date(
+def test_acceptance_preserves_access_date(
     client: TestClient,
     session: Session,
     scope_type: ScopeType,
@@ -263,7 +240,6 @@ def test_acceptance_ignores_historical_invitation_rate_and_preserves_access_date
         email=seed["guest"].email,
         scope_type=scope_type,
         scope_id=scope_id_for(seed, scope_type),
-        commission_rate=Decimal("0.8765"),
         access_starts_at=selected_date,
     )
     session.add(invitation)
@@ -285,8 +261,6 @@ def test_acceptance_ignores_historical_invitation_rate_and_preserves_access_date
     ).one()
     session.refresh(invitation)
     assert invitation.status == InvitationStatus.ACCEPTED
-    assert invitation.commission_rate == Decimal("0.8765")
-    assert relation.commission_rate == Decimal("0")
     assert relation.access_starts_at == selected_date
 
 
@@ -306,7 +280,6 @@ async def test_public_device_access_never_uses_financial_configuration(
             guest_user_id=seed["guest"].id,
             scope_type=scope_type,
             scope_id=scope_id,
-            commission_rate=Decimal("0.7654"),
         )
     )
     session.commit()
@@ -338,7 +311,6 @@ async def test_access_start_uses_earliest_applicable_relation(session: Session, 
             guest_user_id=seed["guest"].id,
             scope_type=ScopeType.ENVIRONMENT,
             scope_id=seed["environment"].id,
-            commission_rate=Decimal("0.1111"),
             access_starts_at=environment_start,
         )
     )
@@ -348,7 +320,6 @@ async def test_access_start_uses_earliest_applicable_relation(session: Session, 
             guest_user_id=seed["guest"].id,
             scope_type=ScopeType.DEVICE,
             scope_id=seed["device"].id,
-            commission_rate=Decimal("0.9999"),
             access_starts_at=device_start,
         )
     )
