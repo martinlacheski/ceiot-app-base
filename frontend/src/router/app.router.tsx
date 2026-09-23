@@ -6,6 +6,8 @@ import EditUserPage from "@/admin/pages/users/EditUserPage";
 import { UsersPage } from "@/admin/pages/users/UsersPage";
 import OverviewPage from "@/app/pages/dashboard/OverviewPage";
 import UserDevicesPage from "@/app/pages/devices/UserDevicesPage";
+import FormerDevicesPage from "@/app/pages/devices/FormerDevicesPage";
+import FormerDeviceHistoryPage from "@/app/pages/devices/FormerDeviceHistoryPage";
 import PairDevicePage from "@/app/pages/devices/PairDevicePage";
 import DeviceDetailPage from "@/app/pages/devices/DeviceDetailPage";
 import DeviceOperationsPage from "@/app/pages/devices/DeviceOperationsPage";
@@ -97,6 +99,8 @@ export const appRouter = createBrowserRouter([
       {
         path: "devices",
         children: [
+          { path: "history", element: <FormerDevicesPage /> },
+          { path: "history/:serial", element: <FormerDeviceHistoryPage /> },
           {
             index: true,
             element: <UserDevicesPage />,
@@ -261,6 +265,8 @@ export const appRouter = createBrowserRouter([
       {
         path: "devices",
         children: [
+          { path: "history", element: <FormerDevicesPage /> },
+          { path: "history/:serial", element: <FormerDeviceHistoryPage /> },
           {
             index: true,
             element: <DevicesPage />,

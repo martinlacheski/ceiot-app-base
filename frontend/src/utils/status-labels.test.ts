@@ -6,6 +6,7 @@ import {
   getOperationStatusLabel,
   getInvitationStatusLabel,
   getConnectionStatusLabel,
+  getBooleanLabel,
   humanizeCode,
   labelFrom,
 } from "./status-labels";
@@ -32,5 +33,11 @@ describe("status labels", () => {
     expect(getOperationStatusLabel("success")).toBe("Exitoso");
     expect(getInvitationStatusLabel("pending")).toBe("Pendiente");
     expect(getConnectionStatusLabel("offline")).toBe("Fuera de línea");
+  });
+
+  it("labels nullable booleans without losing false", () => {
+    expect(getBooleanLabel(true)).toBe("Sí");
+    expect(getBooleanLabel(false)).toBe("No");
+    expect(getBooleanLabel(null)).toBe("-");
   });
 });

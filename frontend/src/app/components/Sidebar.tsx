@@ -18,6 +18,7 @@ import {
   Settings,
   Store,
   Users,
+  History,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
@@ -89,9 +90,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             label: "Vista de dispositivos",
             to: "/app/devices",
           },
+          { icon: History, label: "Historial de dispositivos", to: "/app/devices/history" },
           { icon: Users, label: "Usuarios", to: "/admin/users" },
         ]
-      : [{ icon: ScanQrCode, label: "Dispositivos", to: "/app/devices" }]),
+      : [
+          { icon: ScanQrCode, label: "Dispositivos", to: "/app/devices" },
+          { icon: History, label: "Historial de dispositivos", to: "/app/devices/history" },
+        ]),
     // { icon: FileText, label: "Reportes", to: "/app/reports" },
     // { icon: Bell, label: "Notificaciones", to: "/notifications" },
     // { icon: MessageSquare, label: "Mensajes", to: "/messages" },

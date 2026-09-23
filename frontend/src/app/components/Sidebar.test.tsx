@@ -91,10 +91,11 @@ describe("Sidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: /Dispositivos/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Dispositivos" })).toHaveAttribute(
       "href",
       "/app/devices",
     );
+    expect(screen.getByRole("link", { name: "Historial de dispositivos" })).toHaveAttribute("href", "/app/devices/history");
   });
 
   it("muestra las vistas operativas de administrador en la raíz y en el orden esperado", () => {
@@ -125,6 +126,7 @@ describe("Sidebar", () => {
       "href",
       "/app/devices",
     );
+    expect(within(navigation).getByRole("link", { name: "Historial de dispositivos" })).toHaveAttribute("href", "/app/devices/history");
     expect(within(navigation).getByRole("link", { name: "Usuarios" })).toHaveAttribute(
       "href",
       "/admin/users",
@@ -133,13 +135,14 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 7)).toEqual([
+    expect(links.slice(0, 8)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
       expect.stringContaining("Establecimientos"),
       expect.stringContaining("Dispositivos"),
       expect.stringContaining("Vista de dispositivos"),
+      expect.stringContaining("Historial de dispositivos"),
       expect.stringContaining("Usuarios"),
     ]);
     expect(screen.queryByRole("link", { name: "Generales" })).not.toBeInTheDocument();

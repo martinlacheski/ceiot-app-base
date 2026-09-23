@@ -16,6 +16,15 @@ export const OPERATION_TYPE_LABELS: Record<string, string> = {
   other: "Otro",
 };
 
+/** Raw API enum values for operation filters; labels remain display-only. */
+export const OPERATION_TYPE_OPTIONS = [
+  { value: "SENSOR_DATA", label: OPERATION_TYPE_LABELS.sensor_data },
+  { value: "KEEP_ACTIVE", label: OPERATION_TYPE_LABELS.keep_active },
+  { value: "session_request", label: OPERATION_TYPE_LABELS.session_request },
+  { value: "error", label: OPERATION_TYPE_LABELS.error },
+  { value: "other", label: OPERATION_TYPE_LABELS.other },
+];
+
 export const OPERATION_STATUS_LABELS: Record<string, string> = {
   success: "Exitoso",
   failed: "Fallido",
@@ -73,3 +82,4 @@ export const getInvitationStatusLabel = labelFrom(INVITATION_STATUS_LABELS);
 export const getConnectionStatusLabel = labelFrom(CONNECTION_STATUS_LABELS);
 export const getEnvironmentRoleLabel = labelFrom(ENVIRONMENT_ROLE_LABELS);
 export const getDeviceLocationSourceCodeLabel = labelFrom(DEVICE_LOCATION_SOURCE_LABELS);
+export const getBooleanLabel = (value: boolean | null | undefined): string => value == null ? "-" : value ? "Sí" : "No";
