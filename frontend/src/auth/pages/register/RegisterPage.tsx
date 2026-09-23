@@ -205,7 +205,7 @@ export const RegisterPage = () => {
   }
 
   return (
-    <div className="container mx-auto py-10 max-w-4xl animate-fade-in">
+    <div className="container mx-auto max-w-4xl animate-fade-in">
       <Card className="overflow-hidden p-0  ">
         <CardContent className="grid p-0 md:grid-cols-1">
           <form className="p-6 md:p-8" onSubmit={handleRegister}>

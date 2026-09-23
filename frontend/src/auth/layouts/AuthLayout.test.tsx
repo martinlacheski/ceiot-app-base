@@ -5,12 +5,13 @@ import { describe, expect, it } from "vitest";
 import { LANDING_URL } from "@/config/publicUrls";
 import AuthLayout from "./AuthLayout";
 
-const renderLayout = () =>
+const renderLayout = (path = "/auth/login") =>
   render(
-    <MemoryRouter initialEntries={["/auth/login"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route element={<AuthLayout />}>
           <Route path="/auth/login" element={<p>Login</p>} />
+          <Route path="/auth/register" element={<p>Register</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -40,5 +41,18 @@ describe("AuthLayout", () => {
     const toggle = screen.getByRole("button", { name: /Cambiar a modo/i });
 
     expect(toggle.parentElement).toBe(back.parentElement);
+  });
+
+  it("aligns the top row with the card width of each screen", () => {
+    renderLayout("/auth/register");
+    const registerRow = screen.getByRole("link", { name: /Volver al inicio/i }).parentElement;
+    expect(registerRow).toHaveClass("max-w-4xl");
+    expect(registerRow).not.toHaveClass("max-w-md");
+  });
+
+  it("keeps the narrow row for the sign-in card", () => {
+    renderLayout("/auth/login");
+    const loginRow = screen.getByRole("link", { name: /Volver al inicio/i }).parentElement;
+    expect(loginRow).toHaveClass("max-w-md");
   });
 });
