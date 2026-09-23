@@ -84,7 +84,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image.png",
     },
     nav: {
-      links: [{ href: "#variables", label: "Variables" }, { href: "#base", label: "La base" }],
+      links: [{ href: "#hero", label: "Inicio" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "La base" }],
       contactLabel: "Contacto",
       tagline: "Monitoreo Ambiental IoT",
       localeLabel: "Idioma",
@@ -160,7 +160,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image-pt.png",
     },
     nav: {
-      links: [{ href: "#variables", label: "Variáveis" }, { href: "#base", label: "A base" }],
+      links: [{ href: "#hero", label: "Início" }, { href: "#variables", label: "Variáveis" }, { href: "#base", label: "A base" }],
       contactLabel: "Contato",
       tagline: "Monitoramento Ambiental IoT",
       localeLabel: "Idioma",
@@ -230,7 +230,7 @@ const CONTENT: Record<Locale, LandingContent> = {
       ogImage: "/og-image-en.png",
     },
     nav: {
-      links: [{ href: "#variables", label: "Variables" }, { href: "#base", label: "Foundation" }],
+      links: [{ href: "#hero", label: "Home" }, { href: "#variables", label: "Variables" }, { href: "#base", label: "Foundation" }],
       contactLabel: "Contact",
       tagline: "IoT Environmental Monitoring",
       localeLabel: "Language",

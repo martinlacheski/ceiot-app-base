@@ -72,6 +72,21 @@ describe("generic environmental landing content", () => {
     }
   });
 
+  it("starts the nav with a localized home link to the hero, as in DVEM", () => {
+    const expectations = [
+      { locale: LOCALES.ES, label: "Inicio" },
+      { locale: LOCALES.PT_BR, label: "Início" },
+      { locale: LOCALES.EN, label: "Home" },
+    ];
+
+    for (const expected of expectations) {
+      expect(getLandingContent(expected.locale).nav.links[0]).toEqual({
+        href: "#hero",
+        label: expected.label,
+      });
+    }
+  });
+
   it("uses the localized brand name in the nav and footer, with a rights line", () => {
     const expectations = [
       { locale: LOCALES.ES, brand: "Monitoreo Ambiental IoT", legal: "Monitoreo Ambiental IoT · Todos los derechos reservados." },
