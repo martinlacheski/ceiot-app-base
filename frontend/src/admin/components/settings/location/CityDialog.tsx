@@ -40,6 +40,7 @@ interface Props {
 
 export function CityDialog({ open, onOpenChange, item, stateId }: Props) {
   const queryClient = useQueryClient();
+  const effectiveStateId = stateId ?? item?.state?.id;
   const {
     register,
     handleSubmit,
@@ -50,8 +51,8 @@ export function CityDialog({ open, onOpenChange, item, stateId }: Props) {
     resolver: zodResolver(schema) as any,
     defaultValues: {
       name: item?.name || "",
-      postal_code: item?.postal_code || "",
-      is_active: item?.is_active ?? true,
+      postal_code: item?.postalCode ?? "",
+      is_active: item?.isActive ?? true,
     },
   });
 
@@ -59,7 +60,7 @@ export function CityDialog({ open, onOpenChange, item, stateId }: Props) {
     mutationFn: createCityAction,
     onSuccess: () => {
       toast.success("Ciudad creada");
-      queryClient.invalidateQueries({ queryKey: ["cities", stateId] });
+      queryClient.invalidateQueries({ queryKey: ["cities", effectiveStateId] });
       onOpenChange(false);
     },
     onError: () => toast.error("Error al crear"),
@@ -69,24 +70,24 @@ export function CityDialog({ open, onOpenChange, item, stateId }: Props) {
     mutationFn: updateCityAction,
     onSuccess: () => {
       toast.success("Ciudad actualizada");
-      queryClient.invalidateQueries({ queryKey: ["cities", stateId] });
+      queryClient.invalidateQueries({ queryKey: ["cities", effectiveStateId] });
       onOpenChange(false);
     },
     onError: () => toast.error("Error al actualizar"),
   });
 
   const onSubmit = (data: FormData) => {
-    if (!stateId) {
+    if (!effectiveStateId) {
       toast.error("Error: No se ha seleccionado una provincia padre.");
       return;
     }
     if (item) {
       updateMutation.mutate({
         id: item.id,
-        data: { ...data, state_id: stateId },
+        data: { ...data, state_id: effectiveStateId },
       });
     } else {
-      createMutation.mutate({ ...data, state_id: stateId });
+      createMutation.mutate({ ...data, state_id: effectiveStateId });
     }
   };
 

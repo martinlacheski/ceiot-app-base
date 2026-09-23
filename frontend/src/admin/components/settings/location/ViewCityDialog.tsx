@@ -37,7 +37,7 @@ export function ViewCityDialog({
             </div>
             <div className="space-y-2">
               <Label>Código Postal</Label>
-              <Input value={city.postal_code} readOnly className="bg-muted" />
+              <Input value={city.postalCode ?? ""} readOnly className="bg-muted" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -61,8 +61,8 @@ export function ViewCityDialog({
           <div className="space-y-2">
             <Label>Estado</Label>
             <div className="flex items-center h-10">
-              <Badge variant={city.is_active ? "default" : "secondary"}>
-                {city.is_active ? "Activo" : "Inactivo"}
+              <Badge variant={city.isActive ? "default" : "secondary"}>
+                {city.isActive ? "Activo" : "Inactivo"}
               </Badge>
             </div>
           </div>

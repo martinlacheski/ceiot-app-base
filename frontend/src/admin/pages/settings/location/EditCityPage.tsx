@@ -54,14 +54,12 @@ export default function EditCityPage() {
     );
   }
 
-  // To populate the form correctly with country, we need the state which has the country_id
-  // The 'city' object likely has state relationship if fetched via getById.
-  // Let's assume city has 'state' object populated or we need to access state.country_id
-
-  // If city.state is available:
   const formDefaultValues = {
-    ...city,
-    country_id: city.state?.country_id,
+    name: city.name,
+    postal_code: city.postalCode ?? "",
+    state_id: city.state?.id,
+    country_id: city.state?.country?.id,
+    is_active: city.isActive,
   };
 
   return (

@@ -75,7 +75,11 @@ export default function EditStatePage() {
       <div className="border rounded-lg p-6 bg-card">
         <StateForm
           mode="edit"
-          defaultValues={state}
+          defaultValues={{
+            name: state.name,
+            country_id: state.country?.id,
+            is_active: state.isActive,
+          }}
           onSubmit={handleSubmit}
           isSubmitting={isPending}
           onCancel={() => navigate("/admin/locations/states")}

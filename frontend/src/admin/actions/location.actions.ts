@@ -1,9 +1,12 @@
 import { appApi } from "@/api/appApi";
 import type {
+  City,
   CityCreate,
   CityUpdate,
+  Country,
   CountryCreate,
   CountryUpdate,
+  State,
   StateCreate,
   StateUpdate,
 } from "@/interfaces/location.interface";
@@ -35,8 +38,8 @@ export const getCountriesAction = async ({
   }
 };
 
-export const getCountryAction = async (id: string) => {
-  const response = await appApi.get(`/location/countries/${id}`);
+export const getCountryAction = async (id: string): Promise<Country> => {
+  const response = await appApi.get<Country>(`/location/countries/${id}`);
   return response.data;
 };
 
@@ -94,8 +97,8 @@ export const getStatesAction = async ({
   }
 };
 
-export const getStateAction = async (id: string) => {
-  const response = await appApi.get(`/location/states/${id}`);
+export const getStateAction = async (id: string): Promise<State> => {
+  const response = await appApi.get<State>(`/location/states/${id}`);
   return response.data;
 };
 
@@ -156,8 +159,8 @@ export const getCitiesAction = async ({
   }
 };
 
-export const getCityAction = async (id: string) => {
-  const response = await appApi.get(`/location/cities/${id}`);
+export const getCityAction = async (id: string): Promise<City> => {
+  const response = await appApi.get<City>(`/location/cities/${id}`);
   return response.data;
 };
 

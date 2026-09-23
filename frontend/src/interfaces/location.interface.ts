@@ -1,7 +1,7 @@
 export interface Country {
   id: string; // UUID
   name: string;
-  is_active: boolean;
+  isActive: boolean;
 }
 
 export interface CountryCreate {
@@ -17,9 +17,8 @@ export interface CountryUpdate {
 export interface State {
   id: string; // UUID
   name: string;
-  country_id: string; // UUID
-  is_active: boolean;
-  country?: Country;
+  isActive: boolean;
+  country?: Country | null;
 }
 
 export interface StateCreate {
@@ -37,10 +36,9 @@ export interface StateUpdate {
 export interface City {
   id: string; // UUID
   name: string;
-  postal_code: string;
-  state_id: string; // UUID
-  is_active: boolean;
-  state?: State;
+  postalCode: string | null;
+  isActive: boolean;
+  state?: State | null;
 }
 
 export interface CityCreate {

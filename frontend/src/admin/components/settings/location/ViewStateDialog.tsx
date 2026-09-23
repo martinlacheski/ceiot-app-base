@@ -47,8 +47,8 @@ export function ViewStateDialog({
           <div className="space-y-2">
             <Label>Estado</Label>
             <div className="flex items-center h-10">
-              <Badge variant={state.is_active ? "default" : "secondary"}>
-                {state.is_active ? "Activo" : "Inactivo"}
+              <Badge variant={state.isActive ? "default" : "secondary"}>
+                {state.isActive ? "Activo" : "Inactivo"}
               </Badge>
             </div>
           </div>

@@ -39,6 +39,7 @@ interface Props {
 
 export function StateDialog({ open, onOpenChange, item, countryId }: Props) {
   const queryClient = useQueryClient();
+  const effectiveCountryId = countryId ?? item?.country?.id;
   const {
     register,
     handleSubmit,
@@ -49,7 +50,7 @@ export function StateDialog({ open, onOpenChange, item, countryId }: Props) {
     resolver: zodResolver(schema) as any,
     defaultValues: {
       name: item?.name || "",
-      is_active: item?.is_active ?? true,
+      is_active: item?.isActive ?? true,
     },
   });
 
@@ -57,7 +58,9 @@ export function StateDialog({ open, onOpenChange, item, countryId }: Props) {
     mutationFn: createStateAction,
     onSuccess: () => {
       toast.success("Provincia creada");
-      queryClient.invalidateQueries({ queryKey: ["states", countryId] });
+      queryClient.invalidateQueries({
+        queryKey: ["states", effectiveCountryId],
+      });
       onOpenChange(false);
     },
     onError: () => toast.error("Error al crear"),
@@ -67,24 +70,26 @@ export function StateDialog({ open, onOpenChange, item, countryId }: Props) {
     mutationFn: updateStateAction,
     onSuccess: () => {
       toast.success("Provincia actualizada");
-      queryClient.invalidateQueries({ queryKey: ["states", countryId] });
+      queryClient.invalidateQueries({
+        queryKey: ["states", effectiveCountryId],
+      });
       onOpenChange(false);
     },
     onError: () => toast.error("Error al actualizar"),
   });
 
   const onSubmit = (data: FormData) => {
-    if (!countryId) {
+    if (!effectiveCountryId) {
       toast.error("Error: No se ha seleccionado un país padre.");
       return;
     }
     if (item) {
       updateMutation.mutate({
         id: item.id,
-        data: { ...data, country_id: countryId },
+        data: { ...data, country_id: effectiveCountryId },
       });
     } else {
-      createMutation.mutate({ ...data, country_id: countryId });
+      createMutation.mutate({ ...data, country_id: effectiveCountryId });
     }
   };
 

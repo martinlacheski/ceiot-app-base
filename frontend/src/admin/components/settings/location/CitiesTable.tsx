@@ -124,8 +124,8 @@ function CityMobileCard({
       <CardHeader className="min-w-0 px-4">
         <CardTitle className="min-w-0 truncate pr-2">{city.name}</CardTitle>
         <CardAction>
-          <Badge variant={city.is_active ? "default" : "secondary"}>
-            {city.is_active ? "Activo" : "Inactivo"}
+          <Badge variant={city.isActive ? "default" : "secondary"}>
+            {city.isActive ? "Activo" : "Inactivo"}
           </Badge>
         </CardAction>
       </CardHeader>
@@ -136,9 +136,9 @@ function CityMobileCard({
         <span className="min-w-0 break-words">
           País: {city.state?.country?.name || "-"}
         </span>
-        {city.postal_code && (
+        {city.postalCode && (
           <span className="min-w-0 break-words">
-            Código postal: {city.postal_code}
+            Código postal: {city.postalCode}
           </span>
         )}
       </CardContent>
@@ -170,7 +170,7 @@ function CityMobileCard({
                 <Eye />
                 Ver detalles
               </DropdownMenuItem>
-              {city.is_active ? (
+              {city.isActive ? (
                 <DropdownMenuItem
                   className="min-h-11"
                   variant="destructive"
@@ -342,8 +342,8 @@ export function CitiesTable({ stateId: propStateId }: Props) {
           city.name,
           city.state?.name || "-",
           city.state?.country?.name || "-",
-          city.postal_code,
-          city.is_active ? "Activo" : "Inactivo",
+          city.postalCode ?? "-",
+          city.isActive ? "Activo" : "Inactivo",
         ]),
       };
 
@@ -461,7 +461,7 @@ export function CitiesTable({ stateId: propStateId }: Props) {
     },
     {
       id: "postalCode",
-      accessorFn: (city) => city.postal_code,
+      accessorFn: (city) => city.postalCode,
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
@@ -472,12 +472,12 @@ export function CitiesTable({ stateId: propStateId }: Props) {
         />
       ),
       cell: ({ row }) => (
-        <div className="text-center">{row.original.postal_code}</div>
+        <div className="text-center">{row.original.postalCode}</div>
       ),
     },
     {
       id: "isActive",
-      accessorFn: (city) => city.is_active,
+      accessorFn: (city) => city.isActive,
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
@@ -488,7 +488,7 @@ export function CitiesTable({ stateId: propStateId }: Props) {
         />
       ),
       cell: ({ row }) => {
-        const isActive = row.original.is_active;
+        const isActive = row.original.isActive;
         return (
           <div className="flex justify-center">
             <Badge variant={isActive ? "default" : "secondary"}>
@@ -542,7 +542,7 @@ export function CitiesTable({ stateId: propStateId }: Props) {
             </TooltipProvider>
 
             <TooltipProvider>
-              {city.is_active ? (
+              {city.isActive ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

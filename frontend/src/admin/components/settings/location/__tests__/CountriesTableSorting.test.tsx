@@ -10,7 +10,7 @@ import { CountriesTable } from "../CountriesTable";
 vi.mock("@/admin/hooks/useLocations", () => ({
   useCountries: vi.fn(() => ({
     data: {
-      items: [{ id: "ar", name: "Argentina", is_active: true }],
+      items: [{ id: "ar", name: "Argentina", isActive: true }],
       total: 1,
       pages: 1,
     },
@@ -145,12 +145,12 @@ describe("CountriesTable sorting", () => {
             items:
               args?.sort === "name:desc"
                 ? [
-                    { id: "br", name: "Brasil", is_active: true },
-                    { id: "ar", name: "Argentina", is_active: true },
+                    { id: "br", name: "Brasil", isActive: true },
+                    { id: "ar", name: "Argentina", isActive: true },
                   ]
                 : [
-                    { id: "ar", name: "Argentina", is_active: true },
-                    { id: "br", name: "Brasil", is_active: true },
+                    { id: "ar", name: "Argentina", isActive: true },
+                    { id: "br", name: "Brasil", isActive: true },
                   ],
             total: 2,
             pages: 1,
@@ -174,7 +174,7 @@ describe("CountriesTable sorting", () => {
 
     vi.mocked(useCountries).mockReturnValue({
       data: {
-        items: [{ id: "ar", name: "Argentina", is_active: true }],
+        items: [{ id: "ar", name: "Argentina", isActive: true }],
         total: 1,
         pages: 1,
       },
@@ -191,12 +191,12 @@ describe("CountriesTable sorting", () => {
             items:
               args?.sort === "name:desc"
                 ? [
-                    { id: "br", name: "Brasil", is_active: true },
-                    { id: "ar", name: "Argentina", is_active: true },
+                    { id: "br", name: "Brasil", isActive: true },
+                    { id: "ar", name: "Argentina", isActive: true },
                   ]
                 : [
-                    { id: "ar", name: "Argentina", is_active: true },
-                    { id: "br", name: "Brasil", is_active: true },
+                    { id: "ar", name: "Argentina", isActive: true },
+                    { id: "br", name: "Brasil", isActive: true },
                   ],
             total: 2,
             pages: 1,
@@ -220,7 +220,7 @@ describe("CountriesTable sorting", () => {
 
     vi.mocked(useCountries).mockReturnValue({
       data: {
-        items: [{ id: "ar", name: "Argentina", is_active: true }],
+        items: [{ id: "ar", name: "Argentina", isActive: true }],
         total: 1,
         pages: 1,
       },
@@ -233,7 +233,7 @@ describe("CountriesTable sorting", () => {
     const user = userEvent.setup();
     vi.mocked(useCountries).mockReturnValue({
       data: {
-        items: [{ id: "ar", name: "Argentina", is_active: true }],
+        items: [{ id: "ar", name: "Argentina", isActive: true }],
         total: 30,
         pages: 3,
       },
@@ -269,7 +269,7 @@ describe("CountriesTable sorting", () => {
 
     vi.mocked(useCountries).mockReturnValue({
       data: {
-        items: [{ id: "ar", name: "Argentina", is_active: true }],
+        items: [{ id: "ar", name: "Argentina", isActive: true }],
         total: 1,
         pages: 1,
       },

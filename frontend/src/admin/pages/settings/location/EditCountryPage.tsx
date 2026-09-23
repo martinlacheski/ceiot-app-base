@@ -80,7 +80,10 @@ export default function EditCountryPage() {
         <CountryForm
           mode="edit"
           key={country.id} // Important: Force re-render when country changes
-          defaultValues={country}
+          defaultValues={{
+            name: country.name,
+            is_active: country.isActive,
+          }}
           onSubmit={handleSubmit}
           isSubmitting={isPending}
           onCancel={() => navigate("/admin/locations/countries")}

@@ -120,8 +120,8 @@ function StateMobileCard({
       <CardHeader className="min-w-0 px-4">
         <CardTitle className="min-w-0 truncate pr-2">{state.name}</CardTitle>
         <CardAction>
-          <Badge variant={state.is_active ? "default" : "secondary"}>
-            {state.is_active ? "Activo" : "Inactivo"}
+          <Badge variant={state.isActive ? "default" : "secondary"}>
+            {state.isActive ? "Activo" : "Inactivo"}
           </Badge>
         </CardAction>
       </CardHeader>
@@ -167,7 +167,7 @@ function StateMobileCard({
                 <Eye />
                 Ver detalles
               </DropdownMenuItem>
-              {state.is_active ? (
+              {state.isActive ? (
                 <DropdownMenuItem
                   className="min-h-11"
                   variant="destructive"
@@ -326,7 +326,7 @@ export function StatesTable({
         data: items.map((s: State) => [
           s.name,
           s.country?.name || "-",
-          s.is_active ? "Activo" : "Inactivo",
+          s.isActive ? "Activo" : "Inactivo",
         ]),
       };
 
@@ -422,7 +422,7 @@ export function StatesTable({
     },
     {
       id: "isActive",
-      accessorFn: (state) => state.is_active,
+      accessorFn: (state) => state.isActive,
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
@@ -433,7 +433,7 @@ export function StatesTable({
         />
       ),
       cell: ({ row }) => {
-        const isActive = row.original.is_active;
+        const isActive = row.original.isActive;
         return (
           <div className="flex justify-center">
             <Badge variant={isActive ? "default" : "secondary"}>
@@ -511,7 +511,7 @@ export function StatesTable({
                 </TooltipContent>
               </Tooltip>
 
-              {state.is_active ? (
+              {state.isActive ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

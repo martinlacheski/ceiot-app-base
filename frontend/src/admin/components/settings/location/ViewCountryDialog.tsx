@@ -38,8 +38,8 @@ export function ViewCountryDialog({
           <div className="flex-[0.3] space-y-2">
             <Label>Estado</Label>
             <div className="flex items-center h-10">
-              <Badge variant={country.is_active ? "default" : "secondary"}>
-                {country.is_active ? "Activo" : "Inactivo"}
+              <Badge variant={country.isActive ? "default" : "secondary"}>
+                {country.isActive ? "Activo" : "Inactivo"}
               </Badge>
             </div>
           </div>

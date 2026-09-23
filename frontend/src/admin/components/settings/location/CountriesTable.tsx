@@ -121,8 +121,8 @@ function CountryMobileCard({
       <CardHeader className="min-w-0 px-4">
         <CardTitle className="min-w-0 truncate pr-2">{country.name}</CardTitle>
         <CardAction>
-          <Badge variant={country.is_active ? "default" : "secondary"}>
-            {country.is_active ? "Activo" : "Inactivo"}
+          <Badge variant={country.isActive ? "default" : "secondary"}>
+            {country.isActive ? "Activo" : "Inactivo"}
           </Badge>
         </CardAction>
       </CardHeader>
@@ -154,7 +154,7 @@ function CountryMobileCard({
                 <Eye />
                 Ver detalles
               </DropdownMenuItem>
-              {country.is_active ? (
+              {country.isActive ? (
                 <DropdownMenuItem
                   className="min-h-11"
                   variant="destructive"
@@ -299,7 +299,7 @@ export function CountriesTable({ actions }: Props) {
         columns: ["Nombre", "Estado"],
         data: items.map((c: Country) => [
           c.name,
-          c.is_active ? "Activo" : "Inactivo",
+          c.isActive ? "Activo" : "Inactivo",
         ]),
       };
 
@@ -370,7 +370,7 @@ export function CountriesTable({ actions }: Props) {
     },
     {
       id: "isActive",
-      accessorFn: (country) => country.is_active,
+      accessorFn: (country) => country.isActive,
       header: ({ column }) => (
         <DataTableColumnHeader
           column={column}
@@ -381,7 +381,7 @@ export function CountriesTable({ actions }: Props) {
         />
       ),
       cell: ({ row }) => {
-        const isActive = row.original.is_active;
+        const isActive = row.original.isActive;
         return (
           <div className="flex justify-center">
             <Badge variant={isActive ? "default" : "secondary"}>
@@ -439,7 +439,7 @@ export function CountriesTable({ actions }: Props) {
               </Tooltip>
 
               {/* Delete/Restore Button */}
-              {country.is_active ? (
+              {country.isActive ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button

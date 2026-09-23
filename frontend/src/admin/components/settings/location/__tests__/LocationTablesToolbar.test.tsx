@@ -13,8 +13,8 @@ vi.mock("@/admin/hooks/useLocations", () => ({
   useCountries: vi.fn(() => ({
     data: {
       items: [
-        { id: "country-1", name: "Argentina", is_active: true },
-        { id: "country-2", name: "Uruguay", is_active: false },
+        { id: "country-1", name: "Argentina", isActive: true },
+        { id: "country-2", name: "Uruguay", isActive: false },
       ],
       total: 2,
       pages: 1,
@@ -28,14 +28,14 @@ vi.mock("@/admin/hooks/useLocations", () => ({
         {
           id: "state-1",
           name: "Mendoza",
-          is_active: true,
-          country: { id: "country-1", name: "Argentina" },
+          isActive: true,
+          country: { id: "country-1", name: "Argentina", isActive: true },
         },
         {
           id: "state-2",
           name: "Canelones",
-          is_active: false,
-          country: { id: "country-2", name: "Uruguay" },
+          isActive: false,
+          country: { id: "country-2", name: "Uruguay", isActive: false },
         },
       ],
       total: 2,
@@ -50,16 +50,16 @@ vi.mock("@/admin/hooks/useLocations", () => ({
         {
           id: "city-1",
           name: "Godoy Cruz",
-          postal_code: "5501",
-          is_active: true,
-          state: { name: "Mendoza", country: { name: "Argentina" } },
+          postalCode: "5501",
+          isActive: true,
+          state: { id: "state-1", name: "Mendoza", isActive: true, country: { id: "country-1", name: "Argentina", isActive: true } },
         },
         {
           id: "city-2",
           name: "Las Piedras",
-          postal_code: "90200",
-          is_active: false,
-          state: { name: "Canelones", country: { name: "Uruguay" } },
+          postalCode: "90200",
+          isActive: false,
+          state: { id: "state-2", name: "Canelones", isActive: false, country: { id: "country-2", name: "Uruguay", isActive: false } },
         },
       ],
       total: 2,
@@ -228,6 +228,16 @@ describe("location table toolbars", () => {
     expect(vi.mocked(useCities)).toHaveBeenLastCalledWith(
       expect.objectContaining({ countryId: "country-1", stateId: undefined }),
     );
+  });
+
+  it("renders postal codes and active badges from camelCase location reads", () => {
+    renderTable(<CitiesTable />);
+
+    const cityCards = screen.getByTestId("cities-mobile-list");
+    expect(within(cityCards).getByText("Código postal: 5501")).toBeVisible();
+    expect(within(cityCards).getByText("Código postal: 90200")).toBeVisible();
+    expect(within(cityCards).getAllByText("Activo")).toHaveLength(1);
+    expect(within(cityCards).getAllByText("Inactivo")).toHaveLength(1);
   });
 
   it.each([
