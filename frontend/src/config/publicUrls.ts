@@ -16,3 +16,9 @@ export const LANDING_URL = resolvePublicUrl(
   import.meta.env.VITE_LANDING_URL,
   DEFAULT_LANDING_URL,
 );
+
+export function resolveLandingPageUrl(landingUrl: string, path: string): string {
+  return `${landingUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
+
+export const PRIVACY_POLICY_URL = resolveLandingPageUrl(LANDING_URL, "privacidad/");

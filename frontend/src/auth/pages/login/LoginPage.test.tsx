@@ -105,6 +105,16 @@ describe("LoginPage", () => {
     expect(screen.queryByRole("link", { name: /Volver al inicio/i })).not.toBeInTheDocument();
   });
 
+  it("links the consent notice to the landing privacy policy only", () => {
+    renderComponent();
+
+    expect(screen.getByRole("link", { name: "política de privacidad" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/privacidad\/$/),
+    );
+    expect(screen.queryByText(/términos y condiciones/i)).not.toBeInTheDocument();
+  });
+
   it("calls login on submit", async () => {
     mockLogin.mockResolvedValue({ success: false });
     renderComponent();

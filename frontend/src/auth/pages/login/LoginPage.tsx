@@ -20,6 +20,7 @@ import { useAuthStore } from "@/auth/store/auth.store";
 import { showConfirmDialog, showInfoDialog } from "@/store/confirm.store";
 import { useQuery } from "@tanstack/react-query";
 import { ForgotPasswordDialog } from "../../components/ForgotPasswordDialog";
+import { AuthConsentNotice } from "@/auth/components/AuthConsentNotice";
 
 export const LoginPage = () => {
   const navigate = useNavigate();
@@ -275,11 +276,7 @@ export const LoginPage = () => {
           </form>
         </CardContent>
       </Card>
-      <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-primary">
-        Haciendo click, estás de acuerdo con{" "}
-        <a href="#">términos y condiciones</a> y{" "}
-        <a href="#">políticas de uso</a>.
-      </div>
+      <AuthConsentNotice />
       <ForgotPasswordDialog
         open={forgotPasswordOpen}
         onOpenChange={setForgotPasswordOpen}

@@ -116,6 +116,20 @@ describe("RegisterPage", () => {
     );
   });
 
+  it("links the consent notice to the landing privacy policy only", () => {
+    render(
+      <MemoryRouter initialEntries={["/auth/register"]}>
+        <RegisterPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole("link", { name: "política de privacidad" })).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/privacidad\/$/)
+    );
+    expect(screen.queryByText(/términos y condiciones/i)).not.toBeInTheDocument();
+  });
+
   it("passes invitation next path to social registration", () => {
     const originalLocation = window.location;
     Object.defineProperty(window, "location", {

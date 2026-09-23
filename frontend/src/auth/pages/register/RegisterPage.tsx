@@ -18,6 +18,7 @@ import { Check, X as XIcon } from "lucide-react";
 import { type FormEvent, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { AuthConsentNotice } from "@/auth/components/AuthConsentNotice";
 
 export const RegisterPage = () => {
   const {
@@ -489,10 +490,7 @@ export const RegisterPage = () => {
           </form>
         </CardContent>
       </Card>
-      <div className="text-balance text-center text-xs text-muted-foreground [&_a]:underline [&_a]:underline-offset-4 hover:[&_a]:text-primary">
-        Haciendo click, estás de acuerdo con los{" "}
-        <a href="#">términos y condiciones de uso.</a>
-      </div>
+      <AuthConsentNotice />
     </div>
   );
 };
