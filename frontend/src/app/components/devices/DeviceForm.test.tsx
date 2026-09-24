@@ -48,7 +48,13 @@ describe("DeviceForm", () => {
     expect(await screen.findByText("Agregá al menos un sensor")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Agregar sensor" }));
+    const section = screen.getByRole("region", { name: "Sensores" });
+    expect(screen.getByLabelText("Descripción").compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section).not.toHaveClass("border", "rounded-md", "bg-muted/50");
+    expect(section.querySelector(":scope > div")).not.toHaveClass("border", "bg-background");
+    expect(screen.queryByLabelText(/clave/i)).not.toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("Modelo del sensor 1"), "sensor-1");
+    expect(section).toHaveTextContent("Temperatura: -40–80 °C");
     await userEvent.click(screen.getByRole("button", { name: "Agregar sensor" }));
     await userEvent.selectOptions(screen.getByLabelText("Modelo del sensor 2"), "sensor-1");
     await userEvent.click(screen.getByRole("button", { name: "Crear Dispositivo" }));

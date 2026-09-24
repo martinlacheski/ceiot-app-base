@@ -24,7 +24,10 @@ describe("DeviceSensorsSection", () => {
     renderSection();
     expect(await screen.findByText("DHT22")).toBeInTheDocument();
     expect(screen.getByText(/Temperatura.*°C.*-40,5.*80,5/)).toBeInTheDocument();
-    expect(screen.getByText(/dht22 · Activo/)).toBeInTheDocument();
+    expect(screen.getByText("Identificador en telemetría")).toBeInTheDocument();
+    expect(screen.getByText("dht22")).toBeInTheDocument();
+    expect(screen.getByText(/nombre que usa el dispositivo en su telemetría/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/clave/i)).not.toBeInTheDocument();
   });
   it("adds with an omitted key and confirms deactivation", async () => {
     const user = userEvent.setup();
@@ -38,16 +41,15 @@ describe("DeviceSensorsSection", () => {
     await mocks.confirm.mock.calls[0][1]();
     await waitFor(() => expect(mocks.removeDeviceSensor).toHaveBeenCalledWith("device-1", "installed-1"));
   });
-  it("updates key and JSON configuration", async () => {
+  it("updates JSON configuration without editing or patching the key", async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByText("DHT22");
     await user.click(screen.getByRole("button", { name: "Editar" }));
-    await user.clear(screen.getByLabelText("Clave"));
-    await user.type(screen.getByLabelText("Clave"), "dht22_outdoor");
+    expect(screen.queryByLabelText(/clave/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Configuración JSON"), { target: { value: '{"offset":1}' } });
     await user.click(screen.getByRole("button", { name: "Guardar sensor" }));
-    await waitFor(() => expect(mocks.updateDeviceSensor).toHaveBeenCalledWith("device-1", "installed-1", { key: "dht22_outdoor", config: { offset: 1 } }));
+    await waitFor(() => expect(mocks.updateDeviceSensor).toHaveBeenCalledWith("device-1", "installed-1", { config: { offset: 1 } }));
   });
   it("hides mutations without ownership", async () => {
     renderSection(false);

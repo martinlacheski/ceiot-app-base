@@ -105,7 +105,7 @@ export function DeviceForm({
     queryFn: environmentalSensorService.getCatalog,
     enabled: !isEditing && canWriteSensors && canReadCatalog,
   });
-  const [sensors, setSensors] = useState<{ sensorId: string; key: string }[]>([]);
+  const [sensors, setSensors] = useState<{ sensorId: string }[]>([]);
   const [sensorError, setSensorError] = useState("");
 
   const form = useForm<DeviceFormInput, unknown, DeviceFormValues>({
@@ -188,10 +188,7 @@ export function DeviceForm({
         manufactureDate: values.manufactureDate
           ? format(values.manufactureDate, "yyyy-MM-dd")
           : undefined,
-        sensors: sensors.map((sensor) => ({
-          sensorId: sensor.sensorId,
-          ...(sensor.key.trim() ? { key: sensor.key.trim() } : {}),
-        })),
+        sensors: sensors.map((sensor) => ({ sensorId: sensor.sensorId })),
       };
 
       onSubmit(createPayload);
@@ -365,6 +362,31 @@ export function DeviceForm({
 
         </div>
 
+        {!isEditing && canWriteSensors && canReadCatalog && (
+          <section className="space-y-4" aria-label="Sensores">
+            <h3 className="text-sm font-medium">Sensores</h3>
+            {sensors.map((sensor, index) => {
+              const model = sensorCatalog.find((entry) => entry.id === sensor.sensorId);
+              return <div key={index} className="space-y-2">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-0 flex-1">
+                    <label className="mb-1 block text-sm" htmlFor={`sensor-model-${index}`}>Modelo del sensor {index + 1}</label>
+                    <select id={`sensor-model-${index}`} className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={sensor.sensorId} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { sensorId: event.target.value } : row))}>
+                      <option value="">Seleccionar modelo</option>
+                      {sensorCatalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} — {entry.variables.map((variable) => variable.name).join(", ")}</option>)}
+                    </select>
+                  </div>
+                  <Button type="button" variant="outline" className="min-h-11" onClick={() => setSensors((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label={`Quitar sensor ${index + 1}`}>Quitar</Button>
+                </div>
+                {model && <p className="text-xs text-muted-foreground">{model.variables.map((variable) => `${variable.name}: ${variable.min}–${variable.max} ${variable.unit}`).join(" · ")}</p>}
+              </div>;
+            })}
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setSensors((rows) => [...rows, { sensorId: "" }]); setSensorError(""); }}>Agregar sensor</Button>
+            {catalogError && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
+            {sensorError && <p role="alert" className="text-sm text-destructive">{sensorError}</p>}
+          </section>
+        )}
+
         {showTechnicalFields && (
           <div className="space-y-4 rounded-md border bg-muted/50 p-4">
             <h3 className="text-sm font-medium text-muted-foreground">
@@ -426,35 +448,6 @@ export function DeviceForm({
 
             </div>
           </div>
-        )}
-
-        {!isEditing && canWriteSensors && canReadCatalog && (
-          <section className="space-y-4 rounded-md border bg-muted/50 p-4" aria-label="Sensores">
-            <h3 className="text-sm font-medium">Sensores</h3>
-            {sensors.map((sensor, index) => {
-              const model = sensorCatalog.find((entry) => entry.id === sensor.sensorId);
-              return <div key={index} className="space-y-3 rounded-md border bg-background p-3">
-                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-                  <div>
-                    <label className="mb-1 block text-sm" htmlFor={`sensor-model-${index}`}>Modelo del sensor {index + 1}</label>
-                    <select id={`sensor-model-${index}`} className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={sensor.sensorId} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, sensorId: event.target.value } : row))}>
-                      <option value="">Seleccionar modelo</option>
-                      {sensorCatalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} — {entry.variables.map((variable) => variable.name).join(", ")}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-sm" htmlFor={`sensor-key-${index}`}>Clave opcional {index + 1}</label>
-                    <Input id={`sensor-key-${index}`} className="min-h-11" placeholder="Se generará automáticamente" value={sensor.key} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { ...row, key: event.target.value } : row))} />
-                  </div>
-                  <Button type="button" variant="outline" className="min-h-11" onClick={() => setSensors((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label={`Quitar sensor ${index + 1}`}>Quitar</Button>
-                </div>
-                {model && <p className="text-xs text-muted-foreground">{model.variables.map((variable) => `${variable.name}: ${variable.min}–${variable.max} ${variable.unit}`).join(" · ")}</p>}
-              </div>;
-            })}
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setSensors((rows) => [...rows, { sensorId: "", key: "" }]); setSensorError(""); }}>Agregar sensor</Button>
-            {catalogError && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
-            {sensorError && <p role="alert" className="text-sm text-destructive">{sensorError}</p>}
-          </section>
         )}
 
         {extraContent}
