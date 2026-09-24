@@ -16,14 +16,6 @@ describe("deviceHistoryApi", () => {
     });
   });
 
-  it("keeps environment scope on readings and never maps payment fields", async () => {
-    get.mockResolvedValue({ data: { items: [{ id: "r-1", temperatureC: 22, relativeHumidityPct: 50, pressureHpa: 1013, powerSupplyState: false }], total: 1, page: 1, perPage: 10, pages: 1 } });
-    const result = await deviceHistoryApi.readings("SN/1", { environmentId: "env-1", tempMin: 20, page: 1, perPage: 10 });
-    expect(get).toHaveBeenCalledWith("/devices/history/devices/SN%2F1/sensor-readings", { params: expect.objectContaining({ environment_id: "env-1", temp_min: 20 }) });
-    expect(result.items[0]).toMatchObject({ temperatureC: 22, powerSupplyState: false });
-    expect(result.items[0]).not.toHaveProperty("amount");
-  });
-
   it("sends operation type and status without payment parameters", async () => {
     get.mockResolvedValue({ data: { items: [], total: 0, page: 1, perPage: 10, pages: 0 } });
     await deviceHistoryApi.operations("SN-1", { environmentId: "env-2", operationType: "SENSOR_DATA", status: "success", page: 1, perPage: 10 });
@@ -44,10 +36,9 @@ describe("deviceHistoryApi", () => {
     expect(get).toHaveBeenCalledWith("/sensor-catalog/variables");
   });
 
-  it("sends inclusive local date bounds to both detail endpoints", async () => {
+  it("sends inclusive local date bounds to the operations endpoint", async () => {
     get.mockResolvedValue({ data: { items: [], total: 0, page: 1, perPage: 10, pages: 0 } });
     const dates = { dateFrom: "2026-09-01", dateTo: "2026-09-02" };
-    await deviceHistoryApi.readings("SN-1", { environmentId: "env-1", ...dates });
     await deviceHistoryApi.operations("SN-1", { environmentId: "env-1", ...dates });
     for (const [, request] of get.mock.calls) {
       expect(request.params).toMatchObject({ date_from: dates.dateFrom, date_to: dates.dateTo, utc_offset_minutes: -new Date().getTimezoneOffset() });

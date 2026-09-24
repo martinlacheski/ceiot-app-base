@@ -42,37 +42,6 @@ class HistoryScope:
         return scope
 
 
-@dataclass(frozen=True)
-class ReadingFilters:
-    temp_min: float | None = None
-    temp_max: float | None = None
-    humidity_min: float | None = None
-    humidity_max: float | None = None
-    pressure_min: float | None = None
-    pressure_max: float | None = None
-    has_error: bool | None = None
-    firmware_version: str | None = None
-
-    def conditions(self):
-        conditions = []
-        for value, column, op in (
-            (self.temp_min, SensorReading.temperature_c, "min"),
-            (self.temp_max, SensorReading.temperature_c, "max"),
-            (self.humidity_min, SensorReading.relative_humidity_pct, "min"),
-            (self.humidity_max, SensorReading.relative_humidity_pct, "max"),
-            (self.pressure_min, SensorReading.pressure_hpa, "min"),
-            (self.pressure_max, SensorReading.pressure_hpa, "max"),
-        ):
-            if value is not None:
-                conditions.append(column >= value if op == "min" else column <= value)
-        if self.has_error is not None:
-            error = and_(SensorReading.last_error.is_not(None), SensorReading.last_error != "")
-            conditions.append(error if self.has_error else ~error)
-        if self.firmware_version:
-            conditions.append(SensorReading.firmware_version == self.firmware_version)
-        return conditions
-
-
 def _matches_search(entry, search, utc_offset_minutes):
     # The list is already aggregated in Python: substring matching treats '%' and
     # '_' literally. Detail SQL searches use core.search.ilike_pattern to escape them.
@@ -243,34 +212,6 @@ class DeviceHistoryService:
         items = (await self.session.execute(query)).scalars().all()
         return {'items': items, 'total': total, 'page': page, 'per_page': per_page,
                 'pages': (total + per_page - 1) // per_page}
-
-    async def list_sensor_readings(self, scope, *, serial, environment_id=None, filters=None,
-                                   search=None, date_from=None, date_to=None,
-                                   sort_by="time", sort_order="desc",
-                                   utc_offset_minutes=0, page=1, per_page=100):
-        filters = filters or ReadingFilters()
-        query = select(SensorReading).where(SensorReading.device_serial == serial,
-            scope.condition(SensorReading.environment_id, SensorReading.time, environment_id,
-                            members_only=True), *filters.conditions(),
-            *local_date_conditions(SensorReading.time, date_from, date_to, utc_offset_minutes))
-        match = text_search(search, formatted_time(SensorReading.time, utc_offset_minutes),
-            SensorReading.device_serial, SensorReading.device_type, SensorReading.power_supply_state,
-            SensorReading.temperature_c, SensorReading.relative_humidity_pct, SensorReading.pressure_hpa,
-            SensorReading.uptime, SensorReading.firmware_version, SensorReading.reset_reason,
-            SensorReading.heap_free, SensorReading.wifi_rssi, SensorReading.wifi_ssid,
-            SensorReading.wifi_ip, SensorReading.last_error, SensorReading.device_datetime)
-        if match is not None:
-            query = query.where(match)
-        total = (await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
-        columns = {key: getattr(SensorReading, key) for key in (
-            "time", "temperature_c", "relative_humidity_pct", "pressure_hpa", "firmware_version",
-            "wifi_rssi", "uptime", "heap_free")}
-        query = query.order_by(ordered(columns[sort_by], sort_order),
-                               SensorReading.time.desc(), SensorReading.id.asc()).offset(
-                                   (page - 1) * per_page).limit(per_page)
-        items = (await self.session.execute(query)).scalars().all()
-        return {"items": items, "total": total, "page": page, "per_page": per_page,
-                "pages": (total + per_page - 1) // per_page}
 
     async def list_operations(self, scope, *, serial, environment_id=None, status=None,
                               operation_type=None, search=None, date_from=None, date_to=None,

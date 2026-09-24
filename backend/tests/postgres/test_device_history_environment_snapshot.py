@@ -26,7 +26,7 @@ from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.environment.environment_type.models import EnvironmentType
 from app.api.location.models import LocationCity, LocationCountry, LocationState
 from app.api.sensor.repository import SensorRepository
-from app.api.sensor.models import SensorReading
+from app.api.sensor.models import Telemetry
 from app.api.sensor.service import SensorService
 
 pytestmark = pytest.mark.asyncio
@@ -136,6 +136,10 @@ async def history_rows(postgres_rls_config) -> AsyncIterator[HistoryRows]:
                 {"device_id": device.id},
             )
             await connection.execute(
+                text("DELETE FROM telemetry WHERE device_id = :device_id"),
+                {"device_id": device.id},
+            )
+            await connection.execute(
                 text("DELETE FROM deviceoperation WHERE device_serial = :serial"),
                 {"serial": device.serial},
             )
@@ -203,7 +207,6 @@ async def test_history_snapshots_environment_and_survives_device_reassignment(
         old_reading = await SensorService(SensorRepository(session)).save_reading(
             device_id=history_rows.device_id,
             device_serial=history_rows.device_serial,
-            temperature_c=20.0,
         )
         old_operation = await DeviceOperationService(session).create_operation(
             operation_type=DeviceOperationType.SENSOR_DATA,
@@ -223,7 +226,6 @@ async def test_history_snapshots_environment_and_survives_device_reassignment(
         new_reading = await SensorService(SensorRepository(session)).save_reading(
             device_id=history_rows.device_id,
             device_serial=history_rows.device_serial,
-            temperature_c=21.0,
         )
         new_operation = await DeviceOperationService(session).create_operation(
             operation_type=DeviceOperationType.KEEP_ACTIVE,
@@ -281,32 +283,45 @@ async def test_history_snapshots_environment_and_survives_device_reassignment(
 async def test_history_api_scope_uses_snapshot_not_current_device(
     postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
 ) -> None:
-    """A former owner keeps both histories; the new owner cannot inherit either."""
+    """A former owner keeps both histories; the new owner cannot inherit either.
+
+    Environmental history now lives in `telemetry` (S6), not `sensorreading`
+    (health only), so this snapshot-scope proof uses list_telemetry; the
+    device-health reading is kept only to prove readings_count/former-device
+    listing is unaffected by the column drop.
+    """
     admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
     async with AsyncSession(admin_engine, expire_on_commit=False) as session:
-        old_reading = await SensorService(SensorRepository(session)).save_reading(
+        old_health_reading = await SensorService(SensorRepository(session)).save_reading(
             device_id=history_rows.device_id, device_serial=history_rows.device_serial,
-            temperature_c=18.0,
         )
+        old_telemetry = Telemetry(device_id=history_rows.device_id,
+            device_serial=history_rows.device_serial, values={})
+        session.add(old_telemetry)
         old_operation = await DeviceOperationService(session).create_operation(
             operation_type=DeviceOperationType.SENSOR_DATA,
             device_serial=history_rows.device_serial,
             status=DeviceOperationStatus.SUCCESS,
         )
+        await session.commit()
         await session.execute(text("UPDATE device SET environment_id = :env WHERE id = :id"),
                               {"env": history_rows.new_environment_id,
                                "id": history_rows.device_id})
         await session.commit()
-        new_reading = await SensorService(SensorRepository(session)).save_reading(
+        new_health_reading = await SensorService(SensorRepository(session)).save_reading(
             device_id=history_rows.device_id, device_serial=history_rows.device_serial,
-            temperature_c=26.0,
         )
+        new_telemetry = Telemetry(device_id=history_rows.device_id,
+            device_serial=history_rows.device_serial, values={})
+        session.add(new_telemetry)
         new_operation = await DeviceOperationService(session).create_operation(
             operation_type=DeviceOperationType.KEEP_ACTIVE,
             device_serial=history_rows.device_serial,
             status=DeviceOperationStatus.SUCCESS,
         )
+        await session.commit()
     await admin_engine.dispose()
+    del old_health_reading, new_health_reading
 
     role_engine = rls_engine_factory(pool_size=1)
     async def read_as(user_id, *, admin=False):
@@ -324,27 +339,27 @@ async def test_history_api_scope_uses_snapshot_not_current_device(
             filtered = (await service.list_devices(
                 user, only_former=False, search=history_rows.device_serial,
                 owner_id=history_rows.old_owner_id)) if admin else None
-            readings = await service.list_sensor_readings(scope, serial=history_rows.device_serial)
+            telemetry = await service.list_telemetry(scope, serial=history_rows.device_serial)
             operations = await service.list_operations(scope, serial=history_rows.device_serial)
-            return listed, {item.id for item in readings["items"]}, {item.id for item in operations["items"]}, filtered, former
+            return listed, {item.id for item in telemetry["items"]}, {item.id for item in operations["items"]}, filtered, former
 
-    old_list, old_readings, old_operations, _, former = await read_as(history_rows.old_owner_id)
+    old_list, old_telemetry_ids, old_operations, _, former = await read_as(history_rows.old_owner_id)
     assert any(item["serial"] == history_rows.device_serial and item["is_former"]
                for item in old_list["items"])
     assert former is not None and former["total"] == 1
-    assert old_reading.id in old_readings and new_reading.id not in old_readings
+    assert old_telemetry.id in old_telemetry_ids and new_telemetry.id not in old_telemetry_ids
     assert old_operation.id in old_operations and new_operation.id not in old_operations
 
-    _, new_readings, new_operations, _, _ = await read_as(history_rows.new_owner_id)
-    assert new_reading.id in new_readings and old_reading.id not in new_readings
+    _, new_telemetry_ids, new_operations, _, _ = await read_as(history_rows.new_owner_id)
+    assert new_telemetry.id in new_telemetry_ids and old_telemetry.id not in new_telemetry_ids
     assert new_operation.id in new_operations and old_operation.id not in new_operations
 
-    unrelated_list, unrelated_readings, unrelated_operations, _, _ = await read_as(uuid.uuid4())
+    unrelated_list, unrelated_telemetry_ids, unrelated_operations, _, _ = await read_as(uuid.uuid4())
     assert not any(item["serial"] == history_rows.device_serial for item in unrelated_list["items"])
-    assert not unrelated_readings and not unrelated_operations
+    assert not unrelated_telemetry_ids and not unrelated_operations
 
-    admin_list, admin_readings, admin_operations, filtered, _ = await read_as(uuid.uuid4(), admin=True)
-    assert {old_reading.id, new_reading.id} <= admin_readings
+    admin_list, admin_telemetry_ids, admin_operations, filtered, _ = await read_as(uuid.uuid4(), admin=True)
+    assert {old_telemetry.id, new_telemetry.id} <= admin_telemetry_ids
     assert {old_operation.id, new_operation.id} <= admin_operations
     assert any(item["owner_id"] == history_rows.old_owner_id for item in admin_list["items"])
     assert filtered is not None and filtered["total"] == 1
@@ -369,15 +384,15 @@ async def test_history_environment_guest_sees_operations_but_not_telemetry(
             await session.flush()
             session.add(relation)
             await session.commit()
-            reading = await SensorService(SensorRepository(session)).save_reading(
-                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
-                temperature_c=19.0,
-            )
+            telemetry_row = Telemetry(device_id=history_rows.device_id,
+                device_serial=history_rows.device_serial, values={})
+            session.add(telemetry_row)
             operation = await DeviceOperationService(session).create_operation(
                 operation_type=DeviceOperationType.SENSOR_DATA,
                 device_serial=history_rows.device_serial,
                 status=DeviceOperationStatus.SUCCESS,
             )
+            await session.commit()
 
         role_engine = rls_engine_factory(pool_size=1)
         async with AsyncSession(role_engine, expire_on_commit=False) as session:
@@ -388,10 +403,10 @@ async def test_history_environment_guest_sees_operations_but_not_telemetry(
             listed = await service.list_devices(guest, only_former=False,
                                                 search=history_rows.device_serial)
             operations = await service.list_operations(scope, serial=history_rows.device_serial)
-            readings = await service.list_sensor_readings(scope, serial=history_rows.device_serial)
+            telemetry = await service.list_telemetry(scope, serial=history_rows.device_serial)
             assert any(item["serial"] == history_rows.device_serial for item in listed["items"])
             assert operation.id in {item.id for item in operations["items"]}
-            assert reading.id not in {item.id for item in readings["items"]}
+            assert telemetry_row.id not in {item.id for item in telemetry["items"]}
     finally:
         async with admin_engine.begin() as connection:
             await connection.execute(text("DELETE FROM scoped_guest_relation WHERE id = :id"),
@@ -409,15 +424,15 @@ async def test_detail_date_range_uses_local_day_before_count_and_pagination(
                 datetime(2026, 9, 1, 22, 0, tzinfo=timezone.utc),
                 datetime(2026, 9, 2, 21, 59, tzinfo=timezone.utc),
                 datetime(2026, 9, 2, 22, 0, tzinfo=timezone.utc)]
-    reading_ids = []
+    telemetry_ids = []
     operation_ids = []
     async with AsyncSession(admin_engine, expire_on_commit=False) as session:
         for instant in instants:
-            reading = SensorReading(
+            telemetry_row = Telemetry(
                 time=instant, device_id=history_rows.device_id,
                 device_serial=history_rows.device_serial,
                 environment_id=history_rows.old_environment_id,
-                temperature_c=20.0,
+                values={},
             )
             operation = DeviceOperation(
                 time=instant, environment_id=history_rows.old_environment_id,
@@ -425,8 +440,8 @@ async def test_detail_date_range_uses_local_day_before_count_and_pagination(
                 device_serial=history_rows.device_serial,
                 status=DeviceOperationStatus.SUCCESS,
             )
-            session.add_all([reading, operation])
-            reading_ids.append(reading.id)
+            session.add_all([telemetry_row, operation])
+            telemetry_ids.append(telemetry_row.id)
             operation_ids.append(operation.id)
         await session.commit()
     await admin_engine.dispose()
@@ -438,7 +453,7 @@ async def test_detail_date_range_uses_local_day_before_count_and_pagination(
         service = DeviceHistoryService(session)
         scope = await service.resolve_scope(User(
             id=history_rows.old_owner_id, email="owner@example.com", username="owner", password="unused"))
-        for fetch, expected_ids in ((service.list_sensor_readings, reading_ids),
+        for fetch, expected_ids in ((service.list_telemetry, telemetry_ids),
                                     (service.list_operations, operation_ids)):
             first = await fetch(scope, serial=history_rows.device_serial,
                                 date_from=datetime(2026, 9, 2).date(), date_to=datetime(2026, 9, 2).date(),
@@ -458,7 +473,6 @@ async def test_is_former_is_per_snapshot_environment_under_rls(
     async with AsyncSession(admin_engine, expire_on_commit=False) as session:
         await SensorService(SensorRepository(session)).save_reading(
             device_id=history_rows.device_id, device_serial=history_rows.device_serial,
-            temperature_c=20.0,
         )
         await session.commit()
 
@@ -490,7 +504,6 @@ async def test_is_former_is_per_snapshot_environment_under_rls(
         async with AsyncSession(admin_engine, expire_on_commit=False) as session:
             await SensorService(SensorRepository(session)).save_reading(
                 device_id=history_rows.device_id, device_serial=history_rows.device_serial,
-                temperature_c=21.0,
             )
             await session.execute(text("UPDATE environmentuser SET user_id = :owner WHERE environment_id = :env"),
                                   {"owner": history_rows.old_owner_id,

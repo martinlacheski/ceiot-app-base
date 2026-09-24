@@ -11,7 +11,6 @@ from app.api.access.repository import GuestAccessRepository
 from app.api.access.service import GuestAccessService
 from app.api.auth.models import User
 from app.api.sensor.models import Telemetry
-from app.api.sensor.router import _resolve_access_start
 from app.api.sensor_catalog.models import DeviceSensor, Sensor, SensorVariable, Variable
 from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permissions
 from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
@@ -20,6 +19,7 @@ from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatc
 from app.api.sensor_catalog.telemetry import TelemetryPage, sensor_descriptions
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
+from app.core.time import utc_now
 
 catalog_router = APIRouter()
 device_router = APIRouter()
@@ -29,6 +29,45 @@ def _admin_write(user: User = Depends(PermissionChecker(Permissions.WRITE))):
     if not user.is_admin:
         raise HTTPException(403, 'Only an administrator can manage the sensor catalog')
     return user
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(UTC).replace(tzinfo=None)
+
+
+async def _resolve_access_start(
+    device_id: uuid.UUID,
+    session: AuthedAsyncDBSession,
+    current_user: User,
+) -> datetime | None:
+    """Guest-visible telemetry starts at their effective access grant (owners/admins see everything)."""
+    access_service = GuestAccessService(GuestAccessRepository(session))
+    context = await access_service.resolve_device_access(device_id, current_user)
+    if current_user.is_admin or context.is_owner or not context.is_guest:
+        return None
+
+    access_starts_at = (
+        await access_service.repository.get_effective_guest_access_start_for_device(
+            device_id=device_id,
+            environment_id=context.environment_id,
+            guest_user_id=current_user.id,
+        )
+    )
+    if access_starts_at is None:
+        raise HTTPException(
+            status_code=403,
+            detail="No tienes acceso contextual a este dispositivo",
+        )
+
+    access_starts_at = _as_utc_naive(access_starts_at)
+    if access_starts_at > utc_now():
+        raise HTTPException(
+            status_code=403,
+            detail="El acceso a este dispositivo todavía no está vigente",
+        )
+    return access_starts_at
 
 
 def _page(items, total: int, page: int, per_page: int):

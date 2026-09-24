@@ -182,16 +182,39 @@ async def test_handler_does_not_write_all_invalid_telemetry_but_keeps_health(asy
     assert len(readings) == 1 and readings[0].uptime == 42
 
 
-async def test_handler_preserves_old_flat_payload(async_session, mqtt_context):
+async def test_handler_warns_and_drops_legacy_flat_payload_without_sensors(async_session, mqtt_context, caplog):
+    """S6: temperature/humidity/pressure top-level keys are no longer stored
+    anywhere (the columns are gone). A device still sending the pre-S1 flat
+    contract without a 'sensors' payload gets a clear warning instead of
+    silently losing its telemetry, but a health reading is still recorded
+    (health ingestion keeps working)."""
     serial = "S2-LEGACY-001"
-    await handlers.process_sensor_message_pub(
-        f"iot/devices/{serial}/telemetry",
-        json.dumps({"temperature": 21.5, "humidity": 44, "pressure": 1000}),
-    )
+    with caplog.at_level(logging.WARNING):
+        await handlers.process_sensor_message_pub(
+            f"iot/devices/{serial}/telemetry",
+            json.dumps({"temperature": 21.5, "humidity": 44, "pressure": 1000}),
+        )
     assert not (await async_session.exec(select(Telemetry).where(Telemetry.device_serial == serial))).all()
     readings = (await async_session.exec(select(SensorReading).where(SensorReading.device_serial == serial))).all()
     assert len(readings) == 1
-    assert (readings[0].temperature_c, readings[0].relative_humidity_pct, readings[0].pressure_hpa) == (21.5, 44, 1000)
+    assert not hasattr(readings[0], "temperature_c")
+    assert any("sensors" in record.message and serial in record.message for record in caplog.records)
+
+
+async def test_handler_ignores_legacy_flat_keys_alongside_sensors_without_warning(async_session, mqtt_context, caplog):
+    """A device that already migrated to 'sensors' but still sends the old
+    flat keys too (dual-publishing during a rollout) should not be warned:
+    'sensors' is present, so nothing is actually missing."""
+    serial = "S2-DUAL-001"
+    with caplog.at_level(logging.WARNING):
+        await handlers.process_sensor_message_pub(
+            f"iot/devices/{serial}/telemetry",
+            json.dumps({"temperature": 21.5, "sensors": {"dht22": {"temperature": 23.4}}}),
+        )
+    telemetry = (await async_session.exec(select(Telemetry).where(Telemetry.device_serial == serial))).all()
+    assert len(telemetry) == 1
+    assert not any("sensors" in record.message and "temperature" in record.message.lower()
+                   for record in caplog.records if "ya no se" in record.message)
 
 
 async def test_telemetry_failure_does_not_lose_committed_health(async_session, mqtt_context, monkeypatch, caplog):

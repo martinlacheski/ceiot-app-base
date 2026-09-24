@@ -224,7 +224,7 @@ def test_real_context_owner_guest_outsider_and_serial_history(
     from app.api.device.history import router as history_module
     from app.api.sensor.models import Telemetry
     from app.api.sensor_catalog.models import DeviceSensor
-    from test_sensor_readings_router import seed_sensor_graph
+    from sensor_graph import seed_sensor_graph
 
     seed = seed_sensor_graph(session)
     device = seed["device"]

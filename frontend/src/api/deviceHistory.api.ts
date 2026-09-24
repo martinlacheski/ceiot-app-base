@@ -3,7 +3,6 @@ import { appApi } from "@/api/appApi";
 const base = "/devices/history/devices";
 export interface HistoryPage<T> { items: T[]; total: number; page: number; perPage: number; pages: number }
 export interface HistoryDevice { serial: string; deviceName?: string | null; environmentId: string; environmentName?: string | null; firstSeen: string | null; lastSeen: string | null; readingsCount: number; operationsCount: number; isFormer: boolean; ownerId?: string | null; ownerName?: string | null }
-export interface HistoryReading { id: string; time: string; deviceSerial: string; deviceType: string | null; powerSupplyState: boolean | null; temperatureC: number | null; relativeHumidityPct: number | null; pressureHpa: number | null; uptime: number | null; firmwareVersion: string | null; resetReason: string | null; heapFree: number | null; wifiRssi: number | null; wifiSsid: string | null; wifiIp: string | null; lastError: string | null; deviceDatetime: string | null }
 export interface HistoryOperation { id: string; time: string; deviceSerial: string | null; operationType: string; status: string }
 export interface HistoryTelemetryVariable { code: string; name: string; unit: string }
 export interface HistoryCatalogVariable extends HistoryTelemetryVariable { id: string }
@@ -13,7 +12,6 @@ export interface HistoryTelemetryPage extends HistoryPage<HistoryTelemetryItem> 
 export type HistorySortOrder = "asc" | "desc";
 export interface HistoryCommon { environmentId?: string; search?: string; sortBy?: string; sortOrder?: HistorySortOrder; page?: number; perPage?: number; dateFrom?: string; dateTo?: string }
 export interface HistoryDevicesParams extends HistoryCommon { onlyFormer?: boolean; lastSeenFrom?: string; lastSeenTo?: string; ownerId?: string }
-export interface HistoryReadingsParams extends HistoryCommon { tempMin?: number; tempMax?: number; humidityMin?: number; humidityMax?: number; pressureMin?: number; pressureMax?: number; hasError?: boolean; firmwareVersion?: string }
 export interface HistoryOperationsParams extends HistoryCommon { status?: string; operationType?: string }
 export interface HistoryTelemetryParams extends HistoryCommon { variable?: string; min?: number; max?: number }
 
@@ -43,13 +41,6 @@ export const deviceHistoryApi = {
     last_seen_from: params.lastSeenFrom || undefined,
     last_seen_to: params.lastSeenTo || undefined,
     owner_id: params.ownerId || undefined,
-  }),
-  readings: (serial: string, params: HistoryReadingsParams) => page<HistoryReading>(`${serialPath(serial)}/sensor-readings`, {
-    ...common(params), date_from: params.dateFrom || undefined, date_to: params.dateTo || undefined,
-    temp_min: params.tempMin, temp_max: params.tempMax,
-    humidity_min: params.humidityMin, humidity_max: params.humidityMax,
-    pressure_min: params.pressureMin, pressure_max: params.pressureMax,
-    has_error: params.hasError, firmware_version: params.firmwareVersion || undefined,
   }),
   telemetry: async (serial: string, params: HistoryTelemetryParams): Promise<HistoryTelemetryPage> => {
     const { data } = await appApi.get<HistoryTelemetryPage>(`${serialPath(serial)}/telemetry`, { params: {

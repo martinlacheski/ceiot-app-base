@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 from importlib import import_module
+import logging
 import sys
 import types
 from pathlib import Path
@@ -372,16 +373,21 @@ def isolated_handler_boundaries(monkeypatch: Any) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_sensor_telemetry_persists_runtime_and_sensor_fields(
+async def test_flat_environmental_keys_warn_and_still_persist_runtime_and_health(
     isolated_handler_boundaries: dict[str, Any],
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    await handlers.process_sensor_message_pub(
-        "iot/devices/SYNTHETIC-1000/telemetry",
-        '{"temperature": 21.5, "humidity": 55.0, "power_supply_state": true, '
-        '"mac_address": "AA:BB:CC:DD:EE:FF", "firmware_version": "test-fw", '
-        '"wifi_ip": "192.0.2.10", "wifi_rssi": -48, "wifi_ssid": "test-net", '
-        '"reset_reason": "synthetic", "uptime": 120}',
-    )
+    """S6: flat temperature/humidity keys (no 'sensors' payload) are no
+    longer environmental data -- they get a clear warning and are dropped --
+    but runtime/health reporting and the health reading keep working."""
+    with caplog.at_level(logging.WARNING):
+        await handlers.process_sensor_message_pub(
+            "iot/devices/SYNTHETIC-1000/telemetry",
+            '{"temperature": 21.5, "humidity": 55.0, "power_supply_state": true, '
+            '"mac_address": "AA:BB:CC:DD:EE:FF", "firmware_version": "test-fw", '
+            '"wifi_ip": "192.0.2.10", "wifi_rssi": -48, "wifi_ssid": "test-net", '
+            '"reset_reason": "synthetic", "uptime": 120}',
+        )
 
     reports = isolated_handler_boundaries["runtime_reports"]
     assert len(reports) == 1
@@ -398,17 +404,19 @@ async def test_sensor_telemetry_persists_runtime_and_sensor_fields(
         "gps_updated_at": None,
         "touch_last_connection": True,
     }
+    # No 'sensors' payload was sent, so this is not real sensor telemetry.
     operations = isolated_handler_boundaries["operations"]
     assert len(operations) == 1
-    assert operations[0]["operation_type"] == handlers.DeviceOperationType.SENSOR_DATA
+    assert operations[0]["operation_type"] == handlers.DeviceOperationType.KEEP_ACTIVE
     readings = isolated_handler_boundaries["sensor_readings"]
     assert len(readings) == 1
     assert readings[0]["device_serial"] == "SYNTHETIC-1000"
     assert readings[0]["device_id"] == "synthetic-device-id"
-    assert readings[0]["temperature_c"] == 21.5
-    assert readings[0]["relative_humidity_pct"] == 55.0
+    assert "temperature_c" not in readings[0]
+    assert "relative_humidity_pct" not in readings[0]
     assert readings[0]["power_supply_state"] is True
     assert readings[0]["uptime"] == 120
+    assert any("sensors" in record.message for record in caplog.records)
 
 
 @pytest.mark.asyncio
@@ -424,13 +432,13 @@ async def test_generic_runtime_report_records_keep_active(
     operations = isolated_handler_boundaries["operations"]
     assert len(operations) == 1
     assert operations[0]["operation_type"] == handlers.DeviceOperationType.KEEP_ACTIVE
-    # A pure health ping still records a reading with honest nulls on the
-    # environmental fields it didn't report (C9's missing-data contract).
+    # A pure health ping still records a reading (S6: environmental fields no
+    # longer exist on SensorReading at all -- they live only in `telemetry`).
     readings = isolated_handler_boundaries["sensor_readings"]
     assert len(readings) == 1
-    assert readings[0]["temperature_c"] is None
-    assert readings[0]["relative_humidity_pct"] is None
-    assert readings[0]["pressure_hpa"] is None
+    assert "temperature_c" not in readings[0]
+    assert "relative_humidity_pct" not in readings[0]
+    assert "pressure_hpa" not in readings[0]
 
 
 @pytest.mark.asyncio

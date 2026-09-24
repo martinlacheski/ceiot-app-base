@@ -40,11 +40,11 @@ class SensorReading(SQLModel, table=True):
     # Generic device-health signals
     power_supply_state: Optional[bool] = Field(default=None)
 
-    # Environmental measurements
-    temperature_c: Optional[float] = Field(default=None)
-    relative_humidity_pct: Optional[float] = Field(default=None)
-    pressure_hpa: Optional[float] = Field(default=None)
-    
+    # Environmental measurements moved to the JSONB `telemetry` table (see
+    # app.api.sensor.models.Telemetry / migration 0005). sensorreading keeps
+    # only device health (S6 cleanup, migration 0008 dropped temperature_c,
+    # relative_humidity_pct and pressure_hpa).
+
     # Telemetría del Dispositivo
     uptime: Optional[int] = Field(default=None)
     firmware_version: Optional[str] = Field(default=None)

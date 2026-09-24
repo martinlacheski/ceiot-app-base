@@ -1,6 +1,15 @@
+"""Shared owner/guest/outsider device-and-environment fixture graph.
+
+Originally lived in test_sensor_readings_router.py (removed in S6 along with
+the C10 /sensor-readings endpoints it exercised); kept here because
+test_telemetry_api_contract.py still needs this same rich RLS/guest-access
+graph to test the current telemetry endpoints under real ownership/guest/
+outsider scenarios. Not a test_*.py module on purpose, so pytest does not
+try to collect it directly.
+"""
+
 from datetime import timedelta
 
-from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api.access.models import ScopeType, ScopedGuestRelation
@@ -190,6 +199,7 @@ def seed_sensor_graph(session: Session):
         )
     )
 
+    # Health-only readings (S6: no environmental columns left on SensorReading).
     readings = []
     for index in range(4):
         reading = SensorReading(
@@ -197,9 +207,6 @@ def seed_sensor_graph(session: Session):
             device_id=device.id,
             device_serial=device.serial,
             device_type="environmental",
-            temperature_c=20.0 + index,
-            relative_humidity_pct=50.0 + index,
-            pressure_hpa=1000.0 + index,
             uptime=100 + index,
             wifi_rssi=-40 - index,
         )
@@ -210,7 +217,6 @@ def seed_sensor_graph(session: Session):
             time=base_time + timedelta(hours=3),
             device_id=other_device.id,
             device_serial=other_device.serial,
-            temperature_c=99.0,
         )
     )
     session.commit()
@@ -227,166 +233,3 @@ def seed_sensor_graph(session: Session):
         "readings": readings,
         "base_time": base_time,
     }
-
-
-def test_owner_gets_latest_and_bounded_history_readings(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    device_id = seed["device"].id
-    headers = auth_headers(seed["owner"])
-
-    latest = client.get(
-        f"/api/devices/{device_id}/sensor-readings/latest",
-        params={"limit": 2},
-        headers=headers,
-    )
-    history = client.get(
-        f"/api/devices/{device_id}/sensor-readings/history",
-        params={
-            "start": (seed["base_time"] + timedelta(hours=1)).isoformat(),
-            "end": (seed["base_time"] + timedelta(hours=2)).isoformat(),
-        },
-        headers=headers,
-    )
-
-    assert latest.status_code == 200
-    assert latest.json()["total"] == 4
-    assert [item["temperatureC"] for item in latest.json()["items"]] == [23.0, 22.0]
-    assert all(item["deviceId"] == str(device_id) for item in latest.json()["items"])
-    assert latest.json()["items"][0]["relativeHumidityPct"] == 53.0
-    assert latest.json()["items"][0]["pressureHpa"] == 1003.0
-    assert latest.json()["items"][0]["wifiRssi"] == -43
-
-    assert history.status_code == 200
-    assert history.json()["total"] == 2
-    assert [item["temperatureC"] for item in history.json()["items"]] == [21.0, 22.0]
-
-
-def test_current_guest_gets_only_readings_at_or_after_access_start(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/history",
-        params={
-            "start": seed["base_time"].isoformat(),
-            "end": (seed["base_time"] + timedelta(hours=3)).isoformat(),
-        },
-        headers=auth_headers(seed["guest"]),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["total"] == 3
-    assert [item["temperatureC"] for item in response.json()["items"]] == [21.0, 22.0, 23.0]
-
-
-def test_current_device_scoped_guest_gets_readings_after_access_start(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/latest",
-        params={"limit": 10},
-        headers=auth_headers(seed["device_guest"]),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["total"] == 2
-    assert [item["temperatureC"] for item in response.json()["items"]] == [23.0, 22.0]
-
-
-def test_guest_with_future_access_start_is_denied(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/latest",
-        headers=auth_headers(seed["future_guest"]),
-    )
-
-    assert response.status_code == 403
-
-
-def test_user_with_revoked_relation_cannot_read_sensor_data(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/latest",
-        headers=auth_headers(seed["outsider"]),
-    )
-
-    assert response.status_code in {403, 404}
-    assert "items" not in response.json()
-
-
-def test_owner_from_another_tenant_cannot_read_sensor_data(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/latest",
-        headers=auth_headers(seed["unrelated_owner"]),
-    )
-
-    assert response.status_code in {403, 404}
-    assert "items" not in response.json()
-
-
-def test_empty_history_range_returns_empty_list(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/history",
-        params={
-            "start": (seed["base_time"] + timedelta(days=1)).isoformat(),
-            "end": (seed["base_time"] + timedelta(days=2)).isoformat(),
-        },
-        headers=auth_headers(seed["owner"]),
-    )
-
-    assert response.status_code == 200
-    assert response.json() == {"items": [], "total": 0}
-
-
-def test_latest_limit_is_bounded_without_counting_another_device(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/latest",
-        params={"limit": 1},
-        headers=auth_headers(seed["owner"]),
-    )
-
-    assert response.status_code == 200
-    assert response.json()["total"] == 4
-    assert len(response.json()["items"]) == 1
-    assert response.json()["items"][0]["temperatureC"] == 23.0
-
-
-def test_reversed_history_range_is_rejected(
-    client: TestClient,
-    session: Session,
-):
-    seed = seed_sensor_graph(session)
-    response = client.get(
-        f"/api/devices/{seed['device'].id}/sensor-readings/history",
-        params={
-            "start": (seed["base_time"] + timedelta(hours=3)).isoformat(),
-            "end": seed["base_time"].isoformat(),
-        },
-        headers=auth_headers(seed["owner"]),
-    )
-
-    assert response.status_code == 422

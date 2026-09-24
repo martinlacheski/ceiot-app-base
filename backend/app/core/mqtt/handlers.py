@@ -10,7 +10,15 @@ from app.core.db import system_session
 
 logger = logging.getLogger(__name__)
 
-_SENSOR_READING_KEYS = ("power_supply_state", "temperature", "humidity", "pressure")
+_HEALTH_SIGNAL_KEYS = ("power_supply_state",)
+# S6: environmental values now live only in the JSONB `telemetry` table (see
+# app.api.sensor.service.SensorService.save_sensor_telemetry), keyed by
+# installed device sensor via the `sensors` payload. These flat top-level
+# keys are the pre-S1 device firmware contract; they are no longer persisted
+# anywhere, but older/misconfigured firmware may still send them, so we keep
+# recognizing them just to log a clear warning instead of silently dropping
+# telemetry.
+_LEGACY_ENVIRONMENTAL_KEYS = ("temperature", "humidity", "pressure")
 _RUNTIME_HEALTH_KEYS = (
     "uptime",
     "firmware_version",
@@ -204,7 +212,14 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 if device:
                     await _persist_device_runtime_report(repo, device, data)
 
-            has_sensor_data = "sensors" in data or any(key in data for key in _SENSOR_READING_KEYS)
+            has_sensor_data = "sensors" in data
+            has_legacy_environmental_keys = any(key in data for key in _LEGACY_ENVIRONMENTAL_KEYS)
+            if has_legacy_environmental_keys and not has_sensor_data:
+                logger.warning(
+                    "⚠️ Claves ambientales planas (temperature/humidity/pressure) ya no se "
+                    "almacenan; serial=%r debe publicar un payload 'sensors'. Ignorando valores.",
+                    serial,
+                )
             op_type = (
                 DeviceOperationType.SENSOR_DATA
                 if has_sensor_data
@@ -218,9 +233,15 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 status=DeviceOperationStatus.SUCCESS,
             )
 
-            # Toda telemetría reconocida genera una lectura, con nulls honestos
-            # en los campos de medición ambiental que no vinieron en el payload.
-            if has_sensor_data or any(key in data for key in _RUNTIME_HEALTH_KEYS):
+            # Toda telemetría reconocida (salud, ambiental legacy o 'sensors')
+            # genera una lectura de salud, con nulls honestos en los campos
+            # de salud que no vinieron en el payload.
+            if (
+                has_sensor_data
+                or has_legacy_environmental_keys
+                or any(key in data for key in _HEALTH_SIGNAL_KEYS)
+                or any(key in data for key in _RUNTIME_HEALTH_KEYS)
+            ):
                 from app.api.sensor.repository import SensorRepository
                 from app.api.sensor.service import SensorService
 
@@ -231,9 +252,6 @@ async def process_sensor_message_pub(topic: str, payload: str):
                     device_serial=serial,
                     device_id=device.id if device else None,
                     power_supply_state=data.get("power_supply_state"),
-                    temperature_c=data.get("temperature"),
-                    relative_humidity_pct=data.get("humidity"),
-                    pressure_hpa=data.get("pressure"),
                     device_type=data.get("device_type", "generic"),
                     device_datetime=data.get("datetime"),
                     # Telemetría
