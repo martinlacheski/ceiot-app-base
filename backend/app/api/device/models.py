@@ -175,3 +175,7 @@ class DevicePairingRequest(CamelModel):
     serial: str
     environment_id: uuid.UUID
     description: str = Field(min_length=1)
+
+
+class DeviceMoveRequest(CamelModel):
+    environment_id: uuid.UUID

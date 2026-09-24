@@ -91,6 +91,10 @@ export interface DevicePairingRequest {
   description: string;
 }
 
+export interface DeviceMoveRequest {
+  environmentId: string;
+}
+
 export type DevicesResponse = PaginatedResponse<Device>;
 export interface DeviceTypesResponse {
   items: DeviceTypeCatalog[];

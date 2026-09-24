@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PageHeader } from "@/app/components/PageHeader";
 import { SearchableSelect } from "@/components/custom/SearchableSelect";
+import { useDebouncedSearch } from "@/hooks/useDebouncedSearch";
 import {
   EnvironmentForm,
   type EnvironmentFormValues,
@@ -176,13 +177,19 @@ export default function PairDevicePage() {
   const [checking, setChecking] = useState(false);
   const [environmentDialogOpen, setEnvironmentDialogOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [selectedEnvironmentLabel, setSelectedEnvironmentLabel] = useState<
+    string | undefined
+  >(undefined);
 
+  const environmentSearch = useDebouncedSearch();
   const { data: environmentsData, isLoading: isLoadingEnvs } = useEnvironments({
     page: 1,
     perPage: 100,
     isActive: true,
     sortBy: "name",
     sortOrder: "asc",
+    ownerId: user?.id,
+    search: environmentSearch.debounced || undefined,
   });
 
   const createEnvironment = useCreateEnvironment();
@@ -262,6 +269,7 @@ export default function PairDevicePage() {
       const savedEnvironment = await createEnvironment.mutateAsync(payload);
       toast.success("Establecimiento creado correctamente");
       setEnvironmentDialogOpen(false);
+      setSelectedEnvironmentLabel(savedEnvironment.name);
       form.setValue("environmentId", savedEnvironment.id, {
         shouldValidate: true,
         shouldDirty: true,
@@ -295,7 +303,8 @@ export default function PairDevicePage() {
     );
   };
 
-  // Filter environments where user is strictly OWNER
+  // The server already filters to establishments owned by this user
+  // (`ownerId`) and by the typed search term; this is a safety net.
   const environments = (environmentsData?.items || []).filter(
     (env) => env.ownerId === user?.id,
   );
@@ -390,9 +399,18 @@ export default function PairDevicePage() {
                             value: env.id,
                           }))}
                           value={field.value}
-                          onChange={field.onChange}
+                          selectedLabel={selectedEnvironmentLabel}
+                          onChange={(value) => {
+                            field.onChange(value);
+                            setSelectedEnvironmentLabel(
+                              environments.find((env) => env.id === value)?.name,
+                            );
+                          }}
+                          onSearchChange={environmentSearch.setValue}
+                          shouldFilter={false}
+                          isLoading={isLoadingEnvs}
                           placeholder="Seleccionar establecimiento"
-                          disabled={isLoadingEnvs}
+                          disabled={isLoadingEnvs && environments.length === 0}
                         />
                       </div>
                       <Button

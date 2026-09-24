@@ -30,6 +30,19 @@ interface SearchableSelectProps {
   emptyMessage?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * Called with the text typed in the search box (and with "" when the list is
+   * closed), so the parent can search on the server.
+   */
+  onSearchChange?: (term: string) => void;
+  /** Set to false when `options` already come filtered (server-side search). */
+  shouldFilter?: boolean;
+  /** Shown instead of `emptyMessage` while the options are being fetched. */
+  isLoading?: boolean;
+  /** Label of `value` when it is not (or no longer) among `options`. */
+  selectedLabel?: string;
+  /** Set to false to hide the inline clear (X) button, e.g. when a shared "clear all filters" action already covers it. */
+  showClear?: boolean;
 }
 
 export function SearchableSelect({
@@ -41,11 +54,22 @@ export function SearchableSelect({
   emptyMessage = "No se encontraron resultados.",
   className,
   disabled,
+  onSearchChange,
+  shouldFilter = true,
+  isLoading = false,
+  selectedLabel,
+  showClear = true,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
 
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    // The search box is unmounted with the list: reset the term it reported.
+    if (!next) onSearchChange?.("");
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -56,11 +80,12 @@ export function SearchableSelect({
         >
           <span className="min-w-0 truncate text-left">
             {value
-              ? options.find((option) => option.value === value)?.label
+              ? (options.find((option) => option.value === value)?.label ??
+                selectedLabel)
               : placeholder}
           </span>
           <div className="flex shrink-0 items-center gap-1">
-            {value && !disabled && (
+            {value && !disabled && showClear && (
               <div
                 role="button"
                 onClick={(e) => {
@@ -80,10 +105,13 @@ export function SearchableSelect({
         className="w-[--radix-popover-trigger-width] p-0 z-[9999]"
         align="start"
       >
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+        <Command shouldFilter={shouldFilter}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            onValueChange={onSearchChange}
+          />
           <CommandList>
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
+            <CommandEmpty>{isLoading ? "Buscando..." : emptyMessage}</CommandEmpty>
             <CommandGroup>
               {options.map((option) => (
                 <CommandItem
@@ -91,7 +119,7 @@ export function SearchableSelect({
                   value={option.label}
                   onSelect={() => {
                     onChange(option.value === value ? undefined : option.value);
-                    setOpen(false);
+                    handleOpenChange(false);
                   }}
                 >
                   <Check

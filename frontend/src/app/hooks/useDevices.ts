@@ -10,6 +10,7 @@ import {
   type DeviceCreate,
   type DeviceUpdate,
   type DeviceFilters,
+  type DeviceMoveRequest,
   type DevicePairingRequest,
 } from "../types/device.types";
 import { toast } from "sonner";
@@ -161,6 +162,24 @@ export function useUnpairDevice() {
     onError: (error: any) => {
       toast.error(
         error.response?.data?.detail || "Error al desvincular el dispositivo",
+      );
+    },
+  });
+}
+
+export function useMoveDevice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: DeviceMoveRequest }) =>
+      deviceService.move(id, data),
+    onSuccess: (data) => {
+      toast.success("Dispositivo movido exitosamente");
+      queryClient.invalidateQueries({ queryKey: deviceKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: deviceKeys.detail(data.id) });
+    },
+    onError: (error: any) => {
+      toast.error(
+        error.response?.data?.detail || "Error al mover el dispositivo",
       );
     },
   });

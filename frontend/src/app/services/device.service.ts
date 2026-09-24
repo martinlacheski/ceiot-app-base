@@ -6,6 +6,7 @@ import {
   type DevicesResponse,
   type DeviceTypesResponse,
   type DeviceFilters,
+  type DeviceMoveRequest,
   type DevicePairingRequest,
   type DeviceOperation,
 } from "../types/device.types";
@@ -326,6 +327,11 @@ export const deviceService = {
 
   unpair: async (id: string): Promise<Device> => {
     const { data } = await appApi.post<Device>(`${BASE_URL}/${id}/unpair`);
+    return data;
+  },
+
+  move: async (id: string, request: DeviceMoveRequest): Promise<Device> => {
+    const { data } = await appApi.post<Device>(`${BASE_URL}/${id}/move`, request);
     return data;
   },
 

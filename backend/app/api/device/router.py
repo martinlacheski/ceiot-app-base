@@ -6,11 +6,12 @@ from app.api.device.models import (
     Device,
     DeviceCreate,
     DeviceListResponse,
+    DeviceMoveRequest,
     DevicePairingRequest,
     DeviceRead,
     DeviceUpdate,
 )
-from app.api.device.repository import DeviceRepository
+from app.api.device.repository import DeviceRepository, DeviceStateChangedError
 from app.api.device.device_type.repository import DeviceTypeRepository
 from app.api.device.device_type.constants import DEFAULT_DEVICE_TYPE_CODE
 from app.api.device.service import DeviceService
@@ -27,6 +28,7 @@ from app.api.access.schemas import (
 from app.api.access.models import ScopeType
 from app.api.access.service import GuestAccessService
 from app.api.auth.models import User
+from app.api.environment.environment.models import Environment
 from app.api.environment.environment.repository import EnvironmentRepository
 from app.core.dependencies import (
     PermissionChecker,
@@ -446,6 +448,97 @@ async def unpair_device(
             )
         await access_repo.cleanup_device_scope_access_on_unpair(device_id)
         return await sys_repo.unpair(current_device)
+
+
+DEVICE_STATE_CHANGED_DETAIL = "El dispositivo cambio de estado. Reintenta la operacion."
+
+
+@router.post("/{device_id}/move", response_model=DeviceRead, dependencies=[Depends(PermissionChecker(DevicePermissions.PAIR))])
+async def move_device(
+    device_id: uuid.UUID,
+    request: DeviceMoveRequest,
+    session: AuthedAsyncDBSession,
+    current_user: User = Depends(get_current_user),
+    presence_client: EmqxPresenceClient = Depends(get_emqx_presence_client),
+):
+    """
+    Move a paired device to another establishment in ONE transaction (no unpair + pair).
+
+    Source: owner of the device's current establishment (or `device:read_all`).
+    Destination: owner of it (or admin). The device keeps status and description; it
+    loses its device-scoped guests/invitations (environment-scoped ones apply by
+    inheritance). Past history (operations, telemetry) stays attributed to the
+    establishment that owned it when it was written — see the environment_id snapshot
+    columns and their write-time trigger.
+    """
+    repo = DeviceRepository(session)
+    device = await repo.get(device_id)
+    if not device:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    current_environment_id = device.environment_id
+    if current_environment_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El dispositivo no esta asociado a un establecimiento. Usa Asociar.",
+        )
+
+    # Source: same rule as unpair.
+    if "device:read_all" not in current_user.permissions:
+        context = await get_access_service(session).resolve_device_access(device_id, current_user)
+        if not context.is_owner:
+            raise HTTPException(
+                status_code=403,
+                detail="Solo el propietario del establecimiento puede mover dispositivos",
+            )
+
+    async with system_session() as sys_session:
+        destination = await sys_session.get(Environment, request.environment_id)
+        if destination is None or not destination.is_active:
+            raise HTTPException(
+                status_code=404, detail="Establecimiento destino no encontrado")
+
+        # Destination: same rule as pair.
+        if not current_user.is_admin:
+            role = await EnvironmentRepository(session).get_user_role(
+                request.environment_id,
+                current_user.id,
+            )
+            if not role or not role.is_owner:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Solo el propietario del establecimiento destino puede recibir dispositivos",
+                )
+
+        sys_repo = DeviceRepository(sys_session)
+        access_repo = GuestAccessRepository(sys_session)
+        current_device = await sys_repo.get(device_id)
+        if not current_device:
+            raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+        if current_device.environment_id != current_environment_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DEVICE_STATE_CHANGED_DETAIL,
+            )
+        if current_device.environment_id == request.environment_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="El dispositivo ya pertenece a ese establecimiento",
+            )
+
+        # Guest cleanup and the move share this session: one commit, no window without establishment.
+        await access_repo.cleanup_device_scope_access_on_unpair(device_id)
+        try:
+            moved_device = await sys_repo.move(current_device, request.environment_id)
+        except DeviceStateChangedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DEVICE_STATE_CHANGED_DETAIL,
+            ) from exc
+
+        snapshot = await presence_client.get_snapshot()
+        projected = project_broker_presence([DeviceRead.model_validate(moved_device)], snapshot)
+        return (await enrich_device_owner_metadata(projected, sys_session))[0]
 
 
 @router.post(

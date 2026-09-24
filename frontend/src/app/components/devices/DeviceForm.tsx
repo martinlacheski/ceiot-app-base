@@ -22,6 +22,7 @@ import { SmartDatePicker } from "@/components/custom/SmartDatePicker";
 import { CenteredHeader } from "@/components/custom/CenteredHeader";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SearchableSelect } from "@/components/custom/SearchableSelect";
+import { DeviceEstablishmentBlock } from "@/app/components/devices/DeviceEstablishmentBlock";
 import { getDeviceStatusLabel } from "@/utils/status-labels";
 import {
   FULL_PAGE_FORM_ACTION_BUTTON_CLASS,
@@ -203,17 +204,45 @@ export function DeviceForm({
         {showDeviceIdentityFields && (
           <div className="space-y-4">
             {isEditing && initialData?.environmentId && canManageDevice && (
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleUnpair}
-                >
-                  <Unplug className="mr-1.5 h-3.5 w-3.5" />
-                  Desvincular Dispositivo
-                </Button>
-              </div>
+              <>
+                {form.formState.isDirty && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                    <span>
+                      Guardá o descartá los cambios antes de mover el
+                      dispositivo a otro establecimiento.
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="min-h-11"
+                      onClick={() =>
+                        showConfirmDialog(
+                          "¿Estás seguro de descartar los cambios sin guardar?",
+                          () => form.reset(),
+                        )
+                      }
+                    >
+                      Descartar cambios
+                    </Button>
+                  </div>
+                )}
+                <DeviceEstablishmentBlock
+                  device={initialData}
+                  moveDisabled={form.formState.isDirty}
+                />
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleUnpair}
+                  >
+                    <Unplug className="mr-1.5 h-3.5 w-3.5" />
+                    Desvincular Dispositivo
+                  </Button>
+                </div>
+              </>
             )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4 md:items-end">
               <div>

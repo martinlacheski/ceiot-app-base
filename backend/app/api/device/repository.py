@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
-from sqlalchemy import String, and_, case, cast, false, func, literal, or_
+from sqlalchemy import String, and_, case, cast, false, func, literal, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
@@ -34,11 +34,24 @@ from app.core.search import (
 from app.core.labels_es import DEVICE_STATUS_LABELS, codes_matching_label
 
 
+class DeviceStateChangedError(Exception):
+    """Raised when a device's `environment_id` no longer matches what the caller read.
+
+    Signals a concurrent unpair/pair/move that already changed the device's
+    establishment; the caller should surface a 409 and ask the user to retry.
+    """
+
+
 class DeviceRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get(self, id: uuid.UUID, include_inactive: bool = False) -> Optional[Device]:
+    async def get(
+        self,
+        id: uuid.UUID,
+        include_inactive: bool = False,
+        populate_existing: bool = False,
+    ) -> Optional[Device]:
         query = select(Device).options(
             selectinload(Device.type),
             selectinload(Device.environment).selectinload(
@@ -49,6 +62,11 @@ class DeviceRepository:
         ).where(Device.id == id)
         if not include_inactive:
             query = query.where(Device.is_active == True)
+        if populate_existing:
+            # Forces a refresh of any already identity-mapped instance: needed
+            # after a Core UPDATE (e.g. move()), which bypasses the ORM's
+            # unit-of-work and leaves loaded instances with stale attributes.
+            query = query.execution_options(populate_existing=True)
         result = await self.session.exec(query)
         return result.first()
 
@@ -534,6 +552,43 @@ class DeviceRepository:
 
         # Re-fetch with relationships loaded
         return await self.get(db_device.id, include_inactive=True)
+
+    async def move(self, db_device: Device, environment_id: uuid.UUID) -> Device:
+        """Move a paired device to another environment in ONE UPDATE, never passing through NULL.
+
+        The device history triggers stamp every new row with the device's current
+        environment_id, so a window without an environment (what unpair + pair would
+        leave) would hide the rows written in it. This single conditional UPDATE keeps
+        the device always assigned: rows written before the move stay attributed to the
+        origin environment, rows written after belong to the destination. Status,
+        description and every other field stay untouched.
+
+        The UPDATE only matches while the device is still in the environment the caller
+        read (`DeviceStateChangedError` otherwise), so a concurrent unpair/pair/move is
+        never silently overwritten. The caller owns authorization and the cleanup of the
+        device-scoped guests (same session, committed together with this move).
+        """
+        origin_environment_id = db_device.environment_id
+        destination = await self.session.get(Environment, environment_id)
+        if origin_environment_id is None or destination is None:
+            raise DeviceStateChangedError
+
+        result = await self.session.exec(
+            update(Device)
+            .where(
+                Device.id == db_device.id,
+                Device.environment_id == origin_environment_id,
+            )
+            .values(environment_id=environment_id)
+            # The instance already in the session is stale after a Core UPDATE.
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            await self.session.rollback()
+            raise DeviceStateChangedError
+        await self.session.commit()
+
+        return await self.get(db_device.id, include_inactive=True, populate_existing=True)
 
     async def get_distinct_manufacture_dates(self) -> List[date]:
         statement = select(Device.manufacture_date).distinct().where(
