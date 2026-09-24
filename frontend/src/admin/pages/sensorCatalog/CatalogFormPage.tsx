@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FULL_PAGE_FORM_ACTIONS_CLASS, FULL_PAGE_FORM_ACTION_BUTTON_CLASS, FULL_PAGE_FORM_BACK_LABEL, getFullPageFormPrimaryLabel } from "@/components/custom/fullPageFormActions";
 import { Plus, Trash2 } from "lucide-react";
+import { useVariableOptions } from "./useVariableOptions";
 import { catalogApi, type CatalogKind, type SensorVariableInput, type Variable } from "./catalogApi";
 import { SLUG_PATTERN, validateSensorVariables } from "./catalogValidation";
 
@@ -32,10 +33,7 @@ export function CatalogFormPage({ kind }: { kind: CatalogKind }) {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const record = useQuery({ queryKey: ["admin-catalog", kind, id], queryFn: () => catalogApi.get(kind, id!), enabled: Boolean(id) });
-  const variables = useQuery({ queryKey: ["admin-catalog", "variable-options"], queryFn: async () => {
-    const page = await catalogApi.list("variables", { page: 1, perPage: 10000 });
-    return page.items;
-  }, enabled: sensors });
+  const variables = useVariableOptions(sensors);
   useEffect(() => {
     if (!record.data) return;
     const item = record.data;

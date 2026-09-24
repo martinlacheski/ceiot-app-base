@@ -8,12 +8,24 @@ import { catalogApi } from "./catalogApi";
 vi.mock("./catalogApi", () => ({ catalogApi: { list: vi.fn(), deactivate: vi.fn(), update: vi.fn() } }));
 vi.mock("@/auth/store/auth.store", () => ({ useAuthStore: (selector: (state: object) => unknown) => selector({ user: { isAdmin: true, permissions: ["sensor_catalog:write"] } }) }));
 
-function renderList(kind: "sensors" | "variables") {
+function renderList(kind: "sensors" | "variables", client = new QueryClient()) {
   vi.mocked(catalogApi.list).mockResolvedValue({ items: [{ id: "s1", code: "dht", name: "DHT", manufacturer: "Acme", variables: [], unit: "°C", isActive: true }], total: 1, page: 1, perPage: 10, pages: 1 } as never);
-  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><CatalogListPage kind={kind} /></MemoryRouter></QueryClientProvider>);
+  render(<QueryClientProvider client={client}><MemoryRouter><CatalogListPage kind={kind} /></MemoryRouter></QueryClientProvider>);
 }
 
 describe("catalog lists", () => {
+  it("shares the variable options cache with the sensor form without crashing", async () => {
+    // The sensor form caches the variable options as a plain array under the same key;
+    // coming back to the list after visiting the form must not break the page.
+    const client = new QueryClient();
+    client.setQueryData(["admin-catalog", "variable-options"], [{ id: "v1", code: "temperature", name: "Temperatura", unit: "°C", description: null, isActive: true }]);
+    renderList("sensors", client);
+    await waitFor(() => expect(screen.getByRole("link", { name: "Editar sensor" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
+    // Options come from the shared array cache (seeded or refetched); the select must list them.
+    expect(screen.getByLabelText("Mide la variable").querySelectorAll("option").length).toBeGreaterThan(1);
+  });
+
   it("uses specific create labels, icon actions and sensor filters", async () => {
     renderList("sensors");
     expect(screen.getByRole("link", { name: "Nuevo sensor" })).toHaveClass("h-11");
