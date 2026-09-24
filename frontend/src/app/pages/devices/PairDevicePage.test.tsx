@@ -133,6 +133,32 @@ describe("PairDevicePage", () => {
     });
   });
 
+  it("uses noValidate and lets the user submit an empty form to see custom messages", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <PairDevicePage />
+      </MemoryRouter>,
+    );
+
+    const form = document.querySelector("form");
+    expect(form).toHaveAttribute("novalidate");
+
+    const submitButton = screen.getByRole("button", { name: /^asociar$/i });
+    expect(submitButton).toBeEnabled();
+
+    await user.click(submitButton);
+
+    expect(
+      await screen.findByText("El nombre del servicio es requerido"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Debe seleccionar un establecimiento"),
+    ).toBeInTheDocument();
+    expect(mutateMock).not.toHaveBeenCalled();
+  });
+
   it("opens the inline environment creation dialog", async () => {
     const user = userEvent.setup();
 

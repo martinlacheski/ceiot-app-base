@@ -17,6 +17,11 @@ export interface User {
   isAdmin: boolean;
   isSocialAuth?: boolean;
   permissions: string[];
+
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  lastLoginAt?: string | null;
+  lastSeenAt?: string | null;
 }
 
 export interface SessionUser extends User {

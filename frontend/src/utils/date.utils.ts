@@ -1,4 +1,4 @@
-import { format, isValid } from "date-fns";
+import { format, formatDistanceToNow, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 
 /**
@@ -81,4 +81,17 @@ export function formatTime(
   formatStr: string = "HH:mm",
 ): string {
   return formatDateTime(date, formatStr);
+}
+
+/**
+ * Formatea una fecha como distancia relativa a "ahora" ("hace 3 días"),
+ * reutilizando el mismo manejo de zona horaria que formatDateTime.
+ */
+export function formatRelativeTime(
+  date: string | Date | null | undefined,
+): string {
+  if (!date) return "-";
+  const parsed = new Date(formatDateTime(date, "yyyy-MM-dd'T'HH:mm:ss"));
+  if (!isValid(parsed)) return "-";
+  return formatDistanceToNow(parsed, { addSuffix: true, locale: es });
 }

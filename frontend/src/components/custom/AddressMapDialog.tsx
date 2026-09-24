@@ -33,6 +33,8 @@ export interface AddressMapDialogProps {
   initialAddress: string;
   initialCityId: string;
   onConfirm: (value: { address: string; cityId: string }) => void;
+  /** Optional Google `region` code used only as a search bias; unset by default. */
+  region?: string;
 }
 
 interface CoordinateValue {
@@ -99,6 +101,7 @@ function AddressMapDialogContent({
   initialCityId,
   onConfirm,
   onOpenChange,
+  region,
 }: Omit<AddressMapDialogProps, "open">) {
   const placesLib = useMapsLibrary("places");
   const [selection, setSelection] = useState<ResolvedLocationValue>(() =>
@@ -273,6 +276,7 @@ function AddressMapDialogContent({
                   onPlaceSelect={handlePlaceSelect}
                   placeholder="Buscar dirección en Google Maps"
                   initialValue={selection.address}
+                  region={region}
                 />
               </div>
             </MapControl>
@@ -338,13 +342,14 @@ export function AddressMapDialog(props: AddressMapDialogProps) {
         <APIProvider
           apiKey={import.meta.env.VITE_GCP_API_KEY}
           language="es"
-          region="AR"
+          region={props.region}
         >
           <AddressMapDialogContent
             initialAddress={props.initialAddress}
             initialCityId={props.initialCityId}
             onConfirm={props.onConfirm}
             onOpenChange={props.onOpenChange}
+            region={props.region}
           />
         </APIProvider>
       ) : null}

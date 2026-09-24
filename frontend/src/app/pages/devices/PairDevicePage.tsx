@@ -320,6 +320,7 @@ export default function PairDevicePage() {
           <Form {...form}>
             <form
               onSubmit={form.handleSubmit(handleSubmit)}
+              noValidate
               className="space-y-4"
             >
               <FormField
@@ -439,9 +440,7 @@ export default function PairDevicePage() {
                 <Button
                   type="submit"
                   className="flex-1 sm:flex-none"
-                  disabled={
-                    pairDevice.isPending || checking || !form.formState.isValid
-                  }
+                  disabled={pairDevice.isPending || checking}
                 >
                   {pairDevice.isPending && (
                     <span className="mr-2 animate-spin">⏳</span>

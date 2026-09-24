@@ -1,10 +1,12 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { getUsersAction } from "@/admin/actions/user.actions";
 import { useDeleteUser, useUpdateUser, useUsers } from "@/admin/hooks/useUsers";
+import { exportToPdf } from "@/lib/export.utils";
+import { formatDateTime } from "@/utils/date.utils";
 import { UsersTable } from "../UsersTable";
 
 const deleteMutate = vi.fn();
@@ -535,4 +537,186 @@ describe("UsersTable", () => {
 
   // More interaction tests would go here (e.g. clicking filters)
   // but this verifies the component renders without crashing and shows data.
+
+  describe("last access", () => {
+    const NOW = new Date("2026-09-20T12:00:00Z");
+    const activityUsers = [
+      {
+        ...users[0],
+        createdAt: "2026-01-10T09:30:00Z",
+        updatedAt: "2026-02-11T10:45:00Z",
+        lastLoginAt: "2026-09-10T08:00:00Z",
+        lastSeenAt: "2026-09-17T12:00:00Z",
+      },
+      {
+        ...users[1],
+        createdAt: "2026-03-01T09:30:00Z",
+        updatedAt: null,
+        lastLoginAt: "2026-09-20T11:55:00Z",
+        lastSeenAt: null,
+      },
+      {
+        id: "3",
+        username: "neveruser",
+        email: "never@example.com",
+        isActive: true,
+        isAdmin: false,
+        permissions: [],
+        createdAt: null,
+        updatedAt: null,
+        lastLoginAt: null,
+        lastSeenAt: null,
+      },
+    ];
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(NOW);
+      vi.mocked(useUsers).mockReturnValue({
+        data: { items: activityUsers, total: 3, page: 1, size: 10, pages: 1 },
+        isLoading: false,
+        isError: false,
+      } as unknown as ReturnType<typeof useUsers>);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const renderTable = () =>
+      render(
+        <MemoryRouter>
+          <UsersTable />
+        </MemoryRouter>,
+      );
+
+    it("shows the relative last activity, falling back to the last login and to Nunca", () => {
+      renderTable();
+      const table = within(screen.getByTestId("users-desktop-table"));
+
+      expect(table.getByText("Último acceso")).toBeInTheDocument();
+      expect(table.getByText("hace 3 días")).toBeInTheDocument();
+      expect(table.getByText("hace 5 minutos")).toBeInTheDocument();
+      expect(table.getByText("Nunca")).toBeInTheDocument();
+    });
+
+    it("lists the four exact dates in a tooltip reachable by keyboard", async () => {
+      const user = userEvent.setup();
+      renderTable();
+      const table = within(screen.getByTestId("users-desktop-table"));
+
+      const trigger = table.getByText("hace 3 días");
+      await user.tab();
+      trigger.focus();
+
+      const tooltip = (await screen.findAllByRole("tooltip"))[0];
+      expect(tooltip).toHaveTextContent(
+        `Creado: ${formatDateTime("2026-01-10T09:30:00Z")}`,
+      );
+      expect(tooltip).toHaveTextContent(
+        `Actualizado: ${formatDateTime("2026-02-11T10:45:00Z")}`,
+      );
+      expect(tooltip).toHaveTextContent(
+        `Último login: ${formatDateTime("2026-09-10T08:00:00Z")}`,
+      );
+      expect(tooltip).toHaveTextContent(
+        `Última actividad: ${formatDateTime("2026-09-17T12:00:00Z")}`,
+      );
+      expect(tooltip.textContent).toMatch(/\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}/);
+    });
+
+    it("shows a dash for empty dates in the tooltip", async () => {
+      const user = userEvent.setup();
+      renderTable();
+      const table = within(screen.getByTestId("users-desktop-table"));
+
+      await user.hover(table.getByText("Nunca"));
+
+      const tooltip = (await screen.findAllByRole("tooltip"))[0];
+      expect(tooltip).toHaveTextContent("Creado: —");
+      expect(tooltip).toHaveTextContent("Actualizado: —");
+      expect(tooltip).toHaveTextContent("Último login: —");
+      expect(tooltip).toHaveTextContent("Última actividad: —");
+    });
+
+    it("shows the last access and the four dates in the mobile card", () => {
+      renderTable();
+      const cards = screen.getAllByTestId("user-mobile-card");
+
+      expect(within(cards[0]).getByText(/hace 3 días/)).toBeInTheDocument();
+      expect(
+        within(cards[0]).getByText(
+          `Último login: ${formatDateTime("2026-09-10T08:00:00Z")}`,
+        ),
+      ).toBeInTheDocument();
+      expect(within(cards[2]).getByText(/Nunca/)).toBeInTheDocument();
+    });
+
+    it("sorts by last access and last login through the sort controls", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      render(
+        <MemoryRouter initialEntries={["/admin/users?sort=lastSeenAt:desc"]}>
+          <UsersTable />
+          <LocationSearch />
+        </MemoryRouter>,
+      );
+
+      expect(useUsers).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: "lastSeenAt:desc" }),
+      );
+
+      await user.click(screen.getByRole("button", { name: /Filtros/i }));
+      expect(screen.getByLabelText("Ordenar por")).toHaveTextContent(
+        "Último acceso",
+      );
+      await user.click(screen.getByLabelText("Ordenar por"));
+      await user.click(screen.getByRole("option", { name: "Último login" }));
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "sort=lastLoginAt%3Adesc",
+      );
+    });
+
+    it("adds the last access to the export, with Nunca when there is none", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      vi.mocked(getUsersAction).mockResolvedValue({
+        items: activityUsers,
+        total: 3,
+        page: 1,
+        size: 10000,
+        pages: 1,
+      } as unknown as Awaited<ReturnType<typeof getUsersAction>>);
+      vi.mocked(exportToPdf).mockResolvedValue(undefined);
+      renderTable();
+
+      await user.click(screen.getByRole("button", { name: /pdf/i }));
+
+      await waitFor(() => expect(exportToPdf).toHaveBeenCalled());
+      const options = vi.mocked(exportToPdf).mock.calls[0][0];
+      expect(options.columns.at(-1)).toBe("Último acceso");
+      expect(options.data[0].at(-1)).toBe(
+        formatDateTime("2026-09-17T12:00:00Z"),
+      );
+      expect(options.data[1].at(-1)).toBe(
+        formatDateTime("2026-09-20T11:55:00Z"),
+      );
+      expect(options.data[2].at(-1)).toBe("Nunca");
+    });
+
+    it("sorts from the column header", async () => {
+      const user = userEvent.setup();
+      render(
+        <MemoryRouter>
+          <UsersTable />
+          <LocationSearch />
+        </MemoryRouter>,
+      );
+      const table = within(screen.getByTestId("users-desktop-table"));
+
+      await user.click(table.getByRole("button", { name: /Último acceso/ }));
+      await user.click(screen.getByRole("menuitem", { name: "Desc" }));
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "sort=lastSeenAt%3Adesc",
+      );
+    });
+  });
 });

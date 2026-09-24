@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from fastapi import HTTPException, status
 from typing import Optional, Dict, Any
@@ -19,6 +20,8 @@ from app.core.sorting import SortSpec
 
 from app.core.config import settings
 from app.core.permissions import ALL_PERMISSIONS, BASIC_PERMISSIONS
+
+logger = logging.getLogger(__name__)
 
 # Clase de servicio de autenticación
 class AuthService:
@@ -139,6 +142,17 @@ class AuthService:
         await EmailService().send_verification_email(user.email, verification_token)
         return True
 
+    # Registra un login exitoso; un fallo se loguea y nunca rompe el login
+    async def record_login(self, user_id: uuid.UUID) -> None:
+        try:
+            await self.repo.touch_login(user_id, datetime.now())
+        except Exception:
+            logger.warning("Could not record last login of user %s", user_id, exc_info=True)
+            try:
+                await self.repo.db.rollback()
+            except Exception:
+                pass
+
     # Login de un usuario
     async def login(self, username: str, password: str) -> Dict[str, Any]:
 
@@ -163,6 +177,8 @@ class AuthService:
         # Generar el token
         token, expire = create_access_token(data=user_login)
         refresh_token, refresh_expire = create_refresh_token(data=user_login)
+        # Last: a failed touch rolls back and would expire `user`.
+        await self.record_login(user.id)
         return {
             "access_token": token,
             "expires_at": expire,

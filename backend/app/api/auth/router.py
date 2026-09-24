@@ -28,6 +28,8 @@ USER_SORT_FIELDS = {
     "isActive": "isActive",
     "isAdmin": "isAdmin",
     "createdAt": "createdAt",
+    "lastLoginAt": "lastLoginAt",
+    "lastSeenAt": "lastSeenAt",
     # Preserve the previously accepted backend spellings.
     "is_active": "isActive",
     "is_admin": "isAdmin",
@@ -287,6 +289,7 @@ async def google_callback(request: Request, db: AsyncDBSession):
 
         user_db = await service.get_or_create_social_user(email=sso_user.email, first_name=sso_user.first_name, last_name=sso_user.last_name)
         token_data = service.renew_token(user_db)
+        await service.record_login(user_db.id)
 
         next_path = _safe_frontend_return_path(request.query_params.get("state"))
         response = RedirectResponse(
@@ -330,6 +333,7 @@ async def facebook_callback(request: Request, db: AsyncDBSession):
 
         user_db = await service.get_or_create_social_user(email=sso_user.email, first_name=sso_user.first_name, last_name=sso_user.last_name)
         token_data = service.renew_token(user_db)
+        await service.record_login(user_db.id)
 
         next_path = _safe_frontend_return_path(request.query_params.get("state"))
         response = RedirectResponse(

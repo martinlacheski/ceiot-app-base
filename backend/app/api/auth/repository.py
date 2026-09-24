@@ -3,9 +3,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, or_, col
 from app.api.auth.models import User, UserUpdate
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
-from sqlalchemy import asc, case, desc, func
+from sqlalchemy import asc, case, desc, func, or_ as sa_or, update
 
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.sorting import SortSpec
@@ -98,6 +98,8 @@ class UserRepository:
             "isActive": (User.is_active, False, False),
             "isAdmin": (User.is_admin, False, False),
             "createdAt": (User.created_at, False, False),
+            "lastLoginAt": (User.last_login_at, False, True),
+            "lastSeenAt": (User.last_seen_at, False, True),
         }
         if sort:
             tie_direction = sort[-1][1]
@@ -140,6 +142,40 @@ class UserRepository:
         await self.db.commit()
         await self.db.refresh(user)
         return user
+
+    # Activity writes. Plain Core UPDATEs: `updated_at` has an `onupdate`, so it is set to
+    # itself to keep "Actualizado" meaning "the profile changed", not "the user logged in".
+    async def touch_login(self, user_id: uuid.UUID, now: datetime) -> None:
+        table = User.__table__
+        await self.db.exec(
+            update(table)
+            .where(table.c.id == user_id)
+            .values(last_login_at=now, last_seen_at=now, updated_at=table.c.updated_at)
+        )
+        await self.db.commit()
+
+    async def touch_seen(
+        self,
+        user_id: uuid.UUID,
+        now: datetime,
+        min_interval: timedelta = timedelta(minutes=15),
+    ) -> bool:
+        """Set `last_seen_at` unless it is already fresher than `min_interval`.
+
+        One conditional UPDATE, so concurrent requests cannot double write. Returns whether
+        this call wrote.
+        """
+        table = User.__table__
+        result = await self.db.exec(
+            update(table)
+            .where(
+                table.c.id == user_id,
+                sa_or(table.c.last_seen_at.is_(None), table.c.last_seen_at <= now - min_interval),
+            )
+            .values(last_seen_at=now, updated_at=table.c.updated_at)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
     async def delete(self, user_id: uuid.UUID) -> bool:
         user = await self.get_by_id(user_id)

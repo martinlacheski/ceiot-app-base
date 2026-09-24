@@ -8,10 +8,12 @@ const {
   resolveLocationActionMock,
   latestMapPropsRef,
   latestAutocompletePropsRef,
+  latestApiProviderPropsRef,
 } = vi.hoisted(() => ({
   resolveLocationActionMock: vi.fn(),
   latestMapPropsRef: { current: {} as Record<string, unknown> },
   latestAutocompletePropsRef: { current: {} as Record<string, unknown> },
+  latestApiProviderPropsRef: { current: {} as Record<string, unknown> },
 }));
 
 vi.mock("@/admin/actions/location.actions", () => ({
@@ -20,7 +22,10 @@ vi.mock("@/admin/actions/location.actions", () => ({
 
 vi.mock("@vis.gl/react-google-maps", () => ({
   AdvancedMarker: () => <div>marker</div>,
-  APIProvider: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  APIProvider: (props: { children: ReactNode }) => {
+    latestApiProviderPropsRef.current = props as unknown as Record<string, unknown>;
+    return <div>{props.children}</div>;
+  },
   ControlPosition: { TOP_CENTER: "TOP_CENTER" },
   Map: (props: { children: ReactNode }) => {
     latestMapPropsRef.current = props as unknown as Record<string, unknown>;
@@ -42,6 +47,38 @@ describe("AddressMapDialog", () => {
     resolveLocationActionMock.mockReset();
     latestMapPropsRef.current = {};
     latestAutocompletePropsRef.current = {};
+    latestApiProviderPropsRef.current = {};
+  });
+
+  it("does not force a country bias by default", () => {
+    render(
+      <AddressMapDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        initialAddress=""
+        initialCityId=""
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(latestApiProviderPropsRef.current.region).toBeUndefined();
+    expect(latestAutocompletePropsRef.current.region).toBeUndefined();
+  });
+
+  it("forwards an explicit region to the map provider and the address search", () => {
+    render(
+      <AddressMapDialog
+        open={true}
+        onOpenChange={vi.fn()}
+        initialAddress=""
+        initialCityId=""
+        onConfirm={vi.fn()}
+        region="PE"
+      />,
+    );
+
+    expect(latestApiProviderPropsRef.current.region).toBe("PE");
+    expect(latestAutocompletePropsRef.current.region).toBe("PE");
   });
 
   it("confirma la dirección inicial sin tocar el formulario hasta aceptar", async () => {

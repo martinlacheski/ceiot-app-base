@@ -14,12 +14,19 @@ interface GooglePlaceAutocompleteProps {
   onPlaceSelect: (place: any) => void | Promise<void>;
   placeholder?: string;
   initialValue?: string;
+  /**
+   * Optional Google `region` code (e.g. "PE", "AR") used only as a search
+   * bias. It never restricts results to that country, and no country is
+   * preferred when omitted.
+   */
+  region?: string;
 }
 
 export function GooglePlaceAutocomplete({
   onPlaceSelect,
   placeholder = "Buscar en Google Maps",
   initialValue = "",
+  region,
 }: GooglePlaceAutocompleteProps) {
   const places = useMapsLibrary("places");
   const [predictions, setPredictions] = useState<
@@ -58,7 +65,7 @@ export function GooglePlaceAutocomplete({
           input: value,
           sessionToken: currentToken,
           language: "es",
-          region: "AR",
+          ...(region ? { region } : {}),
         };
         const { suggestions } =
           await suggestionClass.fetchAutocompleteSuggestions(request);
@@ -85,7 +92,7 @@ export function GooglePlaceAutocomplete({
         input: value,
         sessionToken: currentToken,
         language: "es",
-        region: "AR",
+        ...(region ? { region } : {}),
       };
 
       service.getPlacePredictions(request, (results) => {

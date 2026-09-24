@@ -1,15 +1,23 @@
 
+import logging
+from datetime import datetime, timedelta
 from typing import Annotated, AsyncGenerator
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 from sqlalchemy import text
+from sqlalchemy.orm.attributes import set_committed_value
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_session, get_async_session, async_engine
 from app.core.security import decode_token
 from app.api.auth.models import User
 from app.api.auth.repository import UserRepository
+
+logger = logging.getLogger(__name__)
+
+# `last_seen_at` is refreshed at most this often per user.
+LAST_SEEN_INTERVAL = timedelta(minutes=15)
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -59,8 +67,34 @@ async def get_current_user(token: Annotated[str, Depends(oauth2)], db: AsyncDBSe
     if not user:
         raise credentials_exc
 
+    await _touch_last_seen(repo, user)
+
     # Se retorna el usuario
     return user
+
+
+async def _touch_last_seen(repo: UserRepository, user: User) -> None:
+    """Throttled activity mark: no query unless the loaded row says it is stale.
+
+    The conditional UPDATE in the repository is the guard against concurrent double writes.
+    Never fails the request.
+    """
+    now = datetime.now()
+    if user.last_seen_at is not None and now - user.last_seen_at < LAST_SEEN_INTERVAL:
+        return
+    try:
+        if await repo.touch_seen(user.id, now, LAST_SEEN_INTERVAL):
+            # Reflect the write on the loaded row without marking it dirty (a dirty row would
+            # make a later commit issue an UPDATE that bumps `updated_at`).
+            set_committed_value(user, "last_seen_at", now)
+    except Exception:
+        logger.warning("Could not record last seen of user %s", user.id, exc_info=True)
+        try:
+            # The rollback expired the loaded row: reload it so the request can keep using it.
+            await repo.db.rollback()
+            await repo.db.refresh(user)
+        except Exception:
+            pass
 
 
 # Se envuelve la dependencia del usuario en un Annotated para que sea tipado

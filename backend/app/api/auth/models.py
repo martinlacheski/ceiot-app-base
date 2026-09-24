@@ -31,8 +31,12 @@ class User(SQLModel, table=True):
     birth_date: Optional[date] = None
 
     permissions: list[str] = Field(default=[], sa_column=Column(JSON))
-    created_at: datetime = Field(default=datetime.now())
+    # default_factory: evaluated per row (a plain `datetime.now()` would be frozen at import time).
+    created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    # Activity, written only by UserRepository.touch_login / touch_seen (never bumps updated_at).
+    last_login_at: Optional[datetime] = Field(default=None)
+    last_seen_at: Optional[datetime] = Field(default=None)
     is_active: bool = Field(default=True)
     is_verified: bool = Field(default=False, sa_column_kwargs={
                               "server_default": text("false")})
@@ -91,6 +95,8 @@ class UserRead(CamelModel):
     permissions: List[str]
     created_at: datetime
     updated_at: Optional[datetime] = None
+    last_login_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
     is_active: bool
     is_verified: bool
     is_admin: bool

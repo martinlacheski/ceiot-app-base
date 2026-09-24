@@ -81,6 +81,11 @@ import { showConfirmDialog } from "@/store/confirm.store";
 import { toPositiveInt } from "@/utils/url-params";
 import { useNavigate } from "react-router";
 // import { UserDialog } from "./UserDialog";
+import {
+  UserLastAccessCell,
+  UserLastAccessLines,
+  getUserLastAccessExportValue,
+} from "./UserLastAccess";
 import { ViewUserDialog } from "./ViewUserDialog";
 
 interface UsersTableProps {
@@ -96,6 +101,8 @@ const USER_SORT_OPTIONS = [
   { value: "isActive", label: "Estado" },
   { value: "isAdmin", label: "Rol" },
   { value: "createdAt", label: "Fecha de alta" },
+  { value: "lastSeenAt", label: "Último acceso" },
+  { value: "lastLoginAt", label: "Último login" },
 ] as const;
 
 type UserSortField = (typeof USER_SORT_OPTIONS)[number]["value"];
@@ -167,6 +174,7 @@ export function UserMobileCard({
             </span>
           )}
         </div>
+        <UserLastAccessLines user={user} />
       </CardContent>
       <CardFooter className="flex min-w-0 gap-2 px-4">
         <Button
@@ -326,7 +334,15 @@ export function UsersTable({ actions }: UsersTableProps) {
         title: "Reporte de Usuarios",
         filename: "reporte_usuarios",
         generatedBy: getExportGeneratedBy(currentUser),
-        columns: ["Usuario", "Email", "Nombre", "Apellido", "Estado", "Rol"],
+        columns: [
+          "Usuario",
+          "Email",
+          "Nombre",
+          "Apellido",
+          "Estado",
+          "Rol",
+          "Último acceso",
+        ],
         data: users.map((u) => [
           u.username,
           u.email,
@@ -334,6 +350,7 @@ export function UsersTable({ actions }: UsersTableProps) {
           u.lastName || "",
           u.isActive ? "Activo" : "Inactivo",
           u.isAdmin ? "Admin" : "Usuario",
+          getUserLastAccessExportValue(u),
         ]),
       };
 
@@ -524,6 +541,21 @@ export function UsersTable({ actions }: UsersTableProps) {
           </div>
         );
       },
+    },
+    {
+      accessorKey: "lastSeenAt",
+      header: ({ column }) => (
+        <DataTableColumnHeader
+          column={column}
+          title="Último acceso"
+          className="justify-center"
+        />
+      ),
+      cell: ({ row }) => (
+        <div className="text-center">
+          <UserLastAccessCell user={row.original} />
+        </div>
+      ),
     },
     {
       id: "actions",

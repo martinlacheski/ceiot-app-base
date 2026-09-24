@@ -174,7 +174,6 @@ export function EnvironmentDetailDialog({
             <APIProvider
               apiKey={import.meta.env.VITE_GCP_API_KEY}
               language="es"
-              region="AR"
             >
               <Map
                 defaultCenter={coordinates}

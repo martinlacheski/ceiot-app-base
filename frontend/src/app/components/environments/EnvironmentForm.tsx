@@ -831,7 +831,6 @@ export function EnvironmentForm(props: EnvironmentFormProps) {
     <APIProvider
       apiKey={import.meta.env.VITE_GCP_API_KEY}
       language="es"
-      region="AR"
     >
       <EnvironmentFormContent {...props} />
     </APIProvider>

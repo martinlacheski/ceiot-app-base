@@ -46,6 +46,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0007_backfill_sensor_catalog_write.py",
         "0008_drop_sensorreading_environmental_columns.py",
         "0009_remove_sensor_read_permission.py",
+        "0010_add_user_activity_timestamps.py",
     ]
 
 
