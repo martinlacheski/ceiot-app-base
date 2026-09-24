@@ -64,27 +64,27 @@ export function DeviceSensorsSection({ deviceId, canManage }: DeviceSensorsSecti
                 {model?.variables.map((variable) => <p key={variable.code} className="text-xs text-muted-foreground">{variable.name} ({variable.unit}): {rangeFormatter.format(variable.min)}–{rangeFormatter.format(variable.max)} {variable.unit}</p>)}
               </div>
               {canWrite && sensor.isActive && <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => { setEditId(sensor.id); setEditKey(sensor.key); setEditConfig(JSON.stringify(sensor.config, null, 2)); }}>Editar</Button>
-                <Button type="button" variant="destructive" size="sm" onClick={() => showConfirmDialog(`¿Deseas quitar el sensor ${sensor.key}? Sus lecturas anteriores se conservarán.`, async () => { await remove.mutateAsync(sensor.id); })}>Quitar</Button>
+                <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => { setEditId(sensor.id); setEditKey(sensor.key); setEditConfig(JSON.stringify(sensor.config, null, 2)); }}>Editar</Button>
+                <Button type="button" variant="destructive" size="sm" className="min-h-11" onClick={() => showConfirmDialog(`¿Deseas quitar el sensor ${sensor.key}? Sus lecturas anteriores se conservarán.`, async () => { await remove.mutateAsync(sensor.id); })}>Quitar</Button>
               </div>}
             </div>
             {editId === sensor.id && <div className="mt-3 space-y-2 border-t pt-3">
-              <label className="block text-sm">Clave<Input value={editKey} onChange={(event) => setEditKey(event.target.value)} /></label>
+              <label className="block text-sm">Clave<Input className="min-h-11" value={editKey} onChange={(event) => setEditKey(event.target.value)} /></label>
               <label className="block text-sm">Configuración JSON<textarea className="min-h-20 w-full rounded-md border bg-background p-2 font-mono text-sm" value={editConfig} onChange={(event) => setEditConfig(event.target.value)} /></label>
-              <div className="flex gap-2"><Button type="button" size="sm" onClick={saveEdit} disabled={update.isPending}>Guardar sensor</Button><Button type="button" variant="outline" size="sm" onClick={() => setEditId(null)}>Cancelar</Button></div>
+              <div className="flex gap-2"><Button type="button" size="sm" className="min-h-11" onClick={saveEdit} disabled={update.isPending}>Guardar sensor</Button><Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => setEditId(null)}>Cancelar</Button></div>
             </div>}
           </div>;
         })}
       </div>}
       {canWrite && canReadCatalog && <div className="space-y-2 border-t pt-4">
         <label className="block text-sm font-medium" htmlFor="sensor-model">Modelo de sensor</label>
-        <select id="sensor-model" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={catalogLoading || catalogError}>
+        <select id="sensor-model" className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={catalogLoading || catalogError}>
           <option value="">Seleccionar modelo</option>
           {catalog.map((model) => <option key={model.id} value={model.id}>{model.name} · {model.variables.map((variable) => `${variable.name} (${variable.unit})`).join(", ")}</option>)}
         </select>
         <label className="block text-sm" htmlFor="sensor-key">Clave opcional</label>
-        <Input id="sensor-key" value={newKey} onChange={(event) => setNewKey(event.target.value)} placeholder="Se generará automáticamente" />
-        <Button type="button" onClick={addSensor} disabled={add.isPending || catalogLoading || catalogError}>Agregar sensor</Button>
+        <Input id="sensor-key" className="min-h-11" value={newKey} onChange={(event) => setNewKey(event.target.value)} placeholder="Se generará automáticamente" />
+        <Button type="button" className="min-h-11" onClick={addSensor} disabled={add.isPending || catalogLoading || catalogError}>Agregar sensor</Button>
       </div>}
       {catalogError && canReadCatalog && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

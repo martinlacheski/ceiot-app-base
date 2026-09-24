@@ -13,6 +13,7 @@ from app.api.device.device_type.models import DeviceTypeCatalog
 from app.api.device.service import DeviceService
 from app.api.device.models import Device, DeviceStatus
 from app.api.device.repository import DeviceRepository
+from app.api.sensor_catalog.models import Sensor
 from app.api.auth.models import User
 from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.environment.environment_type.models import EnvironmentType
@@ -60,7 +61,10 @@ def admin_token_fixture(client: TestClient, session: Session):
                 DevicePermissions.UPDATE,
                 DevicePermissions.DELETE,
                 DevicePermissions.PAIR,
-                DevicePermissions.READ_ALL
+                DevicePermissions.READ_ALL,
+                # Needed by test_create_device_admin to attach a sensor when
+                # registering an Ambiental device through POST /api/devices.
+                "device_sensor:write",
             ]
         )
         session.add(user)
@@ -127,15 +131,22 @@ def _create_pairing_environment(session: Session, owner: User) -> Environment:
     return environment
 
 
-def test_create_device_admin(client: TestClient, admin_token: str):
+def test_create_device_admin(client: TestClient, admin_token: str, session: Session):
     headers = {"Authorization": f"Bearer {admin_token}"}
     serial = DeviceService.generate_serial()
+
+    # POST /api/devices requires >=1 sensor for the Ambiental default type.
+    sensor = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
+    session.add(sensor)
+    session.commit()
+    session.refresh(sensor)
 
     data = {
         "serial": serial,
         "name": "Test Device",
         "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
         "model": "V1",
+        "sensors": [{"sensorId": str(sensor.id)}],
     }
 
     # Create
@@ -210,15 +221,23 @@ def test_create_device_rejects_inactive_device_type_id(
     assert response.json() == {"detail": "Invalid device type reference"}
 
 
-def test_pairing_flow(client: TestClient, admin_token: str):
+def test_pairing_flow(client: TestClient, admin_token: str, session: Session):
     headers = {"Authorization": f"Bearer {admin_token}"}
 
     # 1. Create Device
+    # Not about the Ambiental type or sensors at all (only the /pair
+    # endpoint's permission check below), so use a non-Ambiental type to
+    # stay clear of the "Ambiental needs a sensor" rule.
+    other_type = DeviceTypeCatalog(name="Pairing Test Type", is_active=True)
+    session.add(other_type)
+    session.commit()
+    session.refresh(other_type)
+
     serial = DeviceService.generate_serial()
     create_data = {
         "serial": serial,
         "name": "Pairing Test Device",
-        "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
+        "deviceTypeId": str(other_type.id),
         "model": "V1"
     }
     r = client.post("/api/devices", json=create_data, headers=headers)
@@ -255,13 +274,21 @@ def test_pairing_flow(client: TestClient, admin_token: str):
 
 
 
-def test_uniqueness_check(client: TestClient, admin_token: str):
+def test_uniqueness_check(client: TestClient, admin_token: str, session: Session):
     headers = {"Authorization": f"Bearer {admin_token}"}
+    # Not about the Ambiental type or sensors at all (only serial
+    # uniqueness), so use a non-Ambiental type to stay clear of the
+    # "Ambiental needs a sensor" rule.
+    other_type = DeviceTypeCatalog(name="Uniqueness Test Type", is_active=True)
+    session.add(other_type)
+    session.commit()
+    session.refresh(other_type)
+
     serial = DeviceService.generate_serial()
     data = {
         "serial": serial,
         "name": "Unique Test",
-        "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID)
+        "deviceTypeId": str(other_type.id)
     }
 
     # First
@@ -276,12 +303,19 @@ def test_uniqueness_check(client: TestClient, admin_token: str):
 def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token: str, session: Session):
     headers = {"Authorization": f"Bearer {admin_token}"}
 
+    # POST /api/devices requires >=1 sensor for the Ambiental default type.
+    sensor = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
+    session.add(sensor)
+    session.commit()
+    session.refresh(sensor)
+
     default_response = client.post(
         "/api/devices",
         json={
             "serial": DeviceService.generate_serial(),
             "name": "Default Type Device",
             "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
+            "sensors": [{"sensorId": str(sensor.id)}],
         },
         headers=headers,
     )

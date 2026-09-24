@@ -13,6 +13,7 @@ from app.api.device.models import Device
 from app.api.device.device_type.repository import DeviceTypeRepository
 from app.api.device.permissions import DevicePermissions
 from app.api.device.service import DeviceService
+from app.api.sensor_catalog.models import Sensor
 from app.core.security import create_access_token, hash_password
 
 
@@ -109,7 +110,15 @@ def test_device_read_includes_nested_device_type_code(
     client: TestClient,
     session: Session,
 ):
+    # This test's whole point is the nested type.code for the *Ambiental*
+    # default type, so it must keep deviceTypeId=DEFAULT_DEVICE_TYPE_ID.
+    # POST /api/devices now requires >=1 sensor for that type, so seed one
+    # and grant the permission to attach it.
     user = create_device_admin(session)
+    user.permissions = [*user.permissions, "device_sensor:write"]
+    sensor = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
+    session.add_all([user, sensor])
+    session.commit()
     headers = {"Authorization": f"Bearer {make_token(user.id)}"}
     serial = DeviceService.generate_serial()
 
@@ -120,6 +129,7 @@ def test_device_read_includes_nested_device_type_code(
             "serial": serial,
             "name": "Nested Code Device",
             "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
+            "sensors": [{"sensorId": str(sensor.id)}],
         },
     )
 
@@ -135,7 +145,13 @@ def test_device_detail_includes_updated_at(
     client: TestClient,
     session: Session,
 ):
+    # Not about sensors or the Ambiental type at all (just the updated_at
+    # field), so use a non-Ambiental type to stay clear of the new
+    # Ambiental-needs-a-sensor rule instead of seeding an unrelated sensor.
     user = create_device_admin(session)
+    other_type = DeviceTypeCatalog(name="Updated At Test Type", is_active=True)
+    session.add(other_type)
+    session.commit()
     headers = {"Authorization": f"Bearer {make_token(user.id)}"}
     serial = DeviceService.generate_serial()
     updated_at = datetime(2026, 9, 23, 12, 34, 56)
@@ -146,7 +162,7 @@ def test_device_detail_includes_updated_at(
         json={
             "serial": serial,
             "name": "Updated At Device",
-            "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID),
+            "deviceTypeId": str(other_type.id),
         },
     )
     assert create_response.status_code == 200

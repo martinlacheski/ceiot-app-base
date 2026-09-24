@@ -3,6 +3,7 @@ import type { PaginatedResponse } from "./common.types";
 export interface DeviceTypeCatalog {
   id: string;
   name: string;
+  code?: string;
   is_active: boolean;
 }
 
@@ -73,6 +74,7 @@ export interface DeviceCreate {
   model?: string;
   batch?: string;
   manufactureDate?: string;
+  sensors?: { sensorId: string; key?: string; config?: Record<string, unknown> }[];
 }
 
 export interface DeviceUpdate {

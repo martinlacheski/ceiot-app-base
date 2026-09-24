@@ -11,6 +11,8 @@ from app.api.device.models import (
     DeviceUpdate,
 )
 from app.api.device.repository import DeviceRepository
+from app.api.device.device_type.repository import DeviceTypeRepository
+from app.api.device.device_type.constants import DEFAULT_DEVICE_TYPE_CODE
 from app.api.device.service import DeviceService
 from app.api.device.permissions import DevicePermissions, DEVICES_PERMISSIONS
 from app.api.access.repository import GuestAccessRepository
@@ -295,12 +297,15 @@ async def get_device(
 @router.post("", response_model=DeviceRead, dependencies=[Depends(PermissionChecker(DevicePermissions.CREATE))])
 async def create_device(
     device_in: DeviceCreate,
-    session: AuthedAsyncDBSession
+    session: AuthedAsyncDBSession,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Factory/Admin endpoint to register a new device hardware.
     """
     repo = DeviceRepository(session)
+    if device_in.sensors and not (current_user.is_admin or "device_sensor:write" in current_user.permissions):
+        raise HTTPException(status_code=403, detail="No tenés permiso para agregar sensores")
 
     # 1. Validate Serial Format & Checksum
     if not DeviceService.validate_serial(device_in.serial):
@@ -321,6 +326,22 @@ async def create_device(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Device with serial {device_in.serial} already exists."
         )
+
+    # 2b. Manual registration policy: an Ambiental device must be registered
+    # with at least one sensor. This is a POST /api/devices-only rule (not a
+    # repository invariant): provisioning, pairing and other internal
+    # creation paths legitimately create sensorless devices and add sensors
+    # later.
+    if not device_in.sensors:
+        resolved_type = await DeviceTypeRepository(session).resolve_catalog_type(
+            device_type_id=device_in.device_type_id,
+            require_active=True,
+        )
+        if resolved_type is not None and resolved_type.code == DEFAULT_DEVICE_TYPE_CODE:
+            raise HTTPException(
+                status_code=422,
+                detail="Agregá al menos un sensor para un dispositivo Ambiental",
+            )
 
     # 3. Create
     try:

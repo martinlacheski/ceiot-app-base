@@ -14,7 +14,7 @@ from app.api.sensor.models import Telemetry
 from app.api.sensor.router import _resolve_access_start
 from app.api.sensor_catalog.models import DeviceSensor, Sensor, SensorVariable, Variable
 from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permissions
-from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead,
+from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
     SensorRead, SensorVariableRead, VariableRead)
 from app.api.sensor_catalog.telemetry import TelemetryPage, sensor_descriptions
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
@@ -84,13 +84,7 @@ async def create_device_sensor(device_id: uuid.UUID, body: DeviceSensorCreate,
     if sensor is None or not sensor.is_active:
         raise HTTPException(404, 'Sensor model not found')
     keys = {row.key for row in await _installed(session, device_id)}
-    key = body.key
-    if key is None:
-        key = sensor.code
-        index = 2
-        while key in keys:
-            key = f'{sensor.code}_{index}'
-            index += 1
+    key = body.key if body.key is not None else next_sensor_key(sensor.code, keys)
     if key in keys:
         raise HTTPException(409, 'Sensor key already exists on this device')
     row = DeviceSensor(device_id=device_id, sensor_id=sensor.id, key=key, config=body.config)

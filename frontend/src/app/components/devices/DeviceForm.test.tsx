@@ -5,6 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DeviceForm } from "./DeviceForm";
 
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: [{ id: "sensor-1", code: "dht22", name: "DHT22", variables: [{ code: "temperature", name: "Temperatura", unit: "°C", min: -40, max: 80 }] }] }),
+}));
+
 const DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32";
 
 class ResizeObserverMock {
@@ -28,8 +32,8 @@ vi.mock("@/app/hooks/useDevices", () => ({
 }));
 
 vi.mock("@/auth/store/auth.store", () => ({
-  useAuthStore: (selector: (state: { user: { id: string; isAdmin: boolean } }) => unknown) =>
-    selector({ user: { id: "owner-1", isAdmin: false } }),
+  useAuthStore: (selector: (state: { user: { id: string; isAdmin: boolean; permissions: string[] } }) => unknown) =>
+    selector({ user: { id: "owner-1", isAdmin: false, permissions: ["device_sensor:write", "sensor_catalog:read"] } }),
 }));
 
 vi.mock("@/store/confirm.store", () => ({
@@ -37,9 +41,25 @@ vi.mock("@/store/confirm.store", () => ({
 }));
 
 describe("DeviceForm", () => {
+  it("requires sensors for Ambiental and submits repeated models", async () => {
+    const onSubmit = vi.fn();
+    render(<MemoryRouter><DeviceForm onSubmit={onSubmit} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
+    expect(await screen.findByText("Agregá al menos un sensor")).toBeInTheDocument();
+    expect(onSubmit).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Agregar sensor" }));
+    await userEvent.selectOptions(screen.getByLabelText("Modelo del sensor 1"), "sensor-1");
+    await userEvent.click(screen.getByRole("button", { name: "Agregar sensor" }));
+    await userEvent.selectOptions(screen.getByLabelText("Modelo del sensor 2"), "sensor-1");
+    await userEvent.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].sensors).toEqual([{ sensorId: "sensor-1" }, { sensorId: "sensor-1" }]);
+  });
   it("defaults a new device to the Ambiental type", async () => {
     const onSubmit = vi.fn();
     render(<MemoryRouter><DeviceForm onSubmit={onSubmit} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Agregar sensor" }));
+    await userEvent.selectOptions(screen.getByLabelText("Modelo del sensor 1"), "sensor-1");
     await userEvent.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0][0].deviceTypeId).toBe(DEVICE_TYPE_ID);

@@ -2,6 +2,7 @@ import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormPageLayout } from "@/components/custom/FormPageLayout";
 import { DeviceForm } from "@/app/components/devices/DeviceForm";
+import { DeviceSensorsSection } from "@/app/components/devices/DeviceSensorsSection";
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { useDevice } from "@/app/hooks/useDevices";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -94,15 +95,16 @@ export default function EditDevicePage({
         mode={mode}
         initialData={device}
         isLoading={saveMutation.isPending}
-        extraContent={
-          id && canManageGuests ? (
+        extraContent={<div className="space-y-4">
+          {id && (user?.isAdmin || user?.permissions?.includes("device_sensor:write")) && <DeviceSensorsSection deviceId={id} canManage={Boolean(canManageGuests)} />}
+          {id && canManageGuests ? (
             <DeviceGuestManagementCard
               deviceId={id}
               isOwner
               accessContext={accessContext}
             />
-          ) : null
-        }
+          ) : null}
+        </div>}
         onSubmit={(data) => saveMutation.mutate(data as DeviceUpdate)}
         onUnpairSuccess={() => navigate(backUrl)}
       />

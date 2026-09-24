@@ -2,12 +2,16 @@ from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
 from sqlalchemy import String, and_, case, cast, false, func, literal, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import select
 from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.auth.models import User
 from app.api.device.device_type.models import DeviceTypeCatalog
+from app.api.sensor_catalog.models import DeviceSensor, Sensor
+from app.api.sensor_catalog.schemas import next_sensor_key
+from fastapi import HTTPException
 from app.api.device.device_type.repository import DeviceTypeRepository
 from app.api.device.models import (
     Device,
@@ -432,6 +436,26 @@ class DeviceRepository:
         if resolved_type is None:
             raise ValueError("Invalid device type reference")
 
+        # The "an Ambiental device must have >=1 sensor" rule is a manual
+        # registration (POST /api/devices) policy, not a repository-wide
+        # invariant: provisioning, pairing and other internal creation paths
+        # legitimately create sensorless devices (sensors are added later).
+        # It is enforced by the caller (see app.api.device.router.create_device),
+        # not here.
+
+        # Validate before inserting the device, then commit both tables together.
+        installations = []
+        used_keys: set[str] = set()
+        for requested in device_in.sensors:
+            sensor = await self.session.get(Sensor, requested.sensor_id)
+            if sensor is None or not sensor.is_active:
+                raise HTTPException(422, "El modelo de sensor no existe o está inactivo")
+            key = requested.key if requested.key is not None else next_sensor_key(sensor.code, used_keys)
+            if key in used_keys:
+                raise HTTPException(422, "Hay claves de sensor duplicadas")
+            used_keys.add(key)
+            installations.append((sensor.id, key, requested.config))
+
         # 1. Create Device
         db_device = Device(
             serial=DeviceService.normalize_serial(device_in.serial),
@@ -444,10 +468,16 @@ class DeviceRepository:
             status=DeviceStatus.NEW,
             environment_id=None,  # Always created unpaired
         )
-        self.session.add(db_device)
-        await self.session.flush()  # To get ID
-
-        await self.session.commit()
+        try:
+            self.session.add(db_device)
+            await self.session.flush()  # To get ID
+            for sensor_id, key, config in installations:
+                self.session.add(DeviceSensor(device_id=db_device.id, sensor_id=sensor_id,
+                                              key=key, config=config))
+            await self.session.commit()
+        except IntegrityError:
+            await self.session.rollback()
+            raise HTTPException(422, "No se pudo crear el dispositivo con esos sensores") from None
         return await self.get(db_device.id, include_inactive=True)
 
     async def update(self, db_device: Device, device_in: DeviceUpdate) -> Device:

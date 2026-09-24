@@ -13,6 +13,16 @@ from app.core.utils import CamelModel
 KEY_PATTERN = re.compile(r"[a-z][a-z0-9]*(_[a-z0-9]+)*\Z")
 
 
+def next_sensor_key(code: str, used: set[str]) -> str:
+    """Choose the same per-device slug for all installation paths."""
+    if code not in used:
+        return code
+    index = 2
+    while f"{code}_{index}" in used:
+        index += 1
+    return f"{code}_{index}"
+
+
 class VariableRead(CamelModel):
     id: uuid.UUID
     code: str

@@ -9,6 +9,7 @@ from app.api.device.device_type.constants import (
 )
 from app.api.device.device_type.models import DeviceTypeCatalog, DeviceTypeRead
 from app.core.utils import CamelModel
+from app.api.sensor_catalog.schemas import DeviceSensorCreate
 
 from app.api.environment.environment.models import Environment
 
@@ -117,6 +118,7 @@ class DeviceCreate(CamelModel):
     model: Optional[str] = None
     batch: Optional[str] = None
     manufacture_date: Optional[date] = None
+    sensors: List[DeviceSensorCreate] = Field(default_factory=list)
 
 
 class DeviceUpdate(CamelModel):
