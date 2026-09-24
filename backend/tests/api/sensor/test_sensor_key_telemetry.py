@@ -103,6 +103,23 @@ async def test_capability_lookup_is_one_query_and_excludes_inactive_sensors(engi
     assert capabilities == [("dht22", "test_temperature", -40, 80)]
 
 
+async def test_deactivated_model_preserves_existing_active_installation(engine, async_session):
+    del engine
+    device_id = uuid.uuid4()
+    variable = Variable(code="installed_temperature", name="Temperature", unit="°C")
+    sensor = Sensor(code="installed_dht22", name="DHT22", manufacturer="Test", is_active=False)
+    async_session.add_all([variable, sensor])
+    await async_session.flush()
+    async_session.add_all([
+        SensorVariable(sensor_id=sensor.id, variable_id=variable.id, min_value=-40,
+            max_value=30, accuracy="1", resolution="1"),
+        DeviceSensor(device_id=device_id, sensor_id=sensor.id, key="installed_dht22"),
+    ])
+    await async_session.commit()
+    capabilities = await SensorRepository(async_session).get_active_sensor_capabilities(device_id)
+    assert capabilities == [("installed_dht22", "installed_temperature", -40, 30)]
+
+
 @pytest.fixture
 def mqtt_context(monkeypatch, engine, async_session):
     del engine

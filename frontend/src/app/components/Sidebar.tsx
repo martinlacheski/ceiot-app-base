@@ -19,6 +19,8 @@ import {
   Store,
   Users,
   History,
+  Cpu,
+  Gauge,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
@@ -91,6 +93,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             to: "/app/devices",
           },
           { icon: History, label: "Historial de dispositivos", to: "/app/devices/history" },
+          ...(user?.permissions?.includes("sensor_catalog:read")
+            ? [
+                { icon: Cpu, label: "Sensores", to: "/admin/sensors" },
+                { icon: Gauge, label: "Variables", to: "/admin/variables" },
+              ]
+            : []),
           { icon: Users, label: "Usuarios", to: "/admin/users" },
         ]
       : [

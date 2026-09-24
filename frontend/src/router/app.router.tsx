@@ -55,6 +55,9 @@ import { EditIdentificationTypePage } from "@/admin/pages/settings/identificatio
 import EnvironmentTypesPage from "@/admin/pages/settings/environment/EnvironmentTypesPage";
 import { CreateEnvironmentTypePage } from "@/admin/pages/settings/environment/CreateEnvironmentTypePage";
 import { EditEnvironmentTypePage } from "@/admin/pages/settings/environment/EditEnvironmentTypePage";
+import { CatalogListPage } from "@/admin/pages/sensorCatalog/CatalogListPage";
+import { CatalogFormPage } from "@/admin/pages/sensorCatalog/CatalogFormPage";
+import { CatalogPermissionRoute } from "./routes/CatalogPermissionRoute";
 
 // Invitaciones (Standalone Authenticated)
 import InvitationAcceptPage from "@/app/invitations/InvitationAcceptPage";
@@ -197,6 +200,12 @@ export const appRouter = createBrowserRouter([
         index: true,
         element: <Navigate to="/admin/users" />,
       },
+      { path: "sensors", element: <CatalogPermissionRoute permission="sensor_catalog:read"><CatalogListPage kind="sensors" /></CatalogPermissionRoute> },
+      { path: "sensors/create", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="sensors" /></CatalogPermissionRoute> },
+      { path: "sensors/edit/:id", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="sensors" /></CatalogPermissionRoute> },
+      { path: "variables", element: <CatalogPermissionRoute permission="sensor_catalog:read"><CatalogListPage kind="variables" /></CatalogPermissionRoute> },
+      { path: "variables/create", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="variables" /></CatalogPermissionRoute> },
+      { path: "variables/edit/:id", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="variables" /></CatalogPermissionRoute> },
       {
         path: "users",
         children: [

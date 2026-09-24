@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.access.repository import GuestAccessRepository
@@ -15,26 +15,108 @@ from app.api.sensor.router import _resolve_access_start
 from app.api.sensor_catalog.models import DeviceSensor, Sensor, SensorVariable, Variable
 from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permissions
 from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
-    SensorRead, SensorVariableRead, VariableRead)
+    SensorRead, SensorVariableRead, VariableRead, VariableAdminRead, VariableCreate, VariablePatch,
+    SensorAdminRead, SensorAdminVariableRead, SensorCreate, SensorPatch)
 from app.api.sensor_catalog.telemetry import TelemetryPage, sensor_descriptions
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
+from app.core.search import ILIKE_ESCAPE, ilike_pattern
 
 catalog_router = APIRouter()
 device_router = APIRouter()
 
 
-@catalog_router.get('/variables', response_model=list[VariableRead],
-            dependencies=[Depends(PermissionChecker(Permissions.READ))])
-async def list_variables(session: AuthedAsyncDBSession):
-    return (await session.execute(select(Variable).where(Variable.is_active.is_(True))
-                                  .order_by(Variable.code))).scalars().all()
+def _admin_write(user: User = Depends(PermissionChecker(Permissions.WRITE))):
+    if not user.is_admin:
+        raise HTTPException(403, 'Only an administrator can manage the sensor catalog')
+    return user
 
 
-@catalog_router.get('/sensors', response_model=list[SensorRead],
+def _page(items, total: int, page: int, per_page: int):
+    return {'items': items, 'total': total, 'page': page,
+            'perPage': per_page, 'pages': (total + per_page - 1) // per_page}
+
+
+def _sort(query, model, sort: str | None, allowed: set[str]):
+    fields = []
+    for part in (sort or 'code:asc').split(','):
+        field, _, direction = part.partition(':')
+        if field in allowed and direction.lower() in ('', 'asc', 'desc'):
+            column = getattr(model, field)
+            expression = func.lower(column) if field not in {'is_active'} else column
+            fields.append(expression.desc() if direction.lower() == 'desc' else expression.asc())
+    return query.order_by(*fields, model.id.asc())
+
+
+async def _sensor_admin(session, sensor: Sensor) -> SensorAdminRead:
+    rows = (await session.execute(select(SensorVariable, Variable)
+        .join(Variable, Variable.id == SensorVariable.variable_id)
+        .where(SensorVariable.sensor_id == sensor.id).order_by(Variable.code))).all()
+    return SensorAdminRead(id=sensor.id, code=sensor.code, name=sensor.name,
+        manufacturer=sensor.manufacturer, description=sensor.description,
+        is_active=sensor.is_active, variables=[SensorAdminVariableRead(
+            variable_id=variable.id, code=variable.code, name=variable.name, unit=variable.unit,
+            min_value=link.min_value, max_value=link.max_value,
+            accuracy=link.accuracy, resolution=link.resolution) for link, variable in rows])
+
+
+async def _replace_sensor_variables(session, sensor_id, variables):
+    ids = [item.variable_id for item in variables]
+    found = set((await session.execute(select(Variable.id).where(Variable.id.in_(ids)))).scalars().all()) if ids else set()
+    if len(found) != len(ids):
+        raise HTTPException(422, 'Unknown variableId')
+    await session.execute(delete(SensorVariable).where(SensorVariable.sensor_id == sensor_id))
+    session.add_all([SensorVariable(sensor_id=sensor_id, variable_id=item.variable_id,
+        min_value=item.min_value, max_value=item.max_value,
+        accuracy=item.accuracy, resolution=item.resolution) for item in variables])
+
+
+@catalog_router.get('/variables', response_model=None,
             dependencies=[Depends(PermissionChecker(Permissions.READ))])
-async def list_sensors(session: AuthedAsyncDBSession):
-    sensors = (await session.execute(select(Sensor).where(Sensor.is_active.is_(True))
-                                  .order_by(Sensor.code))).scalars().all()
+async def list_variables(session: AuthedAsyncDBSession,
+                         page: int | None = Query(None, ge=1),
+                         per_page: int = Query(10, ge=1, le=10000),
+                         is_active: bool | None = Query(None), search: str | None = None,
+                         sort: str | None = None):
+    if page is None:
+        rows = (await session.execute(select(Variable).where(Variable.is_active.is_(True))
+                                      .order_by(Variable.code))).scalars().all()
+        return [VariableRead.model_validate(row) for row in rows]
+    query = select(Variable)
+    if is_active is not None:
+        query = query.where(Variable.is_active.is_(is_active))
+    pattern = ilike_pattern(search)
+    if pattern is not None:
+        query = query.where(or_(Variable.code.ilike(pattern, escape=ILIKE_ESCAPE),
+                                Variable.name.ilike(pattern, escape=ILIKE_ESCAPE),
+                                Variable.unit.ilike(pattern, escape=ILIKE_ESCAPE)))
+    total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+    rows = (await session.execute(_sort(query, Variable, sort,
+        {'code', 'name', 'unit', 'is_active'}).offset((page - 1) * per_page).limit(per_page))).scalars().all()
+    return _page([VariableAdminRead.model_validate(row) for row in rows], total, page, per_page)
+
+
+@catalog_router.get('/sensors', response_model=None,
+            dependencies=[Depends(PermissionChecker(Permissions.READ))])
+async def list_sensors(session: AuthedAsyncDBSession,
+                       page: int | None = Query(None, ge=1),
+                       per_page: int = Query(10, ge=1, le=10000),
+                       is_active: bool | None = Query(None), search: str | None = None,
+                       sort: str | None = None):
+    query = select(Sensor)
+    if page is None or is_active is not None:
+        query = query.where(Sensor.is_active.is_(True if page is None else is_active))
+    if page is not None:
+        pattern = ilike_pattern(search)
+        if pattern is not None:
+            query = query.where(or_(Sensor.code.ilike(pattern, escape=ILIKE_ESCAPE),
+                Sensor.name.ilike(pattern, escape=ILIKE_ESCAPE),
+                Sensor.manufacturer.ilike(pattern, escape=ILIKE_ESCAPE)))
+        total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+        sensors = (await session.execute(_sort(query, Sensor, sort,
+            {'code', 'name', 'manufacturer', 'is_active'}).offset((page - 1) * per_page)
+            .limit(per_page))).scalars().all()
+        return _page([await _sensor_admin(session, sensor) for sensor in sensors], total, page, per_page)
+    sensors = (await session.execute(query.order_by(Sensor.code))).scalars().all()
     if not sensors:
         return []
     rows = (await session.execute(select(SensorVariable, Variable)
@@ -49,6 +131,106 @@ async def list_sensors(session: AuthedAsyncDBSession):
             accuracy=association.accuracy, resolution=association.resolution))
     return [SensorRead(id=sensor.id, code=sensor.code, name=sensor.name,
         manufacturer=sensor.manufacturer, variables=by_sensor[sensor.id]) for sensor in sensors]
+
+
+@catalog_router.get('/variables/{id}', response_model=VariableAdminRead,
+            dependencies=[Depends(PermissionChecker(Permissions.READ))])
+async def get_variable(id: uuid.UUID, session: AuthedAsyncDBSession):
+    row = await session.get(Variable, id)
+    if row is None:
+        raise HTTPException(404, 'Variable not found')
+    return row
+
+
+@catalog_router.post('/variables', response_model=VariableAdminRead, status_code=201,
+            dependencies=[Depends(_admin_write)])
+async def create_variable(body: VariableCreate, session: AuthedAsyncDBSession):
+    row = Variable(**body.model_dump())
+    session.add(row)
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(409, 'Variable code already exists') from None
+    await session.refresh(row)
+    return row
+
+
+@catalog_router.patch('/variables/{id}', response_model=VariableAdminRead,
+            dependencies=[Depends(_admin_write)])
+async def patch_variable(id: uuid.UUID, body: VariablePatch, session: AuthedAsyncDBSession):
+    row = await session.get(Variable, id)
+    if row is None:
+        raise HTTPException(404, 'Variable not found')
+    changes = body.model_dump(exclude_unset=True)
+    if 'code' in changes:
+        raise HTTPException(409, 'Variable code is immutable')
+    if any(value is None for key, value in changes.items() if key != 'description'):
+        raise HTTPException(422, 'Required fields cannot be null')
+    for key, value in changes.items():
+        setattr(row, key, value)
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+@catalog_router.delete('/variables/{id}', response_model=VariableAdminRead,
+            dependencies=[Depends(_admin_write)])
+async def deactivate_variable(id: uuid.UUID, session: AuthedAsyncDBSession):
+    return await patch_variable(id, VariablePatch(is_active=False), session)
+
+
+@catalog_router.get('/sensors/{id}', response_model=SensorAdminRead,
+            dependencies=[Depends(PermissionChecker(Permissions.READ))])
+async def get_sensor(id: uuid.UUID, session: AuthedAsyncDBSession):
+    row = await session.get(Sensor, id)
+    if row is None:
+        raise HTTPException(404, 'Sensor model not found')
+    return await _sensor_admin(session, row)
+
+
+@catalog_router.post('/sensors', response_model=SensorAdminRead, status_code=201,
+            dependencies=[Depends(_admin_write)])
+async def create_sensor(body: SensorCreate, session: AuthedAsyncDBSession):
+    row = Sensor(**body.model_dump(exclude={'variables'}))
+    session.add(row)
+    try:
+        await _replace_sensor_variables(session, row.id, body.variables)
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(409, 'Sensor code already exists') from None
+    await session.refresh(row)
+    return await _sensor_admin(session, row)
+
+
+@catalog_router.patch('/sensors/{id}', response_model=SensorAdminRead,
+            dependencies=[Depends(_admin_write)])
+async def patch_sensor(id: uuid.UUID, body: SensorPatch, session: AuthedAsyncDBSession):
+    row = await session.get(Sensor, id)
+    if row is None:
+        raise HTTPException(404, 'Sensor model not found')
+    changes = body.model_dump(exclude_unset=True)
+    if 'code' in changes:
+        raise HTTPException(409, 'Sensor code is immutable')
+    if any(value is None for key, value in changes.items() if key not in {'description', 'variables'}):
+        raise HTTPException(422, 'Required fields cannot be null')
+    variables = changes.pop('variables', None)
+    for key, value in changes.items():
+        setattr(row, key, value)
+    if 'variables' in body.model_fields_set:
+        if variables is None:
+            raise HTTPException(422, 'variables cannot be null')
+        await _replace_sensor_variables(session, id, body.variables)
+    await session.commit()
+    await session.refresh(row)
+    return await _sensor_admin(session, row)
+
+
+@catalog_router.delete('/sensors/{id}', response_model=SensorAdminRead,
+            dependencies=[Depends(_admin_write)])
+async def deactivate_sensor(id: uuid.UUID, session: AuthedAsyncDBSession):
+    return await patch_sensor(id, SensorPatch(is_active=False), session)
 
 
 async def _authorize(device_id: uuid.UUID, session: AuthedAsyncDBSession,

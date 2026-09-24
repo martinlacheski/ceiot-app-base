@@ -37,8 +37,6 @@ class SensorRepository:
                 DeviceSensor.device_id == device_id,
                 DeviceSensor.is_active.is_(True),
                 DeviceSensor.removed_at.is_(None),
-                Sensor.is_active.is_(True),
-                Variable.is_active.is_(True),
             )
         )
         return [(key, code, minimum, maximum) for key, code, minimum, maximum in result.all()]

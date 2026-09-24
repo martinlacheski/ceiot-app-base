@@ -17,3 +17,14 @@ describe("admin device operations route", () => {
     expect(devices?.children?.some((route) => route.path === ":id/operations")).toBe(true);
   });
 });
+
+describe("admin sensor catalog routes", () => {
+  it("registers list, create, and edit routes directly under /admin, not under settings", () => {
+    const admin = appRouter.routes.find((route) => route.path === "/admin");
+    const paths = admin?.children?.map((route) => route.path);
+    expect(paths).toEqual(expect.arrayContaining([
+      "sensors", "sensors/create", "sensors/edit/:id", "variables", "variables/create", "variables/edit/:id",
+    ]));
+    expect(admin?.children?.find((route) => route.path === "settings")).toBeUndefined();
+  });
+});

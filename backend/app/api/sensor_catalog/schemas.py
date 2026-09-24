@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.core.utils import CamelModel
 
@@ -46,6 +46,97 @@ class SensorRead(CamelModel):
     name: str
     manufacturer: str
     variables: list[SensorVariableRead]
+
+
+class VariableAdminRead(VariableRead):
+    description: str | None
+    is_active: bool
+
+
+class VariableCreate(CamelModel):
+    code: str
+    name: str = Field(min_length=1)
+    unit: str = Field(min_length=1)
+    description: str | None = None
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, code: str) -> str:
+        if not KEY_PATTERN.fullmatch(code):
+            raise ValueError("code must be a lowercase slug")
+        return code
+
+
+class VariablePatch(CamelModel):
+    code: str | None = None
+    name: str | None = Field(default=None, min_length=1)
+    unit: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class SensorVariableInput(CamelModel):
+    variable_id: uuid.UUID
+    min_value: float = Field(allow_inf_nan=False)
+    max_value: float = Field(allow_inf_nan=False)
+    accuracy: str = Field(min_length=1)
+    resolution: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def valid_range(self):
+        if self.min_value > self.max_value:
+            raise ValueError("minValue must be less than or equal to maxValue")
+        return self
+
+
+class SensorAdminVariableRead(SensorVariableInput):
+    code: str
+    name: str
+    unit: str
+
+
+class SensorAdminRead(CamelModel):
+    id: uuid.UUID
+    code: str
+    name: str
+    manufacturer: str
+    description: str | None
+    is_active: bool
+    variables: list[SensorAdminVariableRead]
+
+
+class SensorCreate(CamelModel):
+    code: str
+    name: str = Field(min_length=1)
+    manufacturer: str = Field(min_length=1)
+    description: str | None = None
+    variables: list[SensorVariableInput] = Field(default_factory=list)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, code: str) -> str:
+        return VariableCreate.validate_code(code)
+
+    @field_validator("variables")
+    @classmethod
+    def unique_variables(cls, rows: list[SensorVariableInput]) -> list[SensorVariableInput]:
+        if len({row.variable_id for row in rows}) != len(rows):
+            raise ValueError("variables cannot contain duplicates")
+        return rows
+
+
+class SensorPatch(CamelModel):
+    code: str | None = None
+    name: str | None = Field(default=None, min_length=1)
+    manufacturer: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    is_active: bool | None = None
+    variables: list[SensorVariableInput] | None = None
+
+    @field_validator("variables")
+    @classmethod
+    def unique_variables(cls, rows: list[SensorVariableInput] | None):
+        return SensorCreate.unique_variables(rows) if rows is not None else None
 
 
 class DeviceSensorCreate(CamelModel):

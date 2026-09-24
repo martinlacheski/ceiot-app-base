@@ -13,6 +13,15 @@ describe("Sidebar", () => {
     vi.clearAllMocks();
   });
 
+  it("shows Sensores and Variables as top-level entries, outside Ajustes, to catalog readers", () => {
+    const state = { user: { id: "a1", fullName: "Admin", permissions: ["sensor_catalog:read"] }, logout: vi.fn(), isAdmin: () => true };
+    vi.mocked(useAuthStore).mockImplementation((selector) => typeof selector === "function" ? selector(state as never) : state as never);
+    render(<MemoryRouter><Sidebar isCollapsed={false} onToggle={() => {}} /></MemoryRouter>);
+    // Visible without opening "Ajustes": they are root entries of the sidebar.
+    expect(screen.getByRole("link", { name: "Sensores" })).toHaveAttribute("href", "/admin/sensors");
+    expect(screen.getByRole("link", { name: "Variables" })).toHaveAttribute("href", "/admin/variables");
+  });
+
   it("pone Mapa inmediatamente después de Inicio para un usuario común", () => {
     vi.mocked(useAuthStore).mockImplementation((selector) => {
       const state = {

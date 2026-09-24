@@ -1,4 +1,11 @@
 export const PERMISSIONS = {
+  SENSOR_CATALOG: {
+    label: "Catálogo de sensores",
+    items: [
+      { value: "sensor_catalog:read", label: "Ver catálogo de sensores" },
+      { value: "sensor_catalog:write", label: "Administrar catálogo de sensores" },
+    ],
+  },
   USERS: {
     label: "Usuarios",
     items: [
