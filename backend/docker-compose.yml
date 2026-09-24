@@ -32,3 +32,40 @@ services:
     networks:
       - app-network
     restart: always
+
+  # Consumes device MQTT topics (telemetry, events, status) and writes them.
+  # Kept apart from the API, which is publisher-only by design.
+  mqtt-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["uvicorn", "app.main_runtime:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - .env
+    environment:
+      MQTT_CLIENT_ID: Backend-Runtime
+      MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+      DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
+        @postgresql:5432/${DB_DATABASE:?}"
+      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
+        ${DB_PASSWORD:?}@postgresql:5432/${DB_DATABASE:?}"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      emqx:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/health', timeout=5)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app-network
+    restart: always

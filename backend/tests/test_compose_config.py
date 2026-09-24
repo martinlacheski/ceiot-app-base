@@ -123,11 +123,11 @@ class ComposeConfigTest(unittest.TestCase):
             raise AssertionError(f"expected one publication for container port {target}")
         return matches[0]
 
-    def test_root_include_renders_five_services_on_one_private_network(self):
+    def test_root_include_renders_six_services_on_one_private_network(self):
         config = self.render_config()
         self.assertEqual(
             set(config["services"]),
-            {"backend", "frontend", "landing", "emqx", "postgresql"},
+            {"backend", "mqtt-runtime", "frontend", "landing", "emqx", "postgresql"},
         )
         self.assertEqual(set(config["networks"]), {"app-network"})
         self.assertNotIn("external", config["networks"]["app-network"])
@@ -137,6 +137,22 @@ class ComposeConfigTest(unittest.TestCase):
             self.assertIn("healthcheck", service)
             self.assertNotIn("container_name", service)
             self.assertNotIn("labels", service)
+
+    def test_mqtt_runtime_consumes_device_topics_from_the_backend_image(self):
+        services = self.render_config()["services"]
+        runtime = services["mqtt-runtime"]
+        backend = services["backend"]
+
+        self.assertEqual(runtime["build"]["context"], backend["build"]["context"])
+        self.assertIn("app.main_runtime:app", " ".join(runtime["command"]))
+        self.assertNotIn("ports", runtime)
+        self.assertNotEqual(
+            runtime["environment"]["MQTT_CLIENT_ID"],
+            backend["environment"]["MQTT_CLIENT_ID"],
+        )
+        self.assertEqual(runtime["environment"]["MAIL_TRANSPORT"], "mailpit")
+        self.assertIn("postgresql", runtime["depends_on"])
+        self.assertIn("emqx", runtime["depends_on"])
 
     def test_mailpit_profile_is_optional_and_transport_is_explicit(self):
         default_services = self.render_config()["services"]
