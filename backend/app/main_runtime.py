@@ -19,6 +19,7 @@ from app.core.mqtt.handlers import (
     process_device_status_message,
     process_sensor_message_pub,
     process_sensor_message_sub,
+    process_time_sync_request,
 )
 
 load_dotenv()
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     mqtt_client.subscribe("iot/devices/+/telemetry", process_sensor_message_pub, qos=2)
     mqtt_client.subscribe("iot/devices/+/events", process_sensor_message_sub, qos=2)
     mqtt_client.subscribe("iot/devices/+/status", process_device_status_message, qos=1)
+    mqtt_client.subscribe("iot/devices/+/time/request", process_time_sync_request, qos=1)
 
     logger.info("Generic MQTT runtime started")
 

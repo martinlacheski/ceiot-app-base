@@ -23,9 +23,6 @@ from app.core.security import create_access_token
 from app.core.time import utc_now
 
 
-SENSOR_READ_PERMISSION = "sensor:read"
-
-
 def make_token(user_id):
     token, _ = create_access_token({"id": str(user_id)})
     return token
@@ -58,37 +55,37 @@ def seed_sensor_graph(session: Session):
         email="sensor-owner@example.com",
         username="sensor_owner",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     guest = User(
         email="sensor-guest@example.com",
         username="sensor_guest",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     future_guest = User(
         email="sensor-future-guest@example.com",
         username="sensor_future_guest",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     device_guest = User(
         email="sensor-device-guest@example.com",
         username="sensor_device_guest",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     outsider = User(
         email="sensor-outsider@example.com",
         username="sensor_outsider",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     unrelated_owner = User(
         email="sensor-unrelated-owner@example.com",
         username="sensor_unrelated_owner",
         password="x",
-        permissions=[SENSOR_READ_PERMISSION],
+        permissions=[],
     )
     session.add_all(
         [owner, guest, future_guest, device_guest, outsider, unrelated_owner]

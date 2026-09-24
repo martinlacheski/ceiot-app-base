@@ -7,6 +7,9 @@ from app.api.device.operations.service import DeviceOperationService
 from app.api.device.repository import DeviceRepository
 from app.api.device.service import DeviceService
 from app.core.db import system_session
+from app.core.mqtt.client import get_mqtt_client
+
+_MAX_TIME_REQUEST_ID_LENGTH = 64
 
 logger = logging.getLogger(__name__)
 
@@ -356,3 +359,68 @@ async def process_device_status_message(topic: str, payload: str):
         )
     except Exception as e:
         logger.error(f"❌ Error al procesar broker status: {e}")
+
+
+def _parse_time_request_req_id(payload) -> str | None:
+    """Extract a valid ``req_id`` (string, 1-64 chars) from an optional JSON
+    payload. Any other shape (empty, invalid JSON, non-object, missing/wrong
+    type/too long) is tolerated and treated as "no req_id"."""
+    raw = _decode_payload(payload).strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    req_id = data.get("req_id")
+    if isinstance(req_id, str) and 0 < len(req_id) <= _MAX_TIME_REQUEST_ID_LENGTH:
+        return req_id
+    return None
+
+
+async def process_time_sync_request(topic: str, payload: str):
+    """
+    NTP fallback for firmware that cannot reach an NTP server (e.g. behind a
+    captive/hotspot network) but can still reach the MQTT broker.
+    Topic: iot/devices/{serial}/time/request
+    Responds on: iot/devices/{serial}/time (only for a known, enabled device).
+    See backend/docs/mqtt-time-sync.md for the full contract.
+    """
+    try:
+        serial = _extract_serial_from_topic(topic)
+        if not serial:
+            logger.warning("⚠️ Solicitud de hora ignorada por topic inválido: %s", topic)
+            return
+
+        req_id = _parse_time_request_req_id(payload)
+
+        async with system_session() as session:
+            repo = DeviceRepository(session)
+            device = await repo.get_by_serial(serial)
+
+        if device is None:
+            logger.info(
+                "ℹ️ Solicitud de hora ignorada, dispositivo desconocido: serial=%s",
+                DeviceService.normalize_serial(serial),
+            )
+            return
+        if not (device.enabled and device.is_active):
+            logger.warning(
+                "⚠️ Solicitud de hora ignorada, dispositivo deshabilitado: serial=%s",
+                device.serial,
+            )
+            return
+
+        # Timestamp taken as late as possible, right before publishing, to
+        # keep the request/publish latency out of the value we hand back.
+        now = datetime.now(timezone.utc)
+        response = {
+            "epoch_ms": int(now.timestamp() * 1000),
+            "iso": now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+            "req_id": req_id,
+        }
+        get_mqtt_client().publish(f"iot/devices/{device.serial}/time", response, qos=1, retain=False)
+    except Exception as e:
+        logger.error(f"❌ Error al procesar solicitud de hora: {e}")

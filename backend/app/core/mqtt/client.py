@@ -189,14 +189,15 @@ class MQTTClient:
             self.client.subscribe(topic, qos=qos)
             logger.info(f"📡 Subscribed to {topic} (QoS={qos})")
 
-    def publish(self, topic: str, message: Dict[str, Any], qos: int = 1):
+    def publish(self, topic: str, message: Dict[str, Any], qos: int = 1, retain: bool = False):
         try:
             payload = json.dumps(message)
-            self.client.publish(topic, payload, qos=qos)
+            self.client.publish(topic, payload, qos=qos, retain=retain)
             logger.info(
-                "📤 MQTT Publish topic=%s qos=%s payload_bytes=%s serial=%s",
+                "📤 MQTT Publish topic=%s qos=%s retain=%s payload_bytes=%s serial=%s",
                 topic,
                 qos,
+                retain,
                 len(payload.encode("utf-8")),
                 message.get("serial"),
             )

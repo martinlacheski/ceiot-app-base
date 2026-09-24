@@ -36,6 +36,7 @@ EXPECTED_RUNTIME_SUBSCRIPTIONS = {
     ("iot/devices/+/telemetry", "process_sensor_message_pub", 2),
     ("iot/devices/+/events", "process_sensor_message_sub", 2),
     ("iot/devices/+/status", "process_device_status_message", 1),
+    ("iot/devices/+/time/request", "process_time_sync_request", 1),
 }
 
 RETIRED_EXECUTABLE_PATHS = (
@@ -202,7 +203,7 @@ def test_mqtt_client_defaults_empty_and_connects_only_registered_callbacks() -> 
     )
 
 
-def test_standalone_runtime_keeps_only_three_generic_subscriptions() -> None:
+def test_standalone_runtime_keeps_only_four_generic_subscriptions() -> None:
     tree = _tree(RUNTIME_PATH)
     lifespan = _function(tree, "lifespan")
     observed: set[tuple[str, str, int]] = set()
@@ -266,6 +267,7 @@ def test_handlers_expose_only_generic_mqtt_entrypoints() -> None:
         "process_sensor_message_pub",
         "process_sensor_message_sub",
         "process_device_status_message",
+        "process_time_sync_request",
     } <= names
     assert {
         "process_init_point_request",
