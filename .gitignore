@@ -14,9 +14,13 @@ odd/
 *.pem
 *.crt
 *.csr
+*.srl
 mqtt/certs/
 mqtt/data/
 mqtt/log/
+mqtt/pki/ca/
+mqtt/pki/devices/
+esp32/cert/
 backend/postgres_data/
 
 # Generated dependencies, caches, and build output

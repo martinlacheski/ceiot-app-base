@@ -10,12 +10,24 @@ services:
       - 127.0.0.1:${EMQX_DASHBOARD_PORT:-28183}:18083
     env_file:
       - .env
+    entrypoint: ["/opt/emqx/docker-entrypoint-wrapper.sh"]
+    # Compose (unlike `docker run`) does not fall back to the image's default
+    # CMD when only `entrypoint:` is overridden, so it must be spelled out
+    # here or the wrapper execs with no arguments and silently no-ops.
+    command: ["emqx", "foreground"]
     volumes:
       - ./data:/opt/emqx/data
       - ./log:/opt/emqx/log
       - ./certs:/opt/emqx/certs:ro
+      - ./acl.conf:/opt/emqx/etc/acl.conf:ro
+      - ./docker-entrypoint-wrapper.sh:/opt/emqx/docker-entrypoint-wrapper.sh:ro
     environment:
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_PASSWORD:?}
+      # Consumed by docker-entrypoint-wrapper.sh to render the built-in-database
+      # bootstrap CSV for the shared "backend-services" user (see mqtt/acl.conf).
+      EMQX_BACKEND_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
+      # mTLS on the device-facing listener: the client cert is mandatory and
+      # its CN becomes the MQTT username (used by mqtt/acl.conf as ${username}).
       EMQX_LISTENERS__SSL__DEFAULT__BIND: 0.0.0.0:8883
       EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE: >-
         /opt/emqx/certs/emqx.crt
@@ -25,6 +37,23 @@ services:
         /opt/emqx/certs/ca.crt
       EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY: verify_peer
       EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__FAIL_IF_NO_PEER_CERT: "true"
+      # Devices authenticate with their certificate only (no username/password
+      # authenticator on this listener); identity comes purely from mTLS.
+      EMQX_LISTENERS__SSL__DEFAULT__ENABLE_AUTHN: "false"
+      EMQX_MQTT__PEER_CERT_AS_USERNAME: cn
+      # Backend/runtime authenticate with username+password on the internal
+      # TCP listener (never anonymous); the WS listener inherits the same
+      # chain, so it also requires credentials (kept enabled, authenticated,
+      # for future browser/debug MQTT-over-WS use).
+      EMQX_AUTHENTICATION__1__MECHANISM: password_based
+      EMQX_AUTHENTICATION__1__BACKEND: built_in_database
+      EMQX_AUTHENTICATION__1__USER_ID_TYPE: username
+      EMQX_AUTHENTICATION__1__BOOTSTRAP_TYPE: plain
+      # authorization: per-device ACL, backend gets full access; anything
+      # else (including $SYS/# and bare '#' subscriptions) is denied.
+      EMQX_AUTHORIZATION__NO_MATCH: deny
+      EMQX_AUTHORIZATION__SOURCES__1__TYPE: file
+      EMQX_AUTHORIZATION__SOURCES__1__PATH: /opt/emqx/etc/acl.conf
       EMQX_LOAD_ENV_OVERRIDE: "true"
     healthcheck:
       test: [CMD, emqx, ctl, status]

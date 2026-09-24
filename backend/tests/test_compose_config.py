@@ -46,6 +46,7 @@ MQTT_LISTENER_TCP=11884
 MQTT_LISTENER_TLS=18884
 MQTT_LISTENER_WS=18084
 EMQX_PASSWORD=dummy-dashboard-password
+EMQX_BACKEND_PASSWORD=dummy-backend-password
 """,
     "timescaledb": """\
 DB_PORT=15433
@@ -154,6 +155,44 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertIn("postgresql", runtime["depends_on"])
         self.assertIn("emqx", runtime["depends_on"])
 
+    def test_emqx_requires_mtls_for_devices_and_credentials_for_backend_clients(self):
+        services = self.render_config()["services"]
+        emqx = services["emqx"]
+        backend = services["backend"]
+        runtime = services["mqtt-runtime"]
+        env = emqx["environment"]
+
+        # SSL (device-facing) listener: client cert mandatory, no separate
+        # username/password authenticator, identity comes from the cert CN.
+        self.assertEqual(env["EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__VERIFY"], "verify_peer")
+        self.assertEqual(env["EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__FAIL_IF_NO_PEER_CERT"], "true")
+        self.assertEqual(env["EMQX_LISTENERS__SSL__DEFAULT__ENABLE_AUTHN"], "false")
+        self.assertEqual(env["EMQX_MQTT__PEER_CERT_AS_USERNAME"], "cn")
+
+        # TCP (backend-facing) listener: built-in-database username/password,
+        # anonymous rejected by default once an authenticator is configured.
+        self.assertEqual(env["EMQX_AUTHENTICATION__1__MECHANISM"], "password_based")
+        self.assertEqual(env["EMQX_AUTHENTICATION__1__BACKEND"], "built_in_database")
+        self.assertEqual(env["EMQX_AUTHENTICATION__1__USER_ID_TYPE"], "username")
+
+        # File-based ACL, closed by default.
+        self.assertEqual(env["EMQX_AUTHORIZATION__NO_MATCH"], "deny")
+        self.assertEqual(env["EMQX_AUTHORIZATION__SOURCES__1__TYPE"], "file")
+        self.assertEqual(env["EMQX_AUTHORIZATION__SOURCES__1__PATH"], "/opt/emqx/etc/acl.conf")
+
+        # The wrapper entrypoint renders the bootstrap CSV before emqx boots;
+        # compose must spell out the image CMD explicitly (entrypoint-only
+        # overrides drop it) or the wrapper execs with no arguments.
+        self.assertEqual(emqx["entrypoint"], ["/opt/emqx/docker-entrypoint-wrapper.sh"])
+        self.assertEqual(emqx["command"], ["emqx", "foreground"])
+
+        # backend and mqtt-runtime authenticate as the same built-in-database
+        # user, with the password sourced from mqtt/.env (never duplicated
+        # into backend/.env), so they can never silently drift apart.
+        for service in (backend, runtime):
+            self.assertEqual(service["environment"]["EMQX_USER"], "backend-services")
+            self.assertEqual(service["environment"]["EMQX_PASSWORD"], "dummy-backend-password")
+
     def test_mailpit_profile_is_optional_and_transport_is_explicit(self):
         default_services = self.render_config()["services"]
         self.assertNotIn("mailpit", default_services)
@@ -259,7 +298,13 @@ class ComposeConfigTest(unittest.TestCase):
         }
         self.assertEqual(
             emqx_mount_targets,
-            {"/opt/emqx/data", "/opt/emqx/log", "/opt/emqx/certs"},
+            {
+                "/opt/emqx/data",
+                "/opt/emqx/log",
+                "/opt/emqx/certs",
+                "/opt/emqx/etc/acl.conf",
+                "/opt/emqx/docker-entrypoint-wrapper.sh",
+            },
         )
 
     def test_map_locations_override_is_optional_so_the_landing_uses_the_api(self):

@@ -1,5 +1,9 @@
 # Sincronización de hora por MQTT (fallback de NTP)
 
+> Ver también [`mqtt/README.md`](../../mqtt/README.md) para la seguridad del
+> broker (mTLS, PKI propia, credenciales del backend), incluida la nota sobre
+> `CONFIG_MBEDTLS_HAVE_TIME_DATE` y este mismo mecanismo de hora.
+
 ## Por qué existe
 
 El firmware del ESP32 intenta obtener la hora por SNTP (`time.google.com`,

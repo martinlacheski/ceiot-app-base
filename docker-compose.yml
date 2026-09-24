@@ -6,6 +6,7 @@ include:
     env_file:
       - backend/.env
       - timescaledb/.env
+      - mqtt/.env
   - path: frontend/docker-compose.yml
     project_directory: frontend
     env_file:

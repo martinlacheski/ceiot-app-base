@@ -7,6 +7,11 @@ services:
       - .env
     environment:
       MQTT_CLIENT_ID: Backend-Admin
+      # EMQX built-in-database user shared by backend + mqtt-runtime (see
+      # mqtt/acl.conf); the password is sourced from mqtt/.env so both the
+      # broker bootstrap and these clients always agree on one value.
+      EMQX_USER: backend-services
+      EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
       MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
@@ -44,6 +49,8 @@ services:
       - .env
     environment:
       MQTT_CLIENT_ID: Backend-Runtime
+      EMQX_USER: backend-services
+      EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
       MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
