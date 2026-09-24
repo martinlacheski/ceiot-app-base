@@ -110,7 +110,7 @@ class SensorCreate(CamelModel):
     name: str = Field(min_length=1)
     manufacturer: str = Field(min_length=1)
     description: str | None = None
-    variables: list[SensorVariableInput] = Field(default_factory=list)
+    variables: list[SensorVariableInput] = Field(min_length=1)
 
     @field_validator("code")
     @classmethod
@@ -136,6 +136,8 @@ class SensorPatch(CamelModel):
     @field_validator("variables")
     @classmethod
     def unique_variables(cls, rows: list[SensorVariableInput] | None):
+        if rows is not None and not rows:
+            raise ValueError("at least one variable is required")
         return SensorCreate.unique_variables(rows) if rows is not None else None
 
 

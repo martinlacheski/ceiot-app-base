@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import case, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.access.repository import GuestAccessRepository
@@ -36,15 +36,28 @@ def _page(items, total: int, page: int, per_page: int):
             'perPage': per_page, 'pages': (total + per_page - 1) // per_page}
 
 
-def _sort(query, model, sort: str | None, allowed: set[str]):
+def _state_search(column, search: str, pattern: str):
+    label = search.strip()[:64].casefold()
+    if label == 'activo':
+        return column.is_(True)
+    if label == 'inactivo':
+        return column.is_(False)
+    return case((column.is_(True), 'Activo'), else_='Inactivo').ilike(
+        pattern, escape=ILIKE_ESCAPE)
+
+
+def _sort(query, model, sort: str | None, allowed: set[str], extra=None):
     fields = []
+    extra = extra or {}
     for part in (sort or 'code:asc').split(','):
         field, _, direction = part.partition(':')
         if field in allowed and direction.lower() in ('', 'asc', 'desc'):
-            column = getattr(model, field)
-            expression = func.lower(column) if field not in {'is_active'} else column
-            fields.append(expression.desc() if direction.lower() == 'desc' else expression.asc())
-    return query.order_by(*fields, model.id.asc())
+            column = extra.get(field, getattr(model, field, None))
+            expression = func.lower(column) if field not in {'is_active', 'variables'} else column
+            ordered = expression.desc() if direction.lower() == 'desc' else expression.asc()
+            fields.append(ordered.nulls_last())
+    # Code first so equal rows keep a predictable order; id only guarantees uniqueness.
+    return query.order_by(*fields, model.code.asc(), model.id.asc())
 
 
 async def _sensor_admin(session, sensor: Sensor) -> SensorAdminRead:
@@ -76,6 +89,7 @@ async def list_variables(session: AuthedAsyncDBSession,
                          page: int | None = Query(None, ge=1),
                          per_page: int = Query(10, ge=1, le=10000),
                          is_active: bool | None = Query(None), search: str | None = None,
+                         unit: str | None = None,
                          sort: str | None = None):
     if page is None:
         rows = (await session.execute(select(Variable).where(Variable.is_active.is_(True))
@@ -84,11 +98,15 @@ async def list_variables(session: AuthedAsyncDBSession,
     query = select(Variable)
     if is_active is not None:
         query = query.where(Variable.is_active.is_(is_active))
+    if unit:
+        query = query.where(Variable.unit == unit)
     pattern = ilike_pattern(search)
     if pattern is not None:
         query = query.where(or_(Variable.code.ilike(pattern, escape=ILIKE_ESCAPE),
                                 Variable.name.ilike(pattern, escape=ILIKE_ESCAPE),
-                                Variable.unit.ilike(pattern, escape=ILIKE_ESCAPE)))
+                                Variable.unit.ilike(pattern, escape=ILIKE_ESCAPE),
+                                Variable.description.ilike(pattern, escape=ILIKE_ESCAPE),
+                                _state_search(Variable.is_active, search, pattern)))
     total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = (await session.execute(_sort(query, Variable, sort,
         {'code', 'name', 'unit', 'is_active'}).offset((page - 1) * per_page).limit(per_page))).scalars().all()
@@ -101,19 +119,35 @@ async def list_sensors(session: AuthedAsyncDBSession,
                        page: int | None = Query(None, ge=1),
                        per_page: int = Query(10, ge=1, le=10000),
                        is_active: bool | None = Query(None), search: str | None = None,
+                       manufacturer: str | None = None, variable_id: uuid.UUID | None = None,
                        sort: str | None = None):
     query = select(Sensor)
     if page is None or is_active is not None:
         query = query.where(Sensor.is_active.is_(True if page is None else is_active))
     if page is not None:
+        if manufacturer:
+            query = query.where(Sensor.manufacturer == manufacturer)
+        if variable_id:
+            query = query.where(exists(select(SensorVariable.sensor_id).where(
+                SensorVariable.sensor_id == Sensor.id,
+                SensorVariable.variable_id == variable_id)))
         pattern = ilike_pattern(search)
         if pattern is not None:
             query = query.where(or_(Sensor.code.ilike(pattern, escape=ILIKE_ESCAPE),
                 Sensor.name.ilike(pattern, escape=ILIKE_ESCAPE),
-                Sensor.manufacturer.ilike(pattern, escape=ILIKE_ESCAPE)))
+                Sensor.manufacturer.ilike(pattern, escape=ILIKE_ESCAPE),
+                _state_search(Sensor.is_active, search, pattern),
+                exists(select(SensorVariable.sensor_id).join(Variable,
+                    Variable.id == SensorVariable.variable_id).where(
+                    SensorVariable.sensor_id == Sensor.id,
+                    Variable.name.ilike(pattern, escape=ILIKE_ESCAPE)))))
         total = (await session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+        # nullif turns "no variables" into NULL so NULLS LAST keeps those sensors at the end.
+        variable_count = func.nullif((select(func.count(SensorVariable.variable_id)).where(
+            SensorVariable.sensor_id == Sensor.id).correlate(Sensor).scalar_subquery()), 0)
         sensors = (await session.execute(_sort(query, Sensor, sort,
-            {'code', 'name', 'manufacturer', 'is_active'}).offset((page - 1) * per_page)
+            {'code', 'name', 'manufacturer', 'variables', 'is_active'},
+            {'variables': variable_count}).offset((page - 1) * per_page)
             .limit(per_page))).scalars().all()
         return _page([await _sensor_admin(session, sensor) for sensor in sensors], total, page, per_page)
     sensors = (await session.execute(query.order_by(Sensor.code))).scalars().all()

@@ -100,3 +100,73 @@ def test_write_permission_is_required(client, session, test_user):
     assert client.post("/api/sensor-catalog/variables",
         json={"code": "rain", "name": "Rain", "unit": "mm"},
         headers=headers(test_user)).status_code == 403
+
+
+def test_variable_list_search_filters_and_sort(client, session, test_user):
+    auth = grant(session, test_user)
+    session.add_all([
+        Variable(code="a_rain", name="Rain", unit="mm", description="Accumulated water"),
+        Variable(code="b_rain", name="Old rain", unit="mm", description="Legacy", is_active=False),
+        Variable(code="c_temperature", name="Temperature", unit="°C", description=None),
+    ])
+    session.commit()
+    base = "/api/sensor-catalog/variables"
+
+    def items(**params):
+        response = client.get(base, params={"page": 1, "per_page": 10, **params}, headers=auth)
+        assert response.status_code == 200, response.text
+        return [row["code"] for row in response.json()["items"]]
+
+    assert items(search="  accumulated  ") == ["a_rain"]
+    assert items(search="Inactivo") == ["b_rain"]
+    assert items(search="Activo") == ["a_rain", "c_temperature"]
+    assert items(search="%") == []
+    # "Rain" sorts after "Old rain", so descending by name puts it first.
+    assert items(unit="mm", sort="name:desc") == ["a_rain", "b_rain"]
+    assert items(sort="unit:asc") == ["a_rain", "b_rain", "c_temperature"]
+    assert items(sort="is_active:asc") == ["b_rain", "a_rain", "c_temperature"]
+
+
+def test_sensor_list_search_filters_and_variable_sort(client, session, test_user):
+    auth = grant(session, test_user)
+    temperature = Variable(code="temperature", name="Temperature", unit="°C")
+    humidity = Variable(code="humidity", name="Humidity", unit="%")
+    session.add_all([temperature, humidity])
+    session.commit()
+    few = Sensor(code="a_few", name="Few", manufacturer="Acme")
+    many = Sensor(code="b_many", name="Many", manufacturer="Other", is_active=False)
+    empty = Sensor(code="c_empty", name="Empty", manufacturer="Acme")
+    session.add_all([few, many, empty])
+    session.commit()
+    session.add_all([
+        SensorVariable(sensor_id=few.id, variable_id=temperature.id, min_value=0,
+            max_value=100, accuracy="1", resolution="1"),
+        SensorVariable(sensor_id=many.id, variable_id=temperature.id, min_value=0,
+            max_value=100, accuracy="1", resolution="1"),
+        SensorVariable(sensor_id=many.id, variable_id=humidity.id, min_value=0,
+            max_value=100, accuracy="1", resolution="1"),
+    ])
+    session.commit()
+    base = "/api/sensor-catalog/sensors"
+
+    def items(**params):
+        response = client.get(base, params={"page": 1, "per_page": 10, **params}, headers=auth)
+        assert response.status_code == 200, response.text
+        return [row["code"] for row in response.json()["items"]]
+
+    assert items(search="Humidity") == ["b_many"]
+    assert items(search="Inactivo") == ["b_many"]
+    assert items(search="Activo") == ["a_few", "c_empty"]
+    assert items(search="%") == []
+    assert items(manufacturer="Acme") == ["a_few", "c_empty"]
+    assert items(variable_id=str(humidity.id)) == ["b_many"]
+    assert items(sort="variables:desc") == ["b_many", "a_few", "c_empty"]
+    assert items(sort="manufacturer:desc") == ["b_many", "a_few", "c_empty"]
+
+
+def test_sensor_requires_a_variable(client, session, test_user):
+    auth = grant(session, test_user)
+    base = "/api/sensor-catalog/sensors"
+    response = client.post(base, json={"code": "empty", "name": "Empty", "manufacturer": "Acme",
+        "variables": []}, headers=auth)
+    assert response.status_code == 422, response.text

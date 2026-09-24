@@ -4,15 +4,19 @@ export type CatalogKind = "sensors" | "variables";
 export interface Variable { id: string; code: string; name: string; unit: string; description: string | null; isActive: boolean }
 export interface SensorVariable { variableId: string; code: string; name: string; unit: string; minValue: number; maxValue: number; accuracy: string; resolution: string }
 export interface Sensor { id: string; code: string; name: string; manufacturer: string; description: string | null; isActive: boolean; variables: SensorVariable[] }
-export interface SensorVariableInput { variableId: string; minValue: number; maxValue: number; accuracy: string; resolution: string }
+export interface SensorVariableInput { variableId: string; minValue: number | ""; maxValue: number | ""; accuracy: string; resolution: string }
 export interface Page<T> { items: T[]; total: number; page: number; perPage: number; pages: number }
-export interface ListParams { page: number; perPage: number; search?: string; isActive?: boolean; sort?: string }
+export interface ListParams { page: number; perPage: number; search?: string; isActive?: boolean; manufacturer?: string; variableId?: string; unit?: string; sort?: string }
 
 export const catalogApi = {
   async list<K extends CatalogKind>(kind: K, params: ListParams): Promise<Page<K extends "sensors" ? Sensor : Variable>> {
     const { data } = await appApi.get(`/sensor-catalog/${kind}`, { params: {
       page: params.page, per_page: params.perPage, ...(params.search ? { search: params.search } : {}),
-      ...(params.isActive === undefined ? {} : { is_active: params.isActive }), ...(params.sort ? { sort: params.sort } : {}),
+      ...(params.isActive === undefined ? {} : { is_active: params.isActive }),
+      ...(params.manufacturer ? { manufacturer: params.manufacturer } : {}),
+      ...(params.variableId ? { variable_id: params.variableId } : {}),
+      ...(params.unit ? { unit: params.unit } : {}),
+      ...(params.sort ? { sort: params.sort } : {}),
     } });
     return data;
   },
