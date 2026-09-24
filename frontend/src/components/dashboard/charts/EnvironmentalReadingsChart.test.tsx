@@ -1,154 +1,47 @@
 import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
 import { EnvironmentalReadingsChart } from "./EnvironmentalReadingsChart";
+import type { TelemetryItem } from "@/app/types/environmentalSensor.types";
 
-const chartMocks = vi.hoisted(() => ({
-  chartContainer: vi.fn(),
-  lineChart: vi.fn(),
-  line: vi.fn(),
-  xAxis: vi.fn(),
-  tooltipContent: vi.fn(),
-}));
-
+const mocks = vi.hoisted(() => ({ chartContainer: vi.fn(), lineChart: vi.fn(), line: vi.fn() }));
 vi.mock("@/components/ui/chart", () => ({
-  ChartContainer: ({
-    children,
-    config,
-    ...props
-  }: {
-    children: ReactNode;
-    config: Record<string, unknown>;
-  }) => {
-    chartMocks.chartContainer({ config, ...props });
-    return <div {...props}>{children}</div>;
-  },
-  ChartLegend: ({ content }: { content: ReactNode }) => (
-    <div data-testid="chart-legend">{content}</div>
-  ),
-  ChartLegendContent: () => <div data-testid="chart-legend-content" />,
-  ChartTooltip: ({ content }: { content: ReactNode }) => (
-    <div data-testid="chart-tooltip">{content}</div>
-  ),
-  ChartTooltipContent: (props: Record<string, unknown>) => {
-    chartMocks.tooltipContent(props);
-    return <div data-testid="chart-tooltip-content" />;
-  },
+  ChartContainer: ({ children, config, ...props }: { children: ReactNode; config: unknown }) => { mocks.chartContainer(config); return <div {...props}>{children}</div>; },
+  ChartLegend: () => <div data-testid="legend" />,
+  ChartLegendContent: () => null,
+  ChartTooltip: () => <div data-testid="tooltip" />,
+  ChartTooltipContent: () => null,
 }));
-
 vi.mock("recharts", () => ({
-  CartesianGrid: () => <div data-testid="cartesian-grid" />,
-  LineChart: ({ children, ...props }: { children: ReactNode }) => {
-    chartMocks.lineChart(props);
-    return <div data-testid="line-chart">{children}</div>;
-  },
-  Line: (props: Record<string, unknown>) => {
-    chartMocks.line(props);
-    return <div data-testid={`line-${String(props.dataKey)}`} />;
-  },
-  XAxis: (props: Record<string, unknown>) => {
-    chartMocks.xAxis(props);
-    return <div data-testid="x-axis" />;
-  },
-  YAxis: (props: Record<string, unknown>) => (
-    <div data-testid={`y-axis-${String(props.yAxisId)}`} />
-  ),
+  CartesianGrid: () => null,
+  LineChart: ({ children, data }: { children: ReactNode; data: unknown }) => { mocks.lineChart(data); return <div>{children}</div>; },
+  Line: (props: unknown) => { mocks.line(props); return null; },
+  XAxis: () => null,
+  YAxis: () => null,
 }));
-
-const readings = [
-  {
-    id: "reading-1",
-    time: "2026-09-21T11:30:00Z",
-    deviceId: "device-1",
-    deviceSerial: "IOT-0000-0001",
-    deviceType: "environmental",
-    temperatureC: null,
-    relativeHumidityPct: 60,
-    pressureHpa: 1012.8,
-  },
-  {
-    id: "reading-2",
-    time: "2026-09-21T12:30:00Z",
-    deviceId: "device-1",
-    deviceSerial: "IOT-0000-0001",
-    deviceType: "environmental",
-    temperatureC: 24.5,
-    relativeHumidityPct: 61,
-    pressureHpa: 1013.2,
-  },
+const sensors = [
+  { key: "dht22", sensorCode: "dht22", sensorName: "DHT22", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] },
+  { key: "bmp280", sensorCode: "bmp280", sensorName: "BMP280", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] },
 ];
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
+const readings: TelemetryItem[] = [
+  { time: "2026-09-21T12:30:00Z", values: { dht22: { temperature: 23.4 }, bmp280: { temperature: 22.9 } } },
+  { time: "2026-09-21T11:30:00Z", values: { dht22: { temperature: 22.1 } } },
+];
+beforeEach(() => vi.clearAllMocks());
 describe("EnvironmentalReadingsChart", () => {
-  it("renders an accessible responsive chart with all environmental series", () => {
-    render(<EnvironmentalReadingsChart readings={readings} />);
-
-    expect(
-      screen.getByRole("img", { name: "Historial de lecturas ambientales" }),
-    ).toHaveClass("w-full");
-    expect(screen.getByTestId("line-temperatureC")).toBeInTheDocument();
-    expect(
-      screen.getByTestId("line-relativeHumidityPct"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("line-pressureHpa")).toBeInTheDocument();
-    expect(screen.getByTestId("chart-tooltip")).toBeInTheDocument();
-    expect(screen.getByTestId("chart-legend")).toBeInTheDocument();
-
-    const containerProps = chartMocks.chartContainer.mock.calls.at(-1)?.[0] as
-      | Record<string, unknown>
-      | undefined;
-    expect(containerProps?.config).toMatchObject({
-      temperatureC: { label: "Temperatura (°C)" },
-      relativeHumidityPct: { label: "Humedad relativa (%)" },
-      pressureHpa: { label: "Presión (hPa)" },
-    });
+  it("renders one line per sensor key for a shared variable", () => {
+    render(<EnvironmentalReadingsChart readings={readings} variableCode="temperature" sensors={sensors} />);
+    expect(screen.getByRole("img", { name: "Historial de Temperatura" })).toBeInTheDocument();
+    expect(mocks.line).toHaveBeenCalledTimes(2);
+    expect(mocks.line.mock.calls.map(([props]) => props.dataKey)).toEqual(["series_0", "series_1"]);
+    expect(mocks.chartContainer.mock.calls[0][0]).toMatchObject({ series_0: { label: "DHT22 · dht22" }, series_1: { label: "BMP280 · bmp280" } });
   });
-
-  it("preserves null readings and formats timestamps without inventing values", () => {
-    render(<EnvironmentalReadingsChart readings={readings} />);
-
-    const lineChartProps = chartMocks.lineChart.mock.calls.at(-1)?.[0] as
-      | { data?: typeof readings }
-      | undefined;
-    expect(lineChartProps?.data).toEqual(readings);
-    expect(lineChartProps?.data?.[0].temperatureC).toBeNull();
-
-    const lineProps = chartMocks.line.mock.calls.map(([props]) => props);
-    expect(lineProps).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          dataKey: "temperatureC",
-          connectNulls: false,
-        }),
-        expect.objectContaining({
-          dataKey: "relativeHumidityPct",
-          connectNulls: false,
-        }),
-        expect.objectContaining({
-          dataKey: "pressureHpa",
-          connectNulls: false,
-        }),
-      ]),
-    );
-
-    const xAxisProps = chartMocks.xAxis.mock.calls.at(-1)?.[0] as
-      | { dataKey?: string; tickFormatter?: (value: string) => string }
-      | undefined;
-    expect(xAxisProps?.dataKey).toBe("time");
-    expect(xAxisProps?.tickFormatter?.(readings[0].time)).toEqual(
-      expect.any(String),
-    );
-    expect(xAxisProps?.tickFormatter?.(readings[0].time)).not.toBe(
-      readings[0].time,
-    );
-
-    const tooltipProps = chartMocks.tooltipContent.mock.calls.at(-1)?.[0] as
-      | { labelFormatter?: (value: string) => string }
-      | undefined;
-    expect(tooltipProps?.labelFormatter?.(readings[0].time)).toContain("2026");
+  it("keeps missing values null and chronological order", () => {
+    render(<EnvironmentalReadingsChart readings={readings} variableCode="temperature" sensors={sensors} />);
+    expect(mocks.lineChart.mock.calls[0][0]).toEqual([
+      { time: "2026-09-21T11:30:00Z", series_0: 22.1, series_1: null },
+      { time: "2026-09-21T12:30:00Z", series_0: 23.4, series_1: 22.9 },
+    ]);
+    expect(mocks.line.mock.calls[0][0]).toMatchObject({ connectNulls: false });
   });
 });

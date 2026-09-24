@@ -43,6 +43,11 @@ export const CONNECTION_STATUS_LABELS: Record<string, string> = {
   offline: "Fuera de línea",
 };
 
+export const SENSOR_INSTALLATION_STATUS_LABELS: Record<string, string> = {
+  active: "Activo",
+  inactive: "Inactivo",
+};
+
 export const ENVIRONMENT_ROLE_LABELS: Record<string, string> = {
   owner: "Propietario",
   guest: "Invitado",
@@ -80,6 +85,7 @@ export const getOperationTypeLabel = labelFrom(OPERATION_TYPE_LABELS);
 export const getOperationStatusLabel = labelFrom(OPERATION_STATUS_LABELS);
 export const getInvitationStatusLabel = labelFrom(INVITATION_STATUS_LABELS);
 export const getConnectionStatusLabel = labelFrom(CONNECTION_STATUS_LABELS);
+export const getSensorInstallationStatusLabel = labelFrom(SENSOR_INSTALLATION_STATUS_LABELS);
 export const getEnvironmentRoleLabel = labelFrom(ENVIRONMENT_ROLE_LABELS);
 export const getDeviceLocationSourceCodeLabel = labelFrom(DEVICE_LOCATION_SOURCE_LABELS);
 export const getBooleanLabel = (value: boolean | null | undefined): string => value == null ? "-" : value ? "Sí" : "No";

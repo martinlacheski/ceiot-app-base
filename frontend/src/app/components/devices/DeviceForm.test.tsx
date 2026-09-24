@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DeviceForm } from "./DeviceForm";
 
-const DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31";
+const DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32";
 
 class ResizeObserverMock {
   observe() {}
@@ -17,7 +17,7 @@ vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 vi.mock("@/app/hooks/useDevices", () => ({
   useDeviceTypes: () => ({
     data: {
-      items: [{ id: DEVICE_TYPE_ID, name: "1 Relé", is_active: true }],
+      items: [{ id: DEVICE_TYPE_ID, name: "Ambiental", is_active: true }],
       total: 1,
       page: 1,
       per_page: 100,
@@ -37,6 +37,13 @@ vi.mock("@/store/confirm.store", () => ({
 }));
 
 describe("DeviceForm", () => {
+  it("defaults a new device to the Ambiental type", async () => {
+    const onSubmit = vi.fn();
+    render(<MemoryRouter><DeviceForm onSubmit={onSubmit} /></MemoryRouter>);
+    await userEvent.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].deviceTypeId).toBe(DEVICE_TYPE_ID);
+  });
   it("keeps editable device fields and submits no financial keys", async () => {
     const onSubmit = vi.fn();
     render(

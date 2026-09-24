@@ -1,15 +1,17 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
+import { DeviceSensorsSection } from "@/app/components/devices/DeviceSensorsSection";
 import {
   formatDeviceGpsSummary,
   formatDeviceMac,
 } from "@/app/components/devices/deviceTelemetry";
 import { PageHeader } from "@/app/components/PageHeader";
 import { deviceService } from "@/app/services/device.service";
-import { sensorReadingService } from "@/app/services/sensorReading.service";
+import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
 import { Button } from "@/components/ui/button";
@@ -24,6 +26,8 @@ import {
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
+  const [range, setRange] = useState<"24h" | "7d" | "30d">("24h");
+  const canReadTelemetry = user?.isAdmin || user?.permissions?.includes("telemetry:read");
   const {
     data: device,
     isLoading,
@@ -39,9 +43,9 @@ export default function DeviceDetailPage() {
     isLoading: latestReadingsLoading,
     isError: latestReadingsError,
   } = useQuery({
-    queryKey: ["sensor-readings", "latest", id],
-    queryFn: () => sensorReadingService.getLatest(id!, 1),
-    enabled: Boolean(id),
+    queryKey: ["telemetry", "latest", id],
+    queryFn: () => environmentalSensorService.getLatest(id!, 1),
+    enabled: Boolean(id && canReadTelemetry),
     refetchInterval: 5000,
   });
   const {
@@ -49,17 +53,18 @@ export default function DeviceDetailPage() {
     isLoading: historyReadingsLoading,
     isError: historyReadingsError,
   } = useQuery({
-    queryKey: ["sensor-readings", "history", id, "24h"],
+    queryKey: ["telemetry", "history", id, range],
     queryFn: () => {
       const end = new Date();
-      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-      return sensorReadingService.getHistory(
+      const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+      return environmentalSensorService.getHistory(
         id!,
         start.toISOString(),
         end.toISOString(),
       );
     },
-    enabled: Boolean(id),
+    enabled: Boolean(id && canReadTelemetry),
     refetchInterval: 5000,
   });
 
@@ -113,12 +118,19 @@ export default function DeviceDetailPage() {
           </div>
         </CardContent>
       </Card>
-      <EnvironmentalReadingsSection
+      <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} />
+      {canReadTelemetry && <><label className="flex items-center gap-2 text-sm" htmlFor="telemetry-range">Período de lecturas
+        <select id="telemetry-range" className="rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => setRange(event.target.value as "24h" | "7d" | "30d")}>
+          <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option>
+        </select>
+      </label><EnvironmentalReadingsSection
         latest={latestReadings}
         history={historyReadings}
-        isLoading={latestReadingsLoading || historyReadingsLoading}
-        isError={latestReadingsError || historyReadingsError}
-      />
+        latestLoading={latestReadingsLoading}
+        historyLoading={historyReadingsLoading}
+        latestError={latestReadingsError}
+        historyError={historyReadingsError}
+      /></>}
       <DeviceGuestManagementCard deviceId={id} isOwner={isOwner} />
     </div>
   );

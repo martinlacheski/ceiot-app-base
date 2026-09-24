@@ -37,7 +37,7 @@ import type {
   DeviceUpdate,
 } from "@/app/types/device.types";
 
-const DEFAULT_DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31";
+const DEFAULT_DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32";
 
 const buildDeviceSchema = (isEditing: boolean) =>
   z.object({
@@ -324,10 +324,10 @@ export function DeviceForm({
             name="description"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nombre del servicio</FormLabel>
+                <FormLabel>Descripción</FormLabel>
                 <FormControl>
                   <Input
-                    placeholder="Ej: Agua caliente, Café, Lavado"
+                    placeholder="Ej.: Monitoreo del invernadero"
                     {...field}
                   />
                 </FormControl>

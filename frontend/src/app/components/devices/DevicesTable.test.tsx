@@ -516,14 +516,14 @@ describe("buildDeviceMapSearchUrl", () => {
     id: "device-1",
     serial: "IOT-001",
     name: "Device 1",
-    deviceTypeId: "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31",
+    deviceTypeId: "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32",
     status: "active",
     isActive: true,
     enabled: true,
     brokerConnected: false,
     type: {
-      id: "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31",
-      name: "1 Relé",
+      id: "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32",
+      name: "Ambiental",
       isActive: true,
     },
   };

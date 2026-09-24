@@ -7,7 +7,9 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
-import { sensorReadingService } from "@/app/services/sensorReading.service";
+import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
+import { useAuthStore } from "@/auth/store/auth.store";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -35,14 +37,17 @@ export function DeviceDetailDialog({
   onOpenChange,
 }: DeviceDetailDialogProps) {
   const deviceId = device?.id;
+  const { user } = useAuthStore();
+  const [range, setRange] = useState<"24h" | "7d" | "30d">("24h");
+  const canReadTelemetry = user?.isAdmin || user?.permissions?.includes("telemetry:read");
   const {
     data: latestReadings,
     isLoading: latestReadingsLoading,
     isError: latestReadingsError,
   } = useQuery({
-    queryKey: ["sensor-readings", "latest", deviceId],
-    queryFn: () => sensorReadingService.getLatest(deviceId!, 1),
-    enabled: Boolean(deviceId) && open,
+    queryKey: ["telemetry", "latest", deviceId],
+    queryFn: () => environmentalSensorService.getLatest(deviceId!, 1),
+    enabled: Boolean(deviceId && canReadTelemetry) && open,
     refetchInterval: 5000,
   });
   const {
@@ -50,17 +55,18 @@ export function DeviceDetailDialog({
     isLoading: historyReadingsLoading,
     isError: historyReadingsError,
   } = useQuery({
-    queryKey: ["sensor-readings", "history", deviceId, "24h"],
+    queryKey: ["telemetry", "history", deviceId, range],
     queryFn: () => {
       const end = new Date();
-      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-      return sensorReadingService.getHistory(
+      const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
+      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
+      return environmentalSensorService.getHistory(
         deviceId!,
         start.toISOString(),
         end.toISOString(),
       );
     },
-    enabled: Boolean(deviceId) && open,
+    enabled: Boolean(deviceId && canReadTelemetry) && open,
     refetchInterval: 5000,
   });
 
@@ -187,12 +193,18 @@ export function DeviceDetailDialog({
 
           </div>
 
-          <EnvironmentalReadingsSection
+          {canReadTelemetry && <><label className="flex items-center gap-2 text-sm" htmlFor="dialog-telemetry-range">Período de lecturas
+            <select id="dialog-telemetry-range" className="rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => setRange(event.target.value as "24h" | "7d" | "30d")}>
+              <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option>
+            </select>
+          </label><EnvironmentalReadingsSection
             latest={latestReadings}
             history={historyReadings}
-            isLoading={latestReadingsLoading || historyReadingsLoading}
-            isError={latestReadingsError || historyReadingsError}
-          />
+            latestLoading={latestReadingsLoading}
+        historyLoading={historyReadingsLoading}
+            latestError={latestReadingsError}
+        historyError={historyReadingsError}
+          /></>}
 
           {/* Timestamps */}
           <div className="flex justify-between text-xs text-muted-foreground pt-4 border-t">

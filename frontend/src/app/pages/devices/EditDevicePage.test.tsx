@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import EditDevicePage from "./EditDevicePage";
 
-const DEFAULT_DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c31";
+const DEFAULT_DEVICE_TYPE_ID = "6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32";
 
 class ResizeObserverMock {
   observe() {}
@@ -38,7 +38,7 @@ vi.mock("@/app/hooks/useDevices", () => ({
       environmentId: "env-1",
       type: {
         id: DEFAULT_DEVICE_TYPE_ID,
-        name: "1 Relé",
+        name: "Ambiental",
         isActive: true,
       },
       environment: {
@@ -59,7 +59,7 @@ vi.mock("@/app/hooks/useDevices", () => ({
       items: [
         {
           id: DEFAULT_DEVICE_TYPE_ID,
-          name: "1 Relé",
+          name: "Ambiental",
           is_active: true,
         },
       ],
@@ -100,7 +100,7 @@ describe("EditDevicePage", () => {
       screen.getByRole("button", { name: /desvincular dispositivo/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
-    expect(screen.getByLabelText("Nombre del servicio")).toBeInTheDocument();
+    expect(screen.getByLabelText("Descripción")).toBeInTheDocument();
     expect(screen.queryByLabelText("Importe")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Tiempo (seg.)")).not.toBeInTheDocument();
     expect(

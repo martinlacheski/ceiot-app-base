@@ -32,6 +32,18 @@ describe("deviceHistoryApi", () => {
     expect(Object.keys(request.params).join(" ")).not.toMatch(/payment|amount|revenue/);
   });
 
+  it("requests JSONB telemetry with scoped variable filters and local dates", async () => {
+    get.mockResolvedValue({ data: { items: [], sensors: [], total: 0, page: 1, perPage: 10, pages: 0 } });
+    await deviceHistoryApi.telemetry("SN/1", { environmentId: "env-1", dateFrom: "2026-09-01", variable: "temperature", min: 20, max: 30, sortBy: "time", sortOrder: "asc", page: 1, perPage: 10 });
+    expect(get).toHaveBeenCalledWith("/devices/history/devices/SN%2F1/telemetry", { params: expect.objectContaining({ environment_id: "env-1", date_from: "2026-09-01", variable: "temperature", min: 20, max: 30, sort_by: "time", sort_order: "asc", utc_offset_minutes: -new Date().getTimezoneOffset() }) });
+  });
+
+  it("fetches the catalog variables for complete history filter choices", async () => {
+    get.mockResolvedValue({ data: [{ id: "v-pressure", code: "pressure", name: "Presión", unit: "hPa" }] });
+    expect(await deviceHistoryApi.variables()).toEqual([{ id: "v-pressure", code: "pressure", name: "Presión", unit: "hPa" }]);
+    expect(get).toHaveBeenCalledWith("/sensor-catalog/variables");
+  });
+
   it("sends inclusive local date bounds to both detail endpoints", async () => {
     get.mockResolvedValue({ data: { items: [], total: 0, page: 1, perPage: 10, pages: 0 } });
     const dates = { dateFrom: "2026-09-01", dateTo: "2026-09-02" };
