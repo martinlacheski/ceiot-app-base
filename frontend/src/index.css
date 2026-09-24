@@ -65,11 +65,11 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   /* Vibrant Blue Palette */
-  --chart-1: 221 83% 53%; /* Primary Blue */
-  --chart-2: 199 89% 48%; /* Cerulean */
-  --chart-3: 172 66% 50%; /* Teal */
-  --chart-4: 43 96% 64%;  /* Amber */
-  --chart-5: 14 90% 60%;  /* Orange Red */
+  --chart-1: hsl(221 83% 53%); /* Primary Blue */
+  --chart-2: hsl(199 89% 48%); /* Cerulean */
+  --chart-3: hsl(172 66% 50%); /* Teal */
+  --chart-4: hsl(43 96% 64%);  /* Amber */
+  --chart-5: hsl(14 90% 60%);  /* Orange Red */
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -100,11 +100,11 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   /* Vibrant Blue Palette */
-  --chart-1: 196 100% 50%; /* Bright Blue */
-  --chart-2: 217 91% 60%; /* Blue-ish */
-  --chart-3: 180 100% 40%; /* Cyan/Teal */
-  --chart-4: 43 100% 50%; /* Yellow/Orange for contrast */
-  --chart-5: 12 100% 50%; /* Red/Orange for alerts */
+  --chart-1: hsl(196 100% 50%); /* Bright Blue */
+  --chart-2: hsl(217 91% 60%); /* Blue-ish */
+  --chart-3: hsl(180 100% 40%); /* Cyan/Teal */
+  --chart-4: hsl(43 100% 50%); /* Yellow/Orange for contrast */
+  --chart-5: hsl(12 100% 50%); /* Red/Orange for alerts */
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
