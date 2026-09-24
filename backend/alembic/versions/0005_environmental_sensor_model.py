@@ -166,7 +166,18 @@ def upgrade():
         bind.execute(device_type.insert().values(id=ENVIRONMENTAL_ID, code="environmental", name="Ambiental", is_active=True))
     else:
         bind.execute(device_type.update().where(device_type.c.id == ENVIRONMENTAL_ID).values(is_active=True))
-    bind.execute(device_type.update().where(device_type.c.id == RELAY_1_ID).values(is_active=False))
+    # RELAY_1_ID predates this migration: every database that reached this
+    # revision by upgrading from an older deployment already has the row
+    # (self-healed at runtime back when it was the default type), so a plain
+    # UPDATE was enough there. A database migrated straight from 0001 to head
+    # (a fresh install, or this test's dedicated database) never went through
+    # that historical runtime self-heal and would otherwise end up without
+    # this legacy row at all. Upsert it too, deactivated, so the end state is
+    # deterministic regardless of migration history.
+    if not bind.execute(sa.select(device_type.c.id).where(device_type.c.id == RELAY_1_ID)).first():
+        bind.execute(device_type.insert().values(id=RELAY_1_ID, code="relay_1", name="1 Relé", is_active=False))
+    else:
+        bind.execute(device_type.update().where(device_type.c.id == RELAY_1_ID).values(is_active=False))
 
     uid, system, admin, members, owners, guests, guest_devices = _identity_fragments()
     for table in ("variable", "sensor", "sensor_variable", "device_sensor", "telemetry"):
