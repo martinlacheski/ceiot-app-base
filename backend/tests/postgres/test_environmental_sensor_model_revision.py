@@ -18,7 +18,11 @@ REVISION = ROOT / "alembic/versions/0005_environmental_sensor_model.py"
 
 def test_revision_is_chained_and_reversible():
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert script.get_heads() == ["0005"]
+    heads = script.get_heads()
+    assert len(heads) == 1
+    # Later revisions (e.g. 0006) may extend the chain past 0005, so 0005 is
+    # no longer necessarily the head; it must still be an ancestor of it.
+    assert "0005" in {r.revision for r in script.walk_revisions(base="0004", head=heads[0])}
     assert script.get_revision("0005").down_revision == "0004"
     source = REVISION.read_text()
     assert "def upgrade()" in source

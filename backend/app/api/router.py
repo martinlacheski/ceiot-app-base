@@ -8,6 +8,7 @@ from app.api.public.router import router as public_router
 from app.api.device.device_type.router import router as device_type_router
 from app.api.provisioning.router import router as provisioning_router
 from app.api.sensor.router import router as sensor_router
+from app.api.sensor_catalog.router import catalog_router, device_router as sensor_device_router
 
 router = APIRouter()
 
@@ -28,6 +29,8 @@ router.include_router(device_type_router, prefix="/devices/types", tags=["Device
 router.include_router(history_router, prefix="/devices/history", tags=["Device History"])
 router.include_router(device_router, prefix="/devices", tags=["Devices"])
 router.include_router(sensor_router, prefix="/devices", tags=["Sensor Readings"])
+router.include_router(catalog_router, prefix="/sensor-catalog", tags=["Sensor Catalog"])
+router.include_router(sensor_device_router, prefix="/devices", tags=["Device Sensors and Telemetry"])
 router.include_router(
     operations_router, prefix="/devices/operations", tags=["Device Operations"]
 )

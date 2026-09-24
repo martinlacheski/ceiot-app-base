@@ -7,6 +7,7 @@ from app.api.environment.permissions import ENVIRONMENTS_PERMISSIONS, INVITATION
 from app.api.access.permissions import ACCESS_PERMISSIONS
 from app.api.device.permissions import DEVICES_PERMISSIONS
 from app.api.sensor.permissions import SENSOR_PERMISSIONS
+from app.api.sensor_catalog.permissions import SENSOR_CATALOG_PERMISSIONS
 
 # Definición centralizada de permisos agregando los módulos
 PERMISSIONS_TREE = {
@@ -18,6 +19,7 @@ PERMISSIONS_TREE = {
     "ACCESS": ACCESS_PERMISSIONS,
     "DEVICES": DEVICES_PERMISSIONS,
     "SENSORS": SENSOR_PERMISSIONS,
+    "SENSOR_CATALOG": SENSOR_CATALOG_PERMISSIONS,
 }
 
 # Utilidad para obtener la lista plana de permisos (para validaciones y scripts)
@@ -55,4 +57,8 @@ BASIC_PERMISSIONS = [
     "device:update",
     # Sensor readings
     "sensor:read",
+    "sensor_catalog:read",
+    "device_sensor:read",
+    "device_sensor:write",
+    "telemetry:read",
 ]

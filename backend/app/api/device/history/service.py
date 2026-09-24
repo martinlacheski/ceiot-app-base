@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import String, and_, cast, false, func, or_, select, true, union_all
+from sqlalchemy import Float, String, and_, cast, exists, false, func, or_, select, true, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access.models import ScopeType, ScopedGuestRelation
@@ -15,7 +15,7 @@ from app.api.device.history.serial import OPERATION_SERIAL, READING_SERIAL
 from app.api.device.models import Device
 from app.api.device.operations.models import DeviceOperation
 from app.api.environment.environment.models import Environment, EnvironmentUser
-from app.api.sensor.models import SensorReading
+from app.api.sensor.models import SensorReading, Telemetry
 from app.core.labels_es import OPERATION_STATUS_LABELS, OPERATION_TYPE_LABELS, codes_matching_label
 
 
@@ -202,7 +202,47 @@ class DeviceHistoryService:
                                      sort_by, sort_order), page, per_page)
 
     async def has_history(self, scope, serial, environment_id=None):
-        return bool(await self.list_entries(scope, environment_id, serial))
+        if await self.list_entries(scope, environment_id, serial):
+            return True
+        telemetry = select(Telemetry.id).where(Telemetry.device_serial == serial,
+            scope.condition(Telemetry.environment_id, Telemetry.time, environment_id,
+                            members_only=True)).limit(1)
+        return (await self.session.execute(telemetry)).first() is not None
+
+    async def list_telemetry(self, scope, *, serial, environment_id=None,
+                             search=None, date_from=None, date_to=None,
+                             variable=None, variable_min=None, variable_max=None,
+                             sort_by='time', sort_order='desc', utc_offset_minutes=0,
+                             page=1, per_page=100):
+        """Snapshot-scoped telemetry; JSON variable predicates match any sensor key."""
+        query = select(Telemetry).where(Telemetry.device_serial == serial,
+            scope.condition(Telemetry.environment_id, Telemetry.time, environment_id,
+                            members_only=True),
+            *local_date_conditions(Telemetry.time, date_from, date_to, utc_offset_minutes))
+        match = text_search(search, formatted_time(Telemetry.time, utc_offset_minutes),
+                            Telemetry.values)
+        if match is not None:
+            query = query.where(match)
+        variable_value = None
+        if variable:
+            cells = func.jsonb_each(Telemetry.values).table_valued('key', 'value')
+            numeric = cast(cells.c.value.op('->>')(variable), Float)
+            variable_value = select(func.max(numeric)).select_from(cells).where(
+                cells.c.value.op('?')(variable)).correlate(Telemetry).scalar_subquery()
+            matches = select(1).select_from(cells).where(cells.c.value.op('?')(variable))
+            if variable_min is not None:
+                matches = matches.where(numeric >= variable_min)
+            if variable_max is not None:
+                matches = matches.where(numeric <= variable_max)
+            if variable_min is not None or variable_max is not None:
+                query = query.where(exists(matches.correlate(Telemetry)))
+        total = (await self.session.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
+        sort_column = variable_value if sort_by == 'variable' else Telemetry.time
+        query = query.order_by(ordered(sort_column, sort_order), Telemetry.time.desc(),
+                               Telemetry.id.asc()).offset((page - 1) * per_page).limit(per_page)
+        items = (await self.session.execute(query)).scalars().all()
+        return {'items': items, 'total': total, 'page': page, 'per_page': per_page,
+                'pages': (total + per_page - 1) // per_page}
 
     async def list_sensor_readings(self, scope, *, serial, environment_id=None, filters=None,
                                    search=None, date_from=None, date_to=None,
