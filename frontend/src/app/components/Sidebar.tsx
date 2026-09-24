@@ -13,6 +13,7 @@ import {
   LogOut,
   MapPin,
   // MessageSquare,
+  Radio,
   Receipt,
   ScanQrCode,
   Settings,
@@ -87,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(isAdmin
       ? [
           { icon: ScanQrCode, label: "Dispositivos", to: "/admin/devices" },
+          { icon: Radio, label: "Emulador", to: "/admin/emulator" },
           {
             icon: ScanQrCode,
             label: "Vista de dispositivos",

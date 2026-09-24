@@ -58,6 +58,7 @@ import { EditEnvironmentTypePage } from "@/admin/pages/settings/environment/Edit
 import { CatalogListPage } from "@/admin/pages/sensorCatalog/CatalogListPage";
 import { CatalogFormPage } from "@/admin/pages/sensorCatalog/CatalogFormPage";
 import { CatalogPermissionRoute } from "./routes/CatalogPermissionRoute";
+import EmulatorPage from "@/admin/pages/emulator/EmulatorPage";
 
 // Invitaciones (Standalone Authenticated)
 import InvitationAcceptPage from "@/app/invitations/InvitationAcceptPage";
@@ -297,6 +298,10 @@ export const appRouter = createBrowserRouter([
       {
         path: "permissions",
         element: <PermissionsPage />,
+      },
+      {
+        path: "emulator",
+        element: <EmulatorPage />,
       },
     ],
   },

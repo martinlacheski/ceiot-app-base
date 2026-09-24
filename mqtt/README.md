@@ -206,16 +206,114 @@ es manual:
   ESP-IDF), mbedTLS **no** valida las fechas del certificado, así que este
   error no debería aparecer con la configuración actual del firmware. Si en
   el futuro se habilita esa opción, el ESP32 necesita conocer la hora real
-  antes del handshake TLS — para eso está pensado el *fallback* de hora por
-  MQTT (`backend/docs/mqtt-time-sync.md`), aunque ojo: ese mismo fallback
-  depende de una conexión MQTT ya establecida, así que con
-  `CONFIG_MBEDTLS_HAVE_TIME_DATE` activo hace falta además un bootstrap de
-  hora por HTTP (no implementado todavía) antes del primer intento TLS.
+  antes del handshake TLS: el orden es NTP → `GET /api/public/time` (HTTP
+  plano, sin TLS, ver más abajo) → recién ahí MQTT sobre TLS. El *fallback*
+  de hora por MQTT (`backend/docs/mqtt-time-sync.md`,
+  `iot/devices/{serial}/time/request`) sigue existiendo, pero depende de una
+  conexión MQTT ya establecida, así que no sirve para el primer handshake
+  TLS — para eso está el bootstrap por HTTP.
 - **El backend/mqtt-runtime no conectan (`MQTT Connection failed`)**:
   confirme que `EMQX_BACKEND_PASSWORD` esté definida en `mqtt/.env` y que el
   contenedor `emqx` esté sano (`docker compose ps emqx`); revise
   `docker compose logs emqx` por el warning de bootstrap si cambió la
   contraseña sin borrar el usuario existente.
+
+## Hora del dispositivo (bootstrap antes de mTLS)
+
+El ESP32 necesita una hora razonable antes de poder validar el certificado
+del broker (si `CONFIG_MBEDTLS_HAVE_TIME_DATE` está habilitado). Orden de
+arranque:
+
+1. **NTP** (SNTP), siempre primero.
+2. **HTTP**: `GET /api/public/time` en el backend — sin autenticación, sin
+   TLS a propósito (todavía no hay hora para validar el certificado del
+   broker). Debe seguir siendo alcanzable por HTTP plano en producción (ver
+   nota de reverse proxy en `backend/docs/mqtt-time-sync.md`).
+3. **MQTT sobre TLS**: una vez conectado, `iot/devices/{serial}/time/request`
+   sigue disponible como fallback/resincronización sin reconectar SNTP.
+
+Contrato completo (payloads, ejemplos, ACL) en
+`backend/docs/mqtt-time-sync.md`.
+
+## CLI de emulación (`tools/emulador-dispositivo.py`)
+
+Para desarrollar o hacer una demo sin hardware real, pero ejercitando el
+camino seguro completo (mTLS -> broker -> `mqtt-runtime` -> validación ->
+DB), hay un script Python que se conecta con el certificado de cliente real
+de un dispositivo, igual que lo haría el firmware.
+
+### Requisitos
+
+- Un certificado de dispositivo ya emitido en `mqtt/pki/devices/<serial>/`
+  (`client.crt`, `client.key`, `root.crt`) — ver "Emitir un certificado de
+  dispositivo" más arriba si todavía no existe.
+- `paho-mqtt` instalado. Dos formas:
+
+**Opción A — venv en el host:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install paho-mqtt==2.1.0
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001
+```
+
+**Opción B — dentro del contenedor backend** (ya tiene `paho-mqtt`):
+
+```bash
+docker compose cp tools/emulador-dispositivo.py backend:/tmp/emulador-dispositivo.py
+docker compose cp mqtt/pki/devices/IOT-DEM0-0001 backend:/tmp/IOT-DEM0-0001
+docker compose exec backend python3 /tmp/emulador-dispositivo.py \
+  --serial IOT-DEM0-0001 --cert-dir /tmp/IOT-DEM0-0001 --host emqx --port 8883
+```
+
+(Dentro de la red de Docker el broker se alcanza como `emqx:8883`; desde el
+host se usa `localhost:18883`, el puerto TLS publicado por
+`mqtt/docker-compose.yml`.)
+
+### Uso
+
+**Importante:** `--sensors` tiene que usar la(s) `key` de sensor realmente
+instalada(s) en ese dispositivo (`GET /api/devices/{id}/sensors` te la da; el
+default del script, `dht22:temperature,relative_humidity`, es solo un
+ejemplo — si el dispositivo tiene instalado `dht11` en vez de `dht22`, o una
+`key` distinta como `dht22_2`, las lecturas publicadas con la clave
+equivocada se descartan silenciosamente en la ingesta, igual que pasaría con
+un dispositivo real; revisá los logs de `mqtt-runtime` si no ves filas
+nuevas en `telemetry`).
+
+```bash
+# Una lectura con los sensores por defecto (dht22: temperatura + humedad) —
+# ajustá --sensors si el dispositivo tiene otra key instalada
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001
+
+# Tres lecturas cada 5s, especificando sensores instalados
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 \
+  --sensors "dht11:temperature,relative_humidity" --count 3 --interval 5
+
+# Varios sensores instalados (separados por ';')
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0003 \
+  --sensors "dht22:temperature,relative_humidity;bmp280:temperature,pressure"
+
+# Pedir la hora por MQTT y esperar la respuesta
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --pedir-hora
+```
+
+Valores publicados con un *random walk* pequeño y acotado a rangos
+realistas por variable (mismos rangos que el catálogo de sensores:
+temperatura 18-28°C, humedad 35-65%, presión 995-1025hPa por defecto).
+
+Argumentos: `--serial` (obligatorio), `--cert-dir` (default
+`mqtt/pki/devices/<serial>/`), `--host` (default `localhost`), `--port`
+(default `18883`), `--interval`, `--count`, `--sensors`, `--pedir-hora`. Ver
+`python3 tools/emulador-dispositivo.py --help` para el detalle completo.
+
+**Nota sobre el hostname del certificado del broker:** los SAN del
+certificado de EMQX son `emqx`, `localhost` y `127.0.0.1`. Conectate con
+`--host localhost` (desde el host) o `--host emqx` (desde otro contenedor de
+la misma red) para que la verificación de hostname TLS funcione; cualquier
+otro hostname/IP requiere reemitir el certificado del broker con ese SAN
+(`./emitir-certificado-broker.sh <hostname>`).
 
 ## Qué nunca se sube a git
 

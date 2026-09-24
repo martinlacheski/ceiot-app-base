@@ -131,6 +131,10 @@ describe("Sidebar", () => {
       "href",
       "/admin/devices",
     );
+    expect(within(navigation).getByRole("link", { name: "Emulador" })).toHaveAttribute(
+      "href",
+      "/admin/emulator",
+    );
     expect(within(navigation).getByRole("link", { name: "Vista de dispositivos" })).toHaveAttribute(
       "href",
       "/app/devices",
@@ -144,12 +148,13 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 8)).toEqual([
+    expect(links.slice(0, 9)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
       expect.stringContaining("Establecimientos"),
       expect.stringContaining("Dispositivos"),
+      expect.stringContaining("Emulador"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
       expect.stringContaining("Usuarios"),
@@ -242,6 +247,53 @@ describe("Sidebar", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByRole("img", { name: /monitoreo ambiental iot/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the Emulador entry only to admins", () => {
+    vi.mocked(useAuthStore).mockImplementation((selector) => {
+      const state = {
+        user: { id: "a1", fullName: "Admin Demo" },
+        logout: vi.fn(),
+        isAdmin: () => true,
+      };
+      return typeof selector === "function"
+        ? selector(state as never)
+        : (state as never);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/admin"]}>
+        <Sidebar isCollapsed={false} onToggle={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Emulador" })).toHaveAttribute(
+      "href",
+      "/admin/emulator",
+    );
+  });
+
+  it("hides the Emulador entry for a non-admin user", () => {
+    vi.mocked(useAuthStore).mockImplementation((selector) => {
+      const state = {
+        user: { id: "u1", fullName: "Usuario Demo" },
+        logout: vi.fn(),
+        isAdmin: () => false,
+      };
+      return typeof selector === "function"
+        ? selector(state as never)
+        : (state as never);
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app"]}>
+        <Sidebar isCollapsed={false} onToggle={() => {}} />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.queryByRole("link", { name: "Emulador" }),
+    ).not.toBeInTheDocument();
   });
 
   it("omits Mercado Pago navigation for administrators", async () => {

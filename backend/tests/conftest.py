@@ -141,6 +141,26 @@ def test_user_fixture(session: Session):
     return user
 
 
+@pytest.fixture(name="admin_user")
+def admin_user_fixture(session: Session):
+    user = User(
+        email="admin@example.com",
+        username="adminuser",
+        password=hash_password("adminpassword"),
+        is_verified=True,
+        is_admin=True,
+        permissions=[],
+        first_name="Admin",
+        last_name="User",
+        identification_number="ADMINUSER123",
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+
+    return user
+
+
 @pytest.fixture(name="token")
 def token_fixture(client: TestClient, test_user: User):
     response = client.post(

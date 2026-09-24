@@ -22,11 +22,13 @@ router.include_router(access_router)
 from app.api.device.router import router as device_router
 from app.api.device.operations.router import router as operations_router
 from app.api.device.history.router import router as history_router
+from app.api.device.emulator.router import router as emulator_router
 
 router.include_router(provisioning_router, prefix="/provisioning", tags=["Provisioning"])
 router.include_router(device_type_router, prefix="/devices/types", tags=["Device Types"])
 router.include_router(history_router, prefix="/devices/history", tags=["Device History"])
 router.include_router(device_router, prefix="/devices", tags=["Devices"])
+router.include_router(emulator_router, prefix="/devices", tags=["Device Emulator"])
 router.include_router(catalog_router, prefix="/sensor-catalog", tags=["Sensor Catalog"])
 router.include_router(sensor_device_router, prefix="/devices", tags=["Device Sensors and Telemetry"])
 router.include_router(

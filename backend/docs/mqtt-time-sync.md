@@ -10,11 +10,53 @@ El firmware del ESP32 intenta obtener la hora por SNTP (`time.google.com`,
 `pool.ntp.org`) al conectar la red. En algunas redes (por ejemplo, un hotspot
 de iPhone) el tráfico NTP (UDP/123) queda bloqueado por el operador o por el
 propio hotspot, aunque la conexión MQTT sobre TCP/TLS funcione con
-normalidad. Este mecanismo permite que el dispositivo pida la hora al
-servidor por MQTT cuando SNTP falla, sin depender de un puerto adicional.
+normalidad. Además, el broker exige mTLS: sin una hora razonablemente
+correcta el propio ESP32 puede rechazar el certificado del broker por
+considerarlo "no vigente todavía" o "expirado". Necesitamos entonces una
+hora aproximada *antes* de poder conectar por MQTT/TLS.
 
 **No reemplaza a NTP.** Es un *fallback*: seguí intentando SNTP primero y
 usá este camino solo si no obtuviste hora por NTP en un tiempo razonable.
+
+## Orden de arranque del firmware
+
+1. **NTP (SNTP)** — primer intento, siempre. Es la fuente de hora estándar y
+   no depende de nuestra infraestructura.
+2. **HTTP** (`GET /api/public/time`, ver abajo) — si SNTP no sincronizó en un
+   timeout razonable y `CONFIG_MBEDTLS_HAVE_TIME_DATE` está habilitado en el
+   `sdkconfig` del proyecto (mbedTLS necesita saber la hora para validar
+   certificados; si esa opción está deshabilitada, mbedTLS no usa el reloj
+   del sistema para validar vigencia y este paso pierde sentido). Es HTTP
+   plano (sin TLS) a propósito: todavía no tenemos hora para validar el
+   certificado del broker MQTT, así que no podemos exigir TLS acá tampoco.
+3. **MQTT sobre TLS** — una vez que el reloj tiene una hora razonable (por
+   NTP o por HTTP), conectá al broker EMQX (mTLS, puerto 8883). El fallback
+   de hora por MQTT (`iot/devices/{serial}/time/request`, documentado más
+   abajo) sigue disponible después de este punto para resincronizar sin
+   reconectar SNTP.
+
+## Bootstrap de hora por HTTP
+
+```
+GET /api/public/time
+```
+
+Sin autenticación, sin body. Respuesta (`Cache-Control: no-store`):
+
+```json
+{ "epoch_ms": 1790262894432, "iso": "2026-09-24T15:14:54.432Z" }
+```
+
+- `epoch_ms` / `iso`: mismo formato que la respuesta MQTT de abajo (hora UTC
+  del servidor, tomada lo más tarde posible antes de responder).
+- Rate-limit liviano por IP (mismo mecanismo que `/api/public/contact`), para
+  evitar abuso sin bloquear reintentos normales de arranque.
+
+**Nota de despliegue en producción:** este endpoint debe seguir siendo
+alcanzable por **HTTP plano** (no forzado a HTTPS) en el reverse proxy de
+producción — es justamente el mecanismo que usa el firmware *antes* de tener
+una hora válida para negociar TLS. Si el proxy redirige todo `http://` a
+`https://` incondicionalmente, agregá una excepción para esta ruta.
 
 ## Cuándo llamarlo
 

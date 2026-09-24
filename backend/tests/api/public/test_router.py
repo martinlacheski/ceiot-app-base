@@ -504,3 +504,47 @@ def test_public_map_locations_sets_short_public_cache_header(client: TestClient)
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "public, max-age=60"
+
+
+def test_public_time_endpoint_returns_epoch_ms_and_iso(client: TestClient):
+    import time as time_module
+
+    before_ms = int(time_module.time() * 1000)
+    response = client.get("/api/public/time")
+    after_ms = int(time_module.time() * 1000)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body.keys()) == {"epoch_ms", "iso"}
+    assert isinstance(body["epoch_ms"], int)
+    assert before_ms - 2000 <= body["epoch_ms"] <= after_ms + 2000
+    assert body["iso"].endswith("Z")
+    assert "T" in body["iso"]
+
+
+def test_public_time_endpoint_sets_no_store_cache_header(client: TestClient):
+    response = client.get("/api/public/time")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_public_time_endpoint_is_not_authenticated(client: TestClient):
+    response = client.get("/api/public/time")
+
+    assert response.status_code == 200
+
+
+def test_public_time_endpoint_rate_limits_by_client_ip(client: TestClient, monkeypatch):
+    clock = FixedWindowClock()
+    limiter = public_router.PublicContactRateLimiter(limit=60, window_seconds=60, now=clock)
+    monkeypatch.setattr(public_router, "public_time_rate_limiter", limiter)
+
+    for _ in range(60):
+        response = client.get("/api/public/time")
+        assert response.status_code == 200
+        clock.advance(0.1)
+
+    limited_response = client.get("/api/public/time")
+
+    assert limited_response.status_code == 429

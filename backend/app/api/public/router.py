@@ -12,6 +12,7 @@ import time
 import uuid
 from collections import deque
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from threading import Lock
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -61,6 +62,11 @@ class PublicContactRateLimiter:
 
 contact_rate_limiter = PublicContactRateLimiter(limit=5, window_seconds=600)
 
+# Same shape of limiter as the contact endpoint, but generous: the firmware
+# hits this on every cold boot before it has a valid clock, and may retry.
+public_time_rate_limiter = PublicContactRateLimiter(limit=120, window_seconds=60)
+PUBLIC_TIME_RATE_LIMIT_MESSAGE = "Too many time requests. Please try again later."
+
 
 # ---------------------------------------------------------------------------
 # Response schema — minimal, no sensitive fields
@@ -92,6 +98,11 @@ class PublicContactRequest(BaseModel):
 
 class PublicContactResponse(BaseModel):
     message: str
+
+
+class PublicTimeResponse(BaseModel):
+    epoch_ms: int
+    iso: str
 
 
 class PublicMapLocationResponse(BaseModel):
@@ -261,6 +272,40 @@ async def get_public_map_locations(
 
     response.headers["Cache-Control"] = PUBLIC_MAP_LOCATIONS_CACHE_CONTROL
     return _build_public_map_locations(devices)
+
+
+@router.get(
+    "/time",
+    response_model=PublicTimeResponse,
+    tags=["public"],
+    summary="Public HTTP time bootstrap",
+    description=(
+        "Public endpoint — no authentication required. "
+        "Returns the server's current UTC time so firmware without a valid "
+        "clock yet (NTP blocked/unreachable) can bootstrap enough time to "
+        "validate the broker's TLS certificate before connecting over MQTT. "
+        "See backend/docs/mqtt-time-sync.md for the full NTP -> HTTP -> "
+        "MQTT/TLS bootstrap order."
+    ),
+)
+async def get_public_time(request: Request, response: Response) -> PublicTimeResponse:
+    client_ip = _get_public_request_ip(request)
+    if not public_time_rate_limiter.allow(client_ip):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=PUBLIC_TIME_RATE_LIMIT_MESSAGE,
+        )
+
+    response.headers["Cache-Control"] = "no-store"
+
+    # Timestamp taken as late as possible, right before returning, to keep
+    # rate-limiting/validation latency out of the value handed back — same
+    # approach as the MQTT time/request handler (see mqtt-time-sync.md).
+    now = datetime.now(timezone.utc)
+    return PublicTimeResponse(
+        epoch_ms=int(now.timestamp() * 1000),
+        iso=now.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    )
 
 
 @router.post(
