@@ -22,7 +22,12 @@ beforeEach(() => { vi.clearAllMocks(); auth.permissions = ["sensor_catalog:read"
 describe("DeviceSensorsSection", () => {
   it("shows model variables, range, key, installation and active status", async () => {
     renderSection();
-    expect(await screen.findByText("DHT22")).toBeInTheDocument();
+    expect((await screen.findAllByText("DHT22")).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual(["Sensor", "Variables", "Instalado", "Acciones"]);
+    const table = screen.getByRole("table");
+    expect(table.parentElement).toHaveClass("overflow-x-auto");
+    expect(screen.getByRole("button", { name: "Agregar sensor" }).compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Quitar sensor" })).toHaveAttribute("title", "Quitar sensor");
     expect(screen.getByText(/Temperatura.*°C.*-40,5.*80,5/)).toBeInTheDocument();
     expect(screen.getByText("Identificador en telemetría")).toBeInTheDocument();
     expect(screen.getByText("dht22")).toBeInTheDocument();
@@ -32,11 +37,11 @@ describe("DeviceSensorsSection", () => {
   it("adds with an omitted key and confirms deactivation", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByText("DHT22");
+    await screen.findAllByText("DHT22");
     await user.selectOptions(screen.getByLabelText("Modelo de sensor"), "model-1");
     await user.click(screen.getByRole("button", { name: "Agregar sensor" }));
     await waitFor(() => expect(mocks.addDeviceSensor).toHaveBeenCalledWith("device-1", { sensorId: "model-1", config: {} }));
-    await user.click(screen.getByRole("button", { name: "Quitar" }));
+    await user.click(screen.getByRole("button", { name: "Quitar sensor" }));
     expect(mocks.confirm).toHaveBeenCalledWith(expect.stringContaining("quitar"), expect.any(Function));
     await mocks.confirm.mock.calls[0][1]();
     await waitFor(() => expect(mocks.removeDeviceSensor).toHaveBeenCalledWith("device-1", "installed-1"));
@@ -44,7 +49,7 @@ describe("DeviceSensorsSection", () => {
   it("updates JSON configuration without editing or patching the key", async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByText("DHT22");
+    await screen.findAllByText("DHT22");
     await user.click(screen.getByRole("button", { name: "Editar" }));
     expect(screen.queryByLabelText(/clave/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Configuración JSON"), { target: { value: '{"offset":1}' } });
@@ -53,9 +58,9 @@ describe("DeviceSensorsSection", () => {
   });
   it("hides mutations without ownership", async () => {
     renderSection(false);
-    await screen.findByText("DHT22");
+    await screen.findAllByText("DHT22");
     expect(screen.queryByRole("button", { name: "Agregar sensor" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Quitar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quitar sensor" })).not.toBeInTheDocument();
   });
   it("does not request or render device sensors without read permission", () => {
     auth.permissions = [];
@@ -66,7 +71,14 @@ describe("DeviceSensorsSection", () => {
   it("renders read-only without write permission", async () => {
     auth.permissions = ["sensor_catalog:read", "device_sensor:read"];
     renderSection();
-    await screen.findByText("DHT22");
+    await screen.findAllByText("DHT22");
     expect(screen.queryByRole("button", { name: "Agregar sensor" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quitar sensor" })).not.toBeInTheDocument();
+  });
+  it("shows an empty table row when no sensors are installed", async () => {
+    mocks.getDeviceSensors.mockResolvedValue([]);
+    renderSection();
+    expect(await screen.findByText("Todavía no agregaste sensores.")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toContainElement(screen.getByText("Todavía no agregaste sensores."));
   });
 });

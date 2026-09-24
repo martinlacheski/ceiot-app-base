@@ -2,11 +2,14 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { Plus, Trash2 } from "lucide-react";
 
 import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import { CenteredHeader } from "@/components/custom/CenteredHeader";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { getSensorInstallationStatusLabel } from "@/utils/status-labels";
 
@@ -47,41 +50,41 @@ export function DeviceSensorsSection({ deviceId, canManage }: DeviceSensorsSecti
   };
 
   return <Card>
-    <CardHeader><CardTitle className="text-lg">Sensores del dispositivo</CardTitle></CardHeader>
-    <CardContent className="space-y-4">
-      {isLoading ? <p className="text-sm text-muted-foreground">Cargando sensores…</p> : isError ? <p role="alert" className="text-sm text-destructive">No se pudieron cargar los sensores.</p> : installed.length === 0 ? <p className="text-sm text-muted-foreground">No hay sensores asociados.</p> : <div className="space-y-3">
-        {installed.map((sensor) => {
-          const model = catalog.find((entry) => entry.id === sensor.sensorId);
-          return <div key={sensor.id} className="rounded-md border p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
+    <CardContent className="space-y-4 pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-lg font-semibold">Sensores del dispositivo</h3>
+        {canWrite && canReadCatalog && <Button type="button" className="min-h-11" onClick={addSensor} disabled={add.isPending || catalogLoading || catalogError}><Plus aria-hidden="true" />Agregar sensor</Button>}
+      </div>
+      {canWrite && canReadCatalog && <select aria-label="Modelo de sensor" className="min-h-11 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={catalogLoading || catalogError}>
+        <option value="">Seleccionar modelo</option>
+        {catalog.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+      </select>}
+      {isError ? <p role="alert" className="text-sm text-destructive">No se pudieron cargar los sensores.</p> : <Table className="min-w-[720px]">
+        <TableHeader><TableRow><TableHead>Sensor</TableHead><TableHead>Variables</TableHead><TableHead>Instalado</TableHead><TableHead><CenteredHeader>Acciones</CenteredHeader></TableHead></TableRow></TableHeader>
+        <TableBody>
+          {isLoading || installed.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground">{isLoading ? "Cargando sensores…" : "Todavía no agregaste sensores."}</TableCell></TableRow> : installed.map((sensor) => {
+            const model = catalog.find((entry) => entry.id === sensor.sensorId);
+            return <TableRow key={sensor.id}>
+              <TableCell className="min-w-48 whitespace-normal align-top">
                 <p className="font-medium">{model?.name ?? sensor.key}</p>
-                <p className="text-sm text-muted-foreground">{getSensorInstallationStatusLabel(sensor.isActive ? "active" : "inactive")}</p>
+                <p className="text-xs text-muted-foreground">{getSensorInstallationStatusLabel(sensor.isActive ? "active" : "inactive")}</p>
                 <p className="mt-1 text-xs font-medium text-muted-foreground">Identificador en telemetría</p>
-                <p className="font-mono text-sm">{sensor.key}</p>
+                <p className="font-mono text-sm text-muted-foreground">{sensor.key}</p>
                 <p className="text-xs text-muted-foreground">Es el nombre que usa el dispositivo en su telemetría.</p>
-                {sensor.installedAt && <p className="text-xs text-muted-foreground">Instalado: {format(new Date(sensor.installedAt), "PP p", { locale: es })}</p>}
-                {model?.variables.map((variable) => <p key={variable.code} className="text-xs text-muted-foreground">{variable.name} ({variable.unit}): {rangeFormatter.format(variable.min)}–{rangeFormatter.format(variable.max)} {variable.unit}</p>)}
-              </div>
-              {canWrite && sensor.isActive && <div className="flex gap-2">
+              </TableCell>
+              <TableCell className="min-w-64 whitespace-normal text-xs text-muted-foreground">{model?.variables.length ? model.variables.map((variable) => `${variable.name} (${variable.unit}): ${rangeFormatter.format(variable.min)}–${rangeFormatter.format(variable.max)} ${variable.unit}`).join(" · ") : "—"}</TableCell>
+              <TableCell className="whitespace-normal text-sm text-muted-foreground">{sensor.installedAt ? format(new Date(sensor.installedAt), "PP p", { locale: es }) : "—"}</TableCell>
+              <TableCell className="text-center">{canWrite && sensor.isActive && <div className="flex justify-center gap-2">
                 <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => { setEditId(sensor.id); setEditConfig(JSON.stringify(sensor.config, null, 2)); }}>Editar</Button>
-                <Button type="button" variant="destructive" size="sm" className="min-h-11" onClick={() => showConfirmDialog(`¿Deseas quitar el sensor ${sensor.key}? Sus lecturas anteriores se conservarán.`, async () => { await remove.mutateAsync(sensor.id); })}>Quitar</Button>
-              </div>}
-            </div>
-            {editId === sensor.id && <div className="mt-3 space-y-2 border-t pt-3">
-              <label className="block text-sm">Configuración JSON<textarea className="min-h-20 w-full rounded-md border bg-background p-2 font-mono text-sm" value={editConfig} onChange={(event) => setEditConfig(event.target.value)} /></label>
-              <div className="flex gap-2"><Button type="button" size="sm" className="min-h-11" onClick={saveEdit} disabled={update.isPending}>Guardar sensor</Button><Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => setEditId(null)}>Cancelar</Button></div>
-            </div>}
-          </div>;
-        })}
-      </div>}
-      {canWrite && canReadCatalog && <div className="space-y-2 border-t pt-4">
-        <label className="block text-sm font-medium" htmlFor="sensor-model">Modelo de sensor</label>
-        <select id="sensor-model" className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={catalogLoading || catalogError}>
-          <option value="">Seleccionar modelo</option>
-          {catalog.map((model) => <option key={model.id} value={model.id}>{model.name} · {model.variables.map((variable) => `${variable.name} (${variable.unit})`).join(", ")}</option>)}
-        </select>
-        <Button type="button" className="min-h-11" onClick={addSensor} disabled={add.isPending || catalogLoading || catalogError}>Agregar sensor</Button>
+                <Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Quitar sensor" title="Quitar sensor" onClick={() => showConfirmDialog(`¿Deseas quitar el sensor ${sensor.key}? Sus lecturas anteriores se conservarán.`, async () => { await remove.mutateAsync(sensor.id); })}><Trash2 aria-hidden="true" /></Button>
+              </div>}</TableCell>
+            </TableRow>;
+          })}
+        </TableBody>
+      </Table>}
+      {editId && <div className="space-y-2 border-t pt-3">
+        <label className="block text-sm">Configuración JSON<textarea className="min-h-20 w-full rounded-md border bg-background p-2 font-mono text-sm" value={editConfig} onChange={(event) => setEditConfig(event.target.value)} /></label>
+        <div className="flex gap-2"><Button type="button" size="sm" className="min-h-11" onClick={saveEdit} disabled={update.isPending}>Guardar sensor</Button><Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => setEditId(null)}>Cancelar</Button></div>
       </div>}
       {catalogError && canReadCatalog && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

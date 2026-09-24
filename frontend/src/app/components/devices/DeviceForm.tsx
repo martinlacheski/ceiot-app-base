@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
-import { RefreshCw, Unplug } from "lucide-react";
+import { Plus, RefreshCw, Trash2, Unplug } from "lucide-react";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { SmartDatePicker } from "@/components/custom/SmartDatePicker";
+import { CenteredHeader } from "@/components/custom/CenteredHeader";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SearchableSelect } from "@/components/custom/SearchableSelect";
 import { getDeviceStatusLabel } from "@/utils/status-labels";
 import {
@@ -364,24 +366,26 @@ export function DeviceForm({
 
         {!isEditing && canWriteSensors && canReadCatalog && (
           <section className="space-y-4" aria-label="Sensores">
-            <h3 className="text-sm font-medium">Sensores</h3>
-            {sensors.map((sensor, index) => {
-              const model = sensorCatalog.find((entry) => entry.id === sensor.sensorId);
-              return <div key={index} className="space-y-2">
-                <div className="flex flex-wrap items-end gap-3">
-                  <div className="min-w-0 flex-1">
-                    <label className="mb-1 block text-sm" htmlFor={`sensor-model-${index}`}>Modelo del sensor {index + 1}</label>
-                    <select id={`sensor-model-${index}`} className="min-h-11 w-full rounded-md border bg-background px-3 text-sm" value={sensor.sensorId} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { sensorId: event.target.value } : row))}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-medium">Sensores</h3>
+              <Button type="button" className="min-h-11" onClick={() => { setSensors((rows) => [...rows, { sensorId: "" }]); setSensorError(""); }}><Plus aria-hidden="true" />Agregar sensor</Button>
+            </div>
+            <Table className="min-w-[640px]">
+              <TableHeader><TableRow><TableHead>Sensor</TableHead><TableHead>Variables</TableHead><TableHead><CenteredHeader>Acciones</CenteredHeader></TableHead></TableRow></TableHeader>
+              <TableBody>
+                {sensors.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Todavía no agregaste sensores.</TableCell></TableRow> : sensors.map((sensor, index) => {
+                  const model = sensorCatalog.find((entry) => entry.id === sensor.sensorId);
+                  return <TableRow key={index}>
+                    <TableCell className="min-w-48"><select aria-label={`Modelo del sensor ${index + 1}`} className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={sensor.sensorId} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { sensorId: event.target.value } : row))}>
                       <option value="">Seleccionar modelo</option>
-                      {sensorCatalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} — {entry.variables.map((variable) => variable.name).join(", ")}</option>)}
-                    </select>
-                  </div>
-                  <Button type="button" variant="outline" className="min-h-11" onClick={() => setSensors((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label={`Quitar sensor ${index + 1}`}>Quitar</Button>
-                </div>
-                {model && <p className="text-xs text-muted-foreground">{model.variables.map((variable) => `${variable.name}: ${variable.min}–${variable.max} ${variable.unit}`).join(" · ")}</p>}
-              </div>;
-            })}
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setSensors((rows) => [...rows, { sensorId: "" }]); setSensorError(""); }}>Agregar sensor</Button>
+                      {sensorCatalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                    </select></TableCell>
+                    <TableCell className="min-w-64 whitespace-normal text-xs text-muted-foreground">{model ? model.variables.map((variable) => `${variable.name}: ${variable.min}–${variable.max} ${variable.unit}`).join(" · ") : "—"}</TableCell>
+                    <TableCell className="text-center"><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => setSensors((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label="Quitar sensor" title="Quitar sensor"><Trash2 aria-hidden="true" /></Button></TableCell>
+                  </TableRow>;
+                })}
+              </TableBody>
+            </Table>
             {catalogError && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
             {sensorError && <p role="alert" className="text-sm text-destructive">{sensorError}</p>}
           </section>
