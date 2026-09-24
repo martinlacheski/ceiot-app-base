@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+import app.core.model_registry  # noqa: F401  (resolves ORM relationships in this process)
 from app.core.config import settings
 from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
