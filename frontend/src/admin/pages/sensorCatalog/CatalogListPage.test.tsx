@@ -19,6 +19,9 @@ describe("catalog lists", () => {
     expect(screen.getByRole("link", { name: "Nuevo sensor" })).toHaveClass("h-11");
     await waitFor(() => expect(screen.getByRole("link", { name: "Editar sensor" })).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Desactivar sensor" })).toBeInTheDocument();
+    // Same icons as the Dispositivos table: Edit (square-pen) and Trash2.
+    expect(screen.getByRole("link", { name: "Editar sensor" }).querySelector(".lucide-square-pen, .lucide-pen-box")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Desactivar sensor" }).querySelector(".lucide-trash-2, .lucide-trash2")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
     expect(screen.getByLabelText("Fabricante")).toBeInTheDocument();
     expect(screen.getByLabelText("Mide la variable")).toBeInTheDocument();

@@ -23,6 +23,8 @@ describe("catalog forms", () => {
     renderForm("sensors");
     expect(screen.getByRole("heading", { name: "Nuevo sensor" })).toBeInTheDocument();
     expect(screen.getByText("No hay variables agregadas.")).toBeInTheDocument();
+    // Primary (black) button, like "Agregar sensor" in the device form.
+    expect(screen.getByRole("button", { name: "Agregar variable" })).toHaveClass("bg-primary");
     fireEvent.click(screen.getByRole("button", { name: "Agregar variable" }));
     expect(screen.getByRole("button", { name: "Quitar variable" })).toBeInTheDocument();
     expect(screen.getByRole("spinbutton", { name: "Mín 1" })).toHaveValue(null);
