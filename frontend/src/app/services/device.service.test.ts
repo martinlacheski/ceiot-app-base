@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appApi } from "@/api/appApi";
+import { datetimeCell, type ExportCell } from "@/lib/export.utils";
+import { formatDateTime } from "@/utils/date.utils";
 
 import {
   deviceService,
@@ -136,7 +138,7 @@ describe("deviceService.getOperations", () => {
       page: 2,
       perPage: 20,
       search: "23/09/2026",
-      startDate: new Date("2026-09-01T00:00:00.000Z"),
+      startDate: new Date("2026-09-01T00:00:00Z"),
       endDate: new Date("2026-09-23T23:59:59.000Z"),
       sortBy: "operation_type",
       sortOrder: "asc",
@@ -200,7 +202,11 @@ describe("deviceService.getOperations", () => {
         ]),
       }),
     );
-    const exportedRows = downloadReportMock.mock.calls[0][1].data as string[][];
+    const exportedRows = downloadReportMock.mock.calls[0][1].data as ExportCell[][];
+    expect(exportedRows.map((row) => row[0])).toEqual([
+      datetimeCell("2026-09-01T00:00:00Z", formatDateTime("2026-09-01T00:00:00Z")),
+      datetimeCell("2026-09-02T00:00:00Z", formatDateTime("2026-09-02T00:00:00Z")),
+    ]);
     expect(exportedRows.map((row) => row.slice(-2))).toEqual([
       ["Datos de sensores", "Exitoso"],
       ["Dispositivo activo", "Fallido"],

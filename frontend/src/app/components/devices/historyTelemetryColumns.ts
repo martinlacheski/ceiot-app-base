@@ -1,5 +1,6 @@
 import type { HistoryTelemetryItem, HistoryTelemetrySensor } from "@/api/deviceHistory.api";
 import type { HistoryColumn } from "./HistoryResultsTable";
+import { datetimeCell, decimalCell } from "@/lib/export.cells";
 import { formatDateTime } from "@/utils/date.utils";
 
 export function formatTelemetryValue(value: number | null | undefined, unit: string): string {
@@ -7,6 +8,10 @@ export function formatTelemetryValue(value: number | null | undefined, unit: str
   const number = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 3 }).format(value);
   return unit ? `${number} ${unit}` : number;
 }
+
+/** Decimals Excel shows for a variable; the stored value keeps its full precision. */
+const TELEMETRY_DECIMALS: Record<string, number> = { temperature: 1, relative_humidity: 1 };
+const telemetryDecimals = (code: string) => TELEMETRY_DECIMALS[code] ?? 2;
 
 export function mergeTelemetrySensors(...pages: HistoryTelemetrySensor[][]): HistoryTelemetrySensor[] {
   const byKey = new Map<string, HistoryTelemetrySensor>();
@@ -22,11 +27,17 @@ export function mergeTelemetrySensors(...pages: HistoryTelemetrySensor[][]): His
 
 export function buildTelemetryColumns(sensors: HistoryTelemetrySensor[]): HistoryColumn<HistoryTelemetryItem>[] {
   return [
-    { id: "time", title: "Fecha/Hora", value: (item) => formatDateTime(item.time), sortable: true },
+    { id: "time", title: "Fecha/Hora", value: (item) => formatDateTime(item.time), sortable: true,
+      exportValue: (item) => datetimeCell(item.time, formatDateTime(item.time)) },
     ...sensors.flatMap((sensor) => sensor.variables.map((variable) => ({
       id: `${sensor.key}:${variable.code}`,
       title: `${sensor.sensorName} · ${variable.name}${variable.unit ? ` (${variable.unit})` : ""}`,
       value: (item: HistoryTelemetryItem) => formatTelemetryValue(item.values[sensor.key]?.[variable.code], variable.unit),
+      exportValue: (item: HistoryTelemetryItem) => {
+        const reading = item.values[sensor.key]?.[variable.code];
+        return decimalCell(Number.isFinite(reading) ? reading : null,
+          formatTelemetryValue(reading, variable.unit), telemetryDecimals(variable.code));
+      },
     }))),
   ];
 }

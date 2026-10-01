@@ -1,3 +1,4 @@
+import { datetimeCell, type ExportCell } from "@/lib/export.cells";
 import type { User } from "@/interfaces/user.interface";
 import { formatDateTime, formatRelativeTime } from "@/utils/date.utils";
 import {
@@ -75,8 +76,8 @@ export function UserLastAccessLines({ user }: { user: UserActivity }) {
   );
 }
 
-/** Etiqueta de última actividad o "Nunca" lista para exportar. */
-export function getUserLastAccessExportValue(user: UserActivity): string {
+/** Última actividad como celda de fecha y hora tipada, o "Nunca" como texto plano. */
+export function getUserLastAccessExportValue(user: UserActivity): ExportCell {
   const lastAccess = getLastAccess(user);
-  return lastAccess ? formatDateTime(lastAccess) : "Nunca";
+  return lastAccess ? datetimeCell(lastAccess, formatDateTime(lastAccess)) : "Nunca";
 }

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { exportCellOf } from "./historyExport";
 import { HistoryResultsTable, type HistoryColumn } from "./HistoryResultsTable";
 import { useResettingPage } from "./historyTabState";
 import { isHistoryForbidden, isHistoryNotFound } from "./historyErrors";
@@ -50,7 +51,7 @@ export function HistoryTabBase<T extends { time: string }>({ kind, serial, envir
   });
   const exportRows = async (format: "excel" | "pdf") => {
     const rows = await fetchAllPages((page, perPage) => fetchRows({ search, ...sort, dateFrom, dateTo, page, perPage, filters }));
-    await downloadReport(format, { title: kind === "telemetry" ? `Telemetría: ${serial}` : `Operaciones: ${serial}`, filename: `${kind}-${serial}`, generatedBy: getExportGeneratedBy(user), columns: columns.map((column) => column.title), data: rows.map((row) => columns.map((column) => String(column.value(row)))) });
+    await downloadReport(format, { title: kind === "telemetry" ? `Telemetría: ${serial}` : `Operaciones: ${serial}`, filename: `${kind}-${serial}`, generatedBy: getExportGeneratedBy(user), columns: columns.map((column) => column.title), data: rows.map((row) => columns.map((column) => exportCellOf(column, row))) });
   };
   return <div className="space-y-3">
     <ListToolbarLayout search={<ListSearchInput value={searchBox.value} onChange={searchBox.setValue} onClear={searchBox.clear} />} primaryActions={<><ListFiltersTrigger open={filtersPanel.open} onOpenChange={filtersPanel.setOpen} hasActiveFilters={Object.keys(filters).length > 0} />{dateSelector}</>} />

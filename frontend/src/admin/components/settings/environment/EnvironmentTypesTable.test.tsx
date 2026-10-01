@@ -17,7 +17,8 @@ vi.mock("@/auth/store/auth.store", () => ({
 
 vi.mock("@/store/confirm.store", () => ({ showConfirmDialog: vi.fn() }));
 
-vi.mock("@/lib/export.utils", () => ({
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
   exportToExcel: vi.fn(),
   exportToPdf: vi.fn(),
 }));

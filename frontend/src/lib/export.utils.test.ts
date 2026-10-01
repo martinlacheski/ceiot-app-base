@@ -23,7 +23,7 @@ vi.mock("./report-branding", async (importOriginal) => ({
   loadReportBranding: vi.fn(),
 }));
 
-import { exportToPdf } from "./export.utils";
+import { datetimeCell, decimalCell, exportToPdf } from "./export.utils";
 import { loadReportBranding, REPORT_BRAND_TAGLINE } from "./report-branding";
 
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==";
@@ -48,6 +48,17 @@ describe("branded PDF export (real jsPDF and AutoTable)", () => {
   it("enables compression for full-resolution branding", async () => {
     await exportToPdf(options);
     expect(JsPDF).toHaveBeenLastCalledWith({ orientation: "portrait", compress: true });
+  });
+
+  it("renders typed cells with their display text, unchanged from plain strings", async () => {
+    await exportToPdf({
+      ...options,
+      columns: ["Fecha", "Valor"],
+      data: [[datetimeCell("2026-09-30T14:32:00Z", "30/09/2026 14:32"), decimalCell(27.5, "27,50 °C")]],
+    });
+    const table = (capture.doc as jsPDF & { lastAutoTable: Table }).lastAutoTable;
+    expect(table.body[0].cells[0].text).toEqual(["30/09/2026 14:32"]);
+    expect(table.body[0].cells[1].text).toEqual(["27,50 °C"]);
   });
 
   it.each(["portrait", "landscape"] as const)("repeats both images and headings inside every %s page", async (orientation) => {

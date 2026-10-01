@@ -3,9 +3,15 @@ import { flexRender, getCoreRowModel, useReactTable, type ColumnDef, type Pagina
 import { DataTableColumnHeader } from "@/components/custom/DataTableColumnHeader";
 import { DataTablePagination } from "@/components/custom/DataTablePagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import type { ExportCell } from "@/lib/export.cells";
 import { applySortingUpdate, toSortingState, type ServerSort } from "@/lib/serverSorting";
 
-export interface HistoryColumn<T> { id: string; title: string; value: (item: T) => React.ReactNode; sortable?: boolean }
+export interface HistoryColumn<T> {
+  id: string; title: string; value: (item: T) => React.ReactNode; sortable?: boolean;
+  /** Typed cell (number/date) for the Excel export; the PDF keeps showing its text. Defaults to `value` as text. */
+  exportValue?: (item: T) => ExportCell;
+}
+
 
 export function HistoryResultsTable<T extends object>({ items, columns, sort, onSort, pagination, onPagination, total, mobile, entityName = "registros" }: {
   items: T[]; columns: HistoryColumn<T>[]; sort: ServerSort<string>; onSort: (sort: ServerSort<string>) => void;

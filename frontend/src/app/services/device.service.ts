@@ -20,6 +20,7 @@ import {
   formatDeviceLocation,
   getDeviceLocationSourceLabel,
 } from "../components/devices/deviceMap";
+import { datetimeCell } from "@/lib/export.cells";
 import { formatDateTime } from "@/utils/date.utils";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 import { downloadReport, toFilenamePart } from "@/lib/downloadReport";
@@ -441,7 +442,7 @@ export const deviceService = {
       generatedBy: options?.generatedBy || "Usuario",
       columns: ["Fecha/Hora", "ID", "Tipo", "Estado"],
       data: items.map((operation) => [
-        formatDateTime(operation.time),
+        datetimeCell(operation.time, formatDateTime(operation.time)),
         operation.id,
         getOperationTypeLabel(operation.operation_type),
         getOperationStatusLabel(operation.status),

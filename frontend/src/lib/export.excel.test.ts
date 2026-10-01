@@ -139,3 +139,67 @@ describe("branded Excel export (real ExcelJS round trip)", () => {
     expect((await readDownload()).getWorksheet("Reporte")!.getImages()).toHaveLength(2);
   });
 });
+
+describe("typed export cells (Excel numeric/date cells)", () => {
+  it("writes integer, decimal, percent and date/datetime as real typed cells with the right format", async () => {
+    const { buildExcelWorkbook, integerCell, decimalCell, percentCell, dateCell, datetimeCell } =
+      await import("./export.utils");
+    const columns = ["Cantidad", "Temperatura", "Humedad", "Fecha", "Fecha/Hora", "Texto"];
+    const data = [[
+      integerCell(7, "7"),
+      decimalCell(12.345, "12,345", 3),
+      percentCell(0.21, "21,00"),
+      dateCell("2026-09-30", "30/09/2026"),
+      datetimeCell("2026-09-30T14:32:00-03:00", "30/09/2026 14:32"),
+      "texto libre",
+    ]];
+    const workbook = await buildExcelWorkbook({ title: "t", generatedBy: "g", columns, data });
+    const row = workbook.getWorksheet("Reporte")!.getRow(7);
+
+    expect(row.getCell(1).value).toBe(7);
+    expect(row.getCell(1).numFmt).toBe("#,##0");
+    expect(row.getCell(2).type).toBe(ExcelJS.ValueType.Number);
+    expect(row.getCell(2).value).toBe(12.345);
+    expect(row.getCell(2).numFmt).toBe("0.000");
+    expect(row.getCell(3).value).toBe(0.21);
+    expect(row.getCell(3).numFmt).toBe("0.00%");
+    expect(row.getCell(4).type).toBe(ExcelJS.ValueType.Date);
+    expect((row.getCell(4).value as Date).toISOString()).toBe("2026-09-30T00:00:00.000Z");
+    expect(row.getCell(4).numFmt).toBe("dd/mm/yyyy");
+    expect(row.getCell(5).type).toBe(ExcelJS.ValueType.Date);
+    // The wall clock the app shows is what Excel must display, so it is stored as if it were UTC.
+    const instant = new Date("2026-09-30T14:32:00-03:00");
+    expect((row.getCell(5).value as Date).toISOString()).toBe(
+      new Date(Date.UTC(instant.getFullYear(), instant.getMonth(), instant.getDate(),
+        instant.getHours(), instant.getMinutes())).toISOString(),
+    );
+    expect(row.getCell(5).numFmt).toBe("dd/mm/yyyy hh:mm");
+    expect(row.getCell(6).type).toBe(ExcelJS.ValueType.String);
+    expect(row.getCell(6).value).toBe("texto libre");
+  });
+
+  it("writes a null-valued or unparseable typed cell as empty, independent of its PDF text", async () => {
+    const { buildExcelWorkbook, decimalCell, datetimeCell } = await import("./export.utils");
+    const workbook = await buildExcelWorkbook({
+      title: "t", generatedBy: "g", columns: ["Valor", "Fecha"],
+      data: [[decimalCell(null, "-"), datetimeCell("not a date", "?")]],
+    });
+    const row = workbook.getWorksheet("Reporte")!.getRow(7);
+    expect(row.getCell(1).value).toBeNull();
+    expect(row.getCell(2).value).toBeNull();
+  });
+
+  it("keeps the PDF/autofit text of a typed cell via cellText and styles numeric totals rows", async () => {
+    const { buildExcelWorkbook, cellText, decimalCell } = await import("./export.utils");
+    expect(cellText("plain")).toBe("plain");
+    expect(cellText(decimalCell(27.5, "27,50 °C"))).toBe("27,50 °C");
+    const workbook = await buildExcelWorkbook({
+      title: "t", generatedBy: "g", columns: ["Nombre", "Valor"],
+      data: [["Equipo 1", decimalCell(100, "100,00")], ["Totales", decimalCell(100, "100,00")]],
+    });
+    const totals = workbook.getWorksheet("Reporte")!.getRow(8).getCell(2);
+    expect(totals.value).toBe(100);
+    expect(totals.numFmt).toBe("0.00");
+    expect(totals.font).toMatchObject({ bold: true });
+  });
+});

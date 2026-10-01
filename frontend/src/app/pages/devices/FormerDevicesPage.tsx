@@ -1,3 +1,4 @@
+import { datetimeCell, integerCell } from "@/lib/export.cells";
 import { useEffect, useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
@@ -5,6 +6,7 @@ import { deviceHistoryApi, type HistoryDevice } from "@/api/deviceHistory.api";
 import { environmentService } from "@/app/services/environment.service";
 import { getUsersAction } from "@/admin/actions/user.actions";
 import { PageHeader } from "@/app/components/PageHeader";
+import { exportCellOf } from "@/app/components/devices/historyExport";
 import { HistoryResultsTable, type HistoryColumn } from "@/app/components/devices/HistoryResultsTable";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { ListSearchInput } from "@/components/custom/ListSearchInput";
@@ -60,16 +62,16 @@ export default function FormerDevicesPage() {
     { id: "device_name", title: "Dispositivo", value: (item) => item.deviceName || "-", sortable: true },
     { id: "environment_name", title: "Establecimiento", value: (item) => item.environmentName || "-", sortable: true },
     ...(isAdmin ? [{ id: "owner_name", title: "Propietario", value: (item: HistoryDevice) => item.ownerName || "-", sortable: true }] : []),
-    { id: "first_seen", title: "Primera actividad", value: (item) => formatDateTime(item.firstSeen), sortable: true },
-    { id: "last_seen", title: "Última actividad", value: (item) => formatDateTime(item.lastSeen), sortable: true },
-    { id: "readings_count", title: "Lecturas", value: (item) => item.readingsCount, sortable: true },
-    { id: "operations_count", title: "Operaciones", value: (item) => item.operationsCount, sortable: true },
+    { id: "first_seen", title: "Primera actividad", value: (item) => formatDateTime(item.firstSeen), sortable: true, exportValue: (item) => datetimeCell(item.firstSeen, formatDateTime(item.firstSeen)) },
+    { id: "last_seen", title: "Última actividad", value: (item) => formatDateTime(item.lastSeen), sortable: true, exportValue: (item) => datetimeCell(item.lastSeen, formatDateTime(item.lastSeen)) },
+    { id: "readings_count", title: "Lecturas", value: (item) => item.readingsCount, sortable: true, exportValue: (item) => integerCell(item.readingsCount, String(item.readingsCount)) },
+    { id: "operations_count", title: "Operaciones", value: (item) => item.operationsCount, sortable: true, exportValue: (item) => integerCell(item.operationsCount, String(item.operationsCount)) },
     { id: "open", title: "Historial", value: (item) => <button className="text-primary underline" onClick={() => open(item)}>Ver historial</button> },
   ];
   const exportRows = async (format: "excel" | "pdf") => {
     const all = await fetchAllPages((nextPage, nextSize) => deviceHistoryApi.devices({ ...params, page: nextPage, perPage: nextSize }));
     const reportColumns = columns.filter((column) => column.id !== "open");
-    await downloadReport(format, { title: "Historial de dispositivos", filename: "historial-dispositivos", generatedBy: getExportGeneratedBy(user), columns: reportColumns.map((column) => column.title), data: all.map((item) => reportColumns.map((column) => String(column.value(item)))) });
+    await downloadReport(format, { title: "Historial de dispositivos", filename: "historial-dispositivos", generatedBy: getExportGeneratedBy(user), columns: reportColumns.map((column) => column.title), data: all.map((item) => reportColumns.map((column) => exportCellOf(column, item))) });
   };
   return <PageHeader title="Historial de dispositivos" subtitle="Actividad registrada por establecimiento">
     <ListToolbarLayout search={<ListSearchInput value={searchBox.value} onChange={searchBox.setValue} onClear={searchBox.clear} />} primaryActions={<ListFiltersTrigger open={filtersPanel.open} onOpenChange={filtersPanel.setOpen} hasActiveFilters={!!(ownerId || environmentId || lastSeenFrom || lastSeenTo)} />} />

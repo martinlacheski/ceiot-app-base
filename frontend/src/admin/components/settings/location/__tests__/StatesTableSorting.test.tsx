@@ -43,7 +43,8 @@ vi.mock("@/admin/actions/location.actions", () => ({
 vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: vi.fn(() => ({ user: { username: "admin" } })),
 }));
-vi.mock("@/lib/export.utils", () => ({
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
   exportToExcel: vi.fn(),
   exportToPdf: vi.fn(),
 }));

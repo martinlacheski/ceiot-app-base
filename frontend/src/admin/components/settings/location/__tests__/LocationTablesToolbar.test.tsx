@@ -99,7 +99,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/lib/export.utils", () => ({
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
   exportToExcel: vi.fn(),
   exportToPdf: vi.fn(),
 }));

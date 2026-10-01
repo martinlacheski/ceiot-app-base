@@ -1,3 +1,5 @@
+import type { ExportCell } from "@/lib/export.cells";
+
 export type ReportFormat = "excel" | "pdf";
 
 export interface ReportOptions {
@@ -5,7 +7,7 @@ export interface ReportOptions {
   filename: string;
   generatedBy: string;
   columns: string[];
-  data: string[][];
+  data: ExportCell[][];
 }
 
 const WIDE_REPORT_COLUMNS = 6;

@@ -1,14 +1,18 @@
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
+import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { cellText, type ExportCell } from "./export.cells";
 import { loadReportBranding, REPORT_BRAND_TAGLINE } from "./report-branding";
+
+export * from "./export.cells";
 
 interface ExportPdfOptions {
   title: string;
   filename: string;
   generatedBy: string;
   columns: string[];
-  data: string[][];
+  data: ExportCell[][];
   orientation?: "portrait" | "landscape";
   fontSize?: number;
   margin?: number;
@@ -22,7 +26,70 @@ interface ExportPdfOptions {
   >;
 }
 
+/**
+ * Parses the flexible date shapes export cells accept (a `Date`, a bare
+ * `YYYY-MM-DD` date, or a timestamp with or without an explicit time zone) into a
+ * real `Date`. A naive timestamp (no `Z`/offset) is treated as UTC, matching the
+ * convention `formatDateTime` uses to show it in the browser's local time.
+ */
+function parseExportDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return isValid(value) ? value : null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [year, month, day] = trimmed.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  let iso = trimmed.replace(" ", "T");
+  if (!/[Zz]$/.test(iso) && !/[+-]\d\d:?\d\d$/.test(iso)) iso += "Z";
+  const parsed = new Date(iso);
+  return isValid(parsed) ? parsed : null;
+}
+
+/**
+ * Re-encodes a `Date`'s local wall-clock components (the same ones
+ * `date-fns`'s `format` would print) as a UTC instant. ExcelJS turns a `Date`
+ * into a serial number from its UTC fields, so without this, Excel would show
+ * the UTC time of the instant instead of the local wall clock the app shows.
+ */
+function toExcelWallClock(date: Date, includeTime: boolean): Date {
+  return includeTime
+    ? new Date(Date.UTC(
+        date.getFullYear(), date.getMonth(), date.getDate(),
+        date.getHours(), date.getMinutes(), date.getSeconds(),
+      ))
+    : new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+}
+
+function decimalNumFmt(decimals: number): string {
+  return decimals > 0 ? `0.${"0".repeat(decimals)}` : "0";
+}
+
+/** What Excel should store for one cell: a plain value, or a number/date with its format. */
+function toExcelValue(cell: ExportCell): { value: ExcelJS.CellValue; numFmt?: string } {
+  if (typeof cell === "string") return { value: cell };
+  if (cell.value == null) return { value: null };
+  switch (cell.kind) {
+    case "integer":
+      return { value: Math.round(cell.value), numFmt: "#,##0" };
+    case "decimal":
+      return { value: cell.value, numFmt: decimalNumFmt(cell.decimals) };
+    case "percent":
+      return { value: cell.value, numFmt: "0.00%" };
+    case "date": {
+      const parsed = parseExportDate(cell.value);
+      return parsed ? { value: toExcelWallClock(parsed, false), numFmt: "dd/mm/yyyy" } : { value: null };
+    }
+    case "datetime": {
+      const parsed = parseExportDate(cell.value);
+      return parsed ? { value: toExcelWallClock(parsed, true), numFmt: "dd/mm/yyyy hh:mm" } : { value: null };
+    }
+  }
+}
+
 const TOTALS_LABEL = "Totales";
+
 function fitPdfColumnStyles(
   styles: ExportPdfOptions["columnStyles"],
   minimumWidths: number[],
@@ -141,7 +208,7 @@ export const exportToPdf = async ({
   autoTable(doc, {
     startY: tableTop,
     head: [reportColumns],
-    body: data,
+    body: data.map((row) => row.map(cellText)),
     styles: {
       fontSize,
       cellPadding: 1.4,
@@ -197,15 +264,16 @@ export const exportToPdf = async ({
   doc.save(`${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.pdf`);
 };
 
-import ExcelJS from "exceljs";
-
-export const exportToExcel = async ({
+/**
+ * Builds the branded report workbook without touching the DOM or triggering a
+ * download: used by `exportToExcel` and by tests that read the generated cells back.
+ */
+export async function buildExcelWorkbook({
   title,
-  filename,
   generatedBy,
   columns,
   data,
-}: ExportPdfOptions) => {
+}: Omit<ExportPdfOptions, "filename">): Promise<ExcelJS.Workbook> {
   const branding = await loadReportBranding();
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Reporte");
@@ -246,8 +314,12 @@ export const exportToExcel = async ({
 
   // Add Data
   data.forEach((row) => {
-    const worksheetRow = worksheet.addRow(row);
+    const cells = row.map(toExcelValue);
+    const worksheetRow = worksheet.addRow(cells.map((cell) => cell.value));
     worksheetRow.font = { name: "Arial", size: 11 };
+    cells.forEach((cell, index) => {
+      if (cell.numFmt) worksheetRow.getCell(index + 1).numFmt = cell.numFmt;
+    });
     if (!isTotalsRow(row)) return;
 
     worksheetRow.eachCell((cell) => {
@@ -267,11 +339,13 @@ export const exportToExcel = async ({
   });
 
   // Auto-fit columns
-  worksheet.columns.forEach((column) => {
+  // Same display text the PDF/screen show; the header row is not part of the fit.
+  const displayRows = data.map((row) => row.map(cellText));
+  worksheet.columns.forEach((column, index) => {
     let maxLength = 0;
-    column.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
-      if (rowNumber < headerRow.number) return;
-      const columnLength = cell.value ? Math.max(...cell.value.toString().split("\n").map((line) => line.length)) : 10;
+    displayRows.forEach((row) => {
+      const value = row[index];
+      const columnLength = value ? Math.max(...value.split("\n").map((line) => line.length)) : 10;
       if (columnLength > maxLength) {
         maxLength = columnLength;
       }
@@ -321,6 +395,12 @@ export const exportToExcel = async ({
     horizontalCentered: true,
   };
 
+  return workbook;
+}
+
+export const exportToExcel = async (options: ExportPdfOptions) => {
+  const workbook = await buildExcelWorkbook(options);
+
   // Write Buffer
   const buffer = await workbook.xlsx.writeBuffer();
 
@@ -330,7 +410,7 @@ export const exportToExcel = async ({
   });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
-  link.download = `${filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`;
+  link.download = `${options.filename}_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`;
   link.click();
   URL.revokeObjectURL(link.href);
 };

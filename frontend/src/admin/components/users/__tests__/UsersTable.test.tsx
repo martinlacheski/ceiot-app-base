@@ -5,7 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { showConfirmDialog } from "@/store/confirm.store";
 import { getUsersAction } from "@/admin/actions/user.actions";
 import { useDeleteUser, useUpdateUser, useUsers } from "@/admin/hooks/useUsers";
-import { exportToPdf } from "@/lib/export.utils";
+import { datetimeCell, exportToPdf } from "@/lib/export.utils";
 import { formatDateTime } from "@/utils/date.utils";
 import { UsersTable } from "../UsersTable";
 
@@ -90,7 +90,8 @@ vi.mock("sonner", () => ({
 }));
 
 // Mock export utils
-vi.mock("@/lib/export.utils", () => ({
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
   exportToPdf: vi.fn(),
 }));
 
@@ -693,11 +694,11 @@ describe("UsersTable", () => {
       await waitFor(() => expect(exportToPdf).toHaveBeenCalled());
       const options = vi.mocked(exportToPdf).mock.calls[0][0];
       expect(options.columns.at(-1)).toBe("Último acceso");
-      expect(options.data[0].at(-1)).toBe(
-        formatDateTime("2026-09-17T12:00:00Z"),
+      expect(options.data[0].at(-1)).toEqual(
+        datetimeCell("2026-09-17T12:00:00Z", formatDateTime("2026-09-17T12:00:00Z")),
       );
-      expect(options.data[1].at(-1)).toBe(
-        formatDateTime("2026-09-20T11:55:00Z"),
+      expect(options.data[1].at(-1)).toEqual(
+        datetimeCell("2026-09-20T11:55:00Z", formatDateTime("2026-09-20T11:55:00Z")),
       );
       expect(options.data[2].at(-1)).toBe("Nunca");
     });

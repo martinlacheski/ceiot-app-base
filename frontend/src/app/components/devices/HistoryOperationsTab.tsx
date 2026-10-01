@@ -1,6 +1,7 @@
 import { deviceHistoryApi, type HistoryOperation } from "@/api/deviceHistory.api";
 import { ListSelectFilter } from "@/components/custom/ListFilterFields";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { datetimeCell } from "@/lib/export.cells";
 import { formatDateTime } from "@/utils/date.utils";
 import { OPERATION_STATUS_LABELS, OPERATION_TYPE_OPTIONS, getOperationStatusLabel, getOperationTypeLabel } from "@/utils/status-labels";
 import { HistoryTabBase } from "./HistoryTabBase";
@@ -13,7 +14,7 @@ export function HistoryOperationsTab({ serial, environmentId, dateFrom, dateTo, 
       <ListSelectFilter label="Estado" value={filters.status} onChange={(value) => setFilter("status", value)} options={Object.entries(OPERATION_STATUS_LABELS).map(([value, label]) => ({ value, label }))} />
     </>}
     columns={[
-      { id: "time", title: "Fecha/Hora", value: (item) => formatDateTime(item.time), sortable: true },
+      { id: "time", title: "Fecha/Hora", value: (item) => formatDateTime(item.time), sortable: true, exportValue: (item) => datetimeCell(item.time, formatDateTime(item.time)) },
       { id: "operation_type", title: "Tipo", value: (item) => getOperationTypeLabel(item.operationType), sortable: true },
       { id: "status", title: "Estado", value: (item) => getOperationStatusLabel(item.status), sortable: true },
     ]}

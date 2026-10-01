@@ -18,6 +18,7 @@ import { useAuthStore } from "@/auth/store/auth.store";
 import { HistoryResultsTable } from "./HistoryResultsTable";
 import { useResettingPage, parseHistoryNumber } from "./historyTabState";
 import { isHistoryForbidden, isHistoryNotFound } from "./historyErrors";
+import { exportCellOf } from "./historyExport";
 import { buildTelemetryColumns, mergeTelemetrySensors } from "./historyTelemetryColumns";
 
 export function HistoryTelemetryTab({ serial, environmentId, dateFrom, dateTo, dateSelector }: { serial: string; environmentId: string; dateFrom?: string; dateTo?: string; dateSelector: ReactNode }) {
@@ -75,7 +76,7 @@ export function HistoryTelemetryTab({ serial, environmentId, dateFrom, dateTo, d
       title: `Telemetría: ${serial}`, filename: `telemetry-${serial}`,
       generatedBy: getExportGeneratedBy(user),
       columns: exportColumns.map((column) => column.title),
-      data: rows.map((row) => exportColumns.map((column) => String(column.value(row)))),
+      data: rows.map((row) => exportColumns.map((column) => exportCellOf(column, row))),
     });
   };
   const mobile = (rows: HistoryTelemetryItem[]) => <div className="grid gap-3 md:hidden" aria-label="Lecturas de telemetría en tarjetas">

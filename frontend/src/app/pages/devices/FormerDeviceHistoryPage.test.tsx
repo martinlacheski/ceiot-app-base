@@ -117,6 +117,9 @@ describe("device history page", () => {
     const tab = screen.getByRole("tabpanel", { name: "Telemetría" });
     await waitFor(() => expect(within(tab).getByRole("button", { name: "PDF" })).toBeEnabled());
     await user.click(within(tab).getByRole("button", { name: "PDF" }));
-    await waitFor(() => expect(downloadReport).toHaveBeenCalledWith("pdf", expect.objectContaining({ columns: ["Fecha/Hora", "DHT22 · Temperatura (°C)", "BMP280 · Presión (hPa)"], data: expect.arrayContaining([expect.arrayContaining(["23,4 °C", "-"]), expect.arrayContaining(["-", "1.012,6 hPa"])]) })));
+    await waitFor(() => expect(downloadReport).toHaveBeenCalledWith("pdf", expect.objectContaining({ columns: ["Fecha/Hora", "DHT22 · Temperatura (°C)", "BMP280 · Presión (hPa)"], data: [
+      [expect.objectContaining({ kind: "datetime" }), { kind: "decimal", value: 23.4, decimals: 1, text: "23,4 °C" }, { kind: "decimal", value: null, decimals: 2, text: "-" }],
+      [expect.objectContaining({ kind: "datetime" }), { kind: "decimal", value: null, decimals: 1, text: "-" }, { kind: "decimal", value: 1012.6, decimals: 2, text: "1.012,6 hPa" }],
+    ] })));
   });
 });

@@ -7,7 +7,11 @@ const { exportToExcel, exportToPdf } = vi.hoisted(() => ({
   exportToPdf: vi.fn(),
 }));
 
-vi.mock("@/lib/export.utils", () => ({ exportToExcel, exportToPdf }));
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
+  exportToExcel,
+  exportToPdf,
+}));
 
 const base = {
   title: "Historial",

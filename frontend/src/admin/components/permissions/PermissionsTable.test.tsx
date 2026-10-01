@@ -33,7 +33,11 @@ const { exportToExcel, exportToPdf } = vi.hoisted(() => ({
   exportToPdf: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@/lib/export.utils", () => ({ exportToExcel, exportToPdf }));
+vi.mock("@/lib/export.utils", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/export.utils")>()),
+  exportToExcel,
+  exportToPdf,
+}));
 
 function LocationSearch() {
   return <output data-testid="location-search">{useLocation().search}</output>;
