@@ -1,5 +1,6 @@
 services:
   landing:
+    image: ceiot/landing:dev
     env_file:
       - .env
     build:

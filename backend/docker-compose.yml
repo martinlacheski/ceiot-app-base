@@ -1,5 +1,6 @@
 services:
   backend:
+    image: ceiot/backend:dev
     build:
       context: .
       dockerfile: Dockerfile
@@ -56,6 +57,7 @@ services:
   # Consumes device MQTT topics (telemetry, events, status) and writes them.
   # Kept apart from the API, which is publisher-only by design.
   mqtt-runtime:
+    image: ceiot/mqtt-runtime:dev
     build:
       context: .
       dockerfile: Dockerfile

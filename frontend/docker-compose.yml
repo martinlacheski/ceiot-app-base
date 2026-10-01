@@ -1,5 +1,6 @@
 services:
   frontend:
+    image: ceiot/frontend:dev
     env_file:
       - .env
     build:
