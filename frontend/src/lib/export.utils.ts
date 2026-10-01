@@ -11,6 +11,8 @@ interface ExportPdfOptions {
   title: string;
   filename: string;
   generatedBy: string;
+  /** Optional line under the title (device, period); drawn on every PDF page and under the Excel title. */
+  subtitle?: string;
   columns: string[];
   data: ExportCell[][];
   orientation?: "portrait" | "landscape";
@@ -147,6 +149,7 @@ export const exportToPdf = async ({
   title,
   filename,
   generatedBy,
+  subtitle,
   columns,
   data,
   orientation = "portrait",
@@ -172,7 +175,10 @@ export const exportToPdf = async ({
   doc.setFontSize(11);
   const titleLines: string[] = doc.splitTextToSize(title, pageWidth - margin * 2);
   const titleY = imageTop + rightHeight + 6;
-  const headerBottom = titleY + titleLines.length * 5;
+  const subtitleFontSize = 9;
+  const subtitleLines: string[] = subtitle ? doc.splitTextToSize(subtitle, pageWidth - margin * 2) : [];
+  const subtitleY = titleY + titleLines.length * 5 + 1;
+  const headerBottom = subtitleLines.length ? subtitleY + subtitleLines.length * 4 : titleY + titleLines.length * 5;
   const tableTop = headerBottom + 5;
 
   const drawHeader = () => {
@@ -187,6 +193,12 @@ export const exportToPdf = async ({
     doc.setFont("helvetica", "normal");
     doc.setFontSize(11);
     doc.text(titleLines, pageWidth / 2, titleY, { align: "center", lineHeightFactor: 1.25 });
+    if (subtitleLines.length) {
+      doc.setFontSize(subtitleFontSize);
+      doc.setTextColor(90);
+      doc.text(subtitleLines, pageWidth / 2, subtitleY, { align: "center", lineHeightFactor: 1.25 });
+      doc.setTextColor(35);
+    }
     doc.setDrawColor(41, 128, 185);
     doc.setLineWidth(0.5);
     doc.line(margin, headerBottom, pageWidth - margin, headerBottom);
@@ -271,6 +283,7 @@ export const exportToPdf = async ({
 export async function buildExcelWorkbook({
   title,
   generatedBy,
+  subtitle,
   columns,
   data,
 }: Omit<ExportPdfOptions, "filename">): Promise<ExcelJS.Workbook> {
@@ -284,6 +297,7 @@ export async function buildExcelWorkbook({
     { row: 1, text: REPORT_BRAND_TAGLINE, size: 10, bold: true },
     { row: 3, text: title, size: 12, bold: true },
     { row: 4, text: `Generado por: ${generatedBy} | Fecha: ${now}`, size: 10, italic: true },
+    ...(subtitle ? [{ row: 5, text: subtitle, size: 10, italic: false, bold: false }] : []),
   ];
   headings.forEach((heading) => {
     const row = heading.row;

@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { CalendarDays, LayoutGrid, List } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router";
 
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
+import { DeviceDailySummary, DeviceDetailedReadings } from "@/app/components/devices/DeviceTelemetryTables";
 import { DeviceSensorsSection } from "@/app/components/devices/DeviceSensorsSection";
 import {
   formatDeviceGpsSummary,
@@ -22,11 +24,52 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+
+type Range = "24h" | "7d" | "30d" | "custom";
+type View = "charts" | "daily" | "detailed";
+interface CustomRange { from: Date; to: Date }
+
+const RANGE_DAYS = { "24h": 1, "7d": 7, "30d": 30 } as const;
+const VIEWS: Array<{ id: View; label: string; Icon: typeof LayoutGrid }> = [
+  { id: "charts", label: "Gráficos", Icon: LayoutGrid },
+  { id: "daily", label: "Resumen diario", Icon: CalendarDays },
+  { id: "detailed", label: "Vista detallada", Icon: List },
+];
+
+/** ISO bounds of the period: rolling window up to `now`, or whole local days for a custom range. */
+function resolvePeriod(range: Range, custom: CustomRange, now: number) {
+  if (range === "custom") {
+    const start = new Date(custom.from.getFullYear(), custom.from.getMonth(), custom.from.getDate(), 0, 0, 0, 0);
+    const end = new Date(custom.to.getFullYear(), custom.to.getMonth(), custom.to.getDate(), 23, 59, 59, 999);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+  return { start: new Date(now - RANGE_DAYS[range] * 24 * 60 * 60 * 1000).toISOString(), end: new Date(now).toISOString() };
+}
+
+const nowMs = () => Date.now();
+
+function defaultCustomRange(): CustomRange {
+  const to = new Date();
+  return { from: new Date(to.getFullYear(), to.getMonth(), to.getDate() - 6), to };
+}
 
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
-  const [range, setRange] = useState<"24h" | "7d" | "30d">("24h");
+  const [range, setRange] = useState<Range>("24h");
+  const [view, setView] = useState<View>("charts");
+  const [custom, setCustom] = useState<CustomRange>(defaultCustomRange);
+  // Fixed while a table view is open so its queries and exports share one period.
+  const [tablePeriod, setTablePeriod] = useState<{ start: string; end: string } | null>(null);
+  const changeRange = (next: Range, nextCustom = custom) => {
+    setRange(next);
+    setTablePeriod(resolvePeriod(next, nextCustom, nowMs()));
+  };
+  const changeView = (next: View) => {
+    setView(next);
+    setTablePeriod(resolvePeriod(range, custom, nowMs()));
+  };
   const canReadTelemetry = user?.isAdmin || user?.permissions?.includes("telemetry:read");
   const {
     data: device,
@@ -53,18 +96,14 @@ export default function DeviceDetailPage() {
     isLoading: historyReadingsLoading,
     isError: historyReadingsError,
   } = useQuery({
-    queryKey: ["telemetry", "history", id, range],
+    queryKey: range === "custom"
+      ? ["telemetry", "history", id, range, custom.from.toDateString(), custom.to.toDateString()]
+      : ["telemetry", "history", id, range],
     queryFn: () => {
-      const end = new Date();
-      const days = range === "24h" ? 1 : range === "7d" ? 7 : 30;
-      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-      return environmentalSensorService.getHistory(
-        id!,
-        start.toISOString(),
-        end.toISOString(),
-      );
+      const { start, end } = resolvePeriod(range, custom, nowMs());
+      return environmentalSensorService.getHistory(id!, start, end);
     },
-    enabled: Boolean(id && canReadTelemetry),
+    enabled: Boolean(id && canReadTelemetry && view === "charts"),
     refetchInterval: 5000,
   });
 
@@ -119,18 +158,40 @@ export default function DeviceDetailPage() {
         </CardContent>
       </Card>
       <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} />
-      {canReadTelemetry && <><label className="flex items-center gap-2 text-sm" htmlFor="telemetry-range">Período de lecturas
-        <select id="telemetry-range" className="rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => setRange(event.target.value as "24h" | "7d" | "30d")}>
-          <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option>
-        </select>
-      </label><EnvironmentalReadingsSection
-        latest={latestReadings}
-        history={historyReadings}
-        latestLoading={latestReadingsLoading}
-        historyLoading={historyReadingsLoading}
-        latestError={latestReadingsError}
-        historyError={historyReadingsError}
-      /></>}
+      {canReadTelemetry && <>
+        <div role="group" aria-label="Vista de las lecturas" className="grid w-full grid-cols-3 items-center gap-1 rounded-md border p-1 sm:inline-grid sm:w-auto">
+          {VIEWS.map(({ id: viewId, label, Icon }) => <Button key={viewId} type="button"
+            className="h-auto min-h-11 flex-col gap-1 whitespace-normal px-1 py-2 text-xs leading-tight sm:flex-row sm:gap-2 sm:px-3 sm:text-sm"
+            variant={view === viewId ? "secondary" : "ghost"} aria-pressed={view === viewId} onClick={() => changeView(viewId)}>
+            <Icon data-icon="inline-start" />{label}
+          </Button>)}
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex items-center gap-2 text-sm" htmlFor="telemetry-range">Período de lecturas
+            <select id="telemetry-range" className="h-11 rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => changeRange(event.target.value as Range)}>
+              <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option><option value="custom">Personalizado</option>
+            </select>
+          </label>
+          {range === "custom" && <DateRangePicker key={`${custom.from.toDateString()}|${custom.to.toDateString()}`}
+            initialDateFrom={custom.from} initialDateTo={custom.to} align="start" locale="es" showCompare={false} mobileLayout
+            triggerClassName="w-full sm:w-auto"
+            onUpdate={({ range: picked }) => {
+              const next = { from: picked.from ?? custom.from, to: picked.to ?? picked.from ?? custom.to };
+              setCustom(next);
+              changeRange("custom", next);
+            }} />}
+        </div>
+        {view === "charts" && <EnvironmentalReadingsSection
+          latest={latestReadings}
+          history={historyReadings}
+          latestLoading={latestReadingsLoading}
+          historyLoading={historyReadingsLoading}
+          latestError={latestReadingsError}
+          historyError={historyReadingsError}
+        />}
+        {view === "daily" && tablePeriod && <DeviceDailySummary device={device} start={tablePeriod.start} end={tablePeriod.end} />}
+        {view === "detailed" && tablePeriod && <DeviceDetailedReadings device={device} start={tablePeriod.start} end={tablePeriod.end} />}
+      </>}
       <DeviceGuestManagementCard deviceId={id} isOwner={isOwner} />
     </div>
   );

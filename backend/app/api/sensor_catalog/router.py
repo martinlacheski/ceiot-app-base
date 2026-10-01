@@ -16,7 +16,8 @@ from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permi
 from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
     SensorRead, SensorVariableRead, VariableRead, VariableAdminRead, VariableCreate, VariablePatch,
     SensorAdminRead, SensorAdminVariableRead, SensorCreate, SensorPatch)
-from app.api.sensor_catalog.telemetry import TelemetryPage, sensor_descriptions
+from app.api.sensor_catalog.telemetry import (DailyTelemetry, TelemetryPage, daily_sensor_descriptions,
+                                              daily_telemetry, sensor_descriptions)
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.time import utc_now
@@ -448,3 +449,25 @@ async def telemetry_history(device_id: uuid.UUID, session: AuthedAsyncDBSession,
     return TelemetryPage(items=rows, total=total, page=page, per_page=per_page,
         pages=(total + per_page - 1) // per_page,
         sensors=await sensor_descriptions(session, rows, {device_id}))
+
+
+MAX_DAILY_RANGE_DAYS = 366
+
+
+@device_router.get('/{device_id}/telemetry/daily', response_model=DailyTelemetry,
+            dependencies=[Depends(PermissionChecker(Permissions.TELEMETRY_READ))])
+async def telemetry_daily(device_id: uuid.UUID, session: AuthedAsyncDBSession,
+                          current_user: User = Depends(get_current_user),
+                          start: datetime = Query(...), end: datetime = Query(...),
+                          utc_offset_minutes: int = Query(0, ge=-840, le=840,
+                              description='Browser offset from UTC in minutes (local = UTC + offset)')):
+    """Per local day min/max/avg/count for every sensor variable, aggregated in SQL."""
+    start = start.astimezone(UTC) if start.tzinfo else start.replace(tzinfo=UTC)
+    end = end.astimezone(UTC) if end.tzinfo else end.replace(tzinfo=UTC)
+    if start > end:
+        raise HTTPException(422, 'start must be less than or equal to end')
+    if (end - start).days > MAX_DAILY_RANGE_DAYS:
+        raise HTTPException(422, f'The range cannot exceed {MAX_DAILY_RANGE_DAYS} days')
+    access_start = await _resolve_access_start(device_id, session, current_user)
+    days = await daily_telemetry(session, device_id, start, end, utc_offset_minutes, access_start)
+    return DailyTelemetry(days=days, sensors=await daily_sensor_descriptions(session, days, device_id))

@@ -53,3 +53,21 @@ export interface TelemetryPage {
   perPage?: number;
   pages?: number;
 }
+
+export interface DailyStat {
+  min: number;
+  max: number;
+  avg: number;
+  count: number;
+}
+
+export interface DailyTelemetryDay {
+  /** Local calendar date, YYYY-MM-DD. */
+  date: string;
+  sensors: Record<string, Record<string, DailyStat>>;
+}
+
+export interface DailyTelemetry {
+  days: DailyTelemetryDay[];
+  sensors: TelemetrySensor[];
+}

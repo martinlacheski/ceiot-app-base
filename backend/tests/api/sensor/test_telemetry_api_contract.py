@@ -269,3 +269,30 @@ def test_real_context_owner_guest_outsider_and_serial_history(
     assert history.json()["items"][0]["values"]["dht22"]["temperature"] == 23.4
     assert history.json()["sensors"][0]["sensorCode"] == "dht22"
     assert client.get(history_path, headers=_headers(seed["guest"])).status_code == 404
+
+
+def test_daily_route_registered():
+    paths = {route.path for route in router.routes}
+    assert "/devices/{device_id}/telemetry/daily" in paths
+
+
+def test_daily_telemetry_validation(client, session, test_user, monkeypatch):
+    from app.api.sensor_catalog import router as module
+
+    async def allow(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(module, "_resolve_access_start", allow)
+    test_user.permissions = [*test_user.permissions, "telemetry:read"]
+    session.add(test_user)
+    session.commit()
+    url = f"/api/devices/{uuid.uuid4()}/telemetry/daily"
+    headers = _headers(test_user)
+    ok = {"start": "2026-01-01T00:00:00Z", "end": "2026-01-02T00:00:00Z"}
+    assert client.get(url, params=ok).status_code == 401
+    assert client.get(url, params={**ok, "start": "2026-01-03T00:00:00Z"}, headers=headers).status_code == 422
+    assert client.get(url, params={"start": "2025-01-01T00:00:00Z", "end": "2026-06-01T00:00:00Z"},
+                      headers=headers).status_code == 422
+    assert client.get(url, params={**ok, "utc_offset_minutes": 841}, headers=headers).status_code == 422
+    assert client.get(url, params={**ok, "utc_offset_minutes": -841}, headers=headers).status_code == 422
+    assert client.get(url, params={"start": ok["start"]}, headers=headers).status_code == 422

@@ -36,4 +36,13 @@ describe("environmentalSensorService", () => {
     expect(Object.fromEntries((vi.mocked(appApi.get).mock.calls[0][1] as {params: URLSearchParams}).params)).toEqual({ limit: "1" });
     expect(Object.fromEntries((vi.mocked(appApi.get).mock.calls[1][1] as {params: URLSearchParams}).params)).toEqual({ start: "start", end: "end", page: "2", per_page: "500" });
   });
+
+  it("requests the daily summary with the browser UTC offset", async () => {
+    vi.mocked(appApi.get).mockResolvedValue({ data: { days: [], sensors: [] } });
+    const data = await environmentalSensorService.getDaily("device-1", "s", "e", -180);
+    expect(data).toEqual({ days: [], sensors: [] });
+    expect(appApi.get).toHaveBeenCalledWith("/devices/device-1/telemetry/daily", { params: expect.any(URLSearchParams) });
+    expect(Object.fromEntries((vi.mocked(appApi.get).mock.calls[0][1] as { params: URLSearchParams }).params))
+      .toEqual({ start: "s", end: "e", utc_offset_minutes: "-180" });
+  });
 });

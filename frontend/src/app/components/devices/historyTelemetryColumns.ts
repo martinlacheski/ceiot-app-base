@@ -11,7 +11,7 @@ export function formatTelemetryValue(value: number | null | undefined, unit: str
 
 /** Decimals Excel shows for a variable; the stored value keeps its full precision. */
 const TELEMETRY_DECIMALS: Record<string, number> = { temperature: 1, relative_humidity: 1 };
-const telemetryDecimals = (code: string) => TELEMETRY_DECIMALS[code] ?? 2;
+export const telemetryDecimals = (code: string) => TELEMETRY_DECIMALS[code] ?? 2;
 
 export function mergeTelemetrySensors(...pages: HistoryTelemetrySensor[][]): HistoryTelemetrySensor[] {
   const byKey = new Map<string, HistoryTelemetrySensor>();

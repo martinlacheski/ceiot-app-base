@@ -159,4 +159,20 @@ describe("branded PDF export (real jsPDF and AutoTable)", () => {
     expect(capture.doc!.getNumberOfPages()).toBe(1);
     expect(capture.doc!.addImage).toHaveBeenCalledTimes(2);
   });
+
+  it("repeats the optional subtitle under the title on every page and leaves room for it", async () => {
+    const subtitle = "Dispositivo: Sala (IOT-DEM0-0003) · Período: 01/09/2026 00:00 - 30/09/2026 23:59";
+    await exportToPdf({ ...options, subtitle, data: Array.from({ length: 180 }, (_, i) => [`Equipo ${i}`, "100"]) });
+    const doc = capture.doc!;
+    const table = (doc as jsPDF & { lastAutoTable: Table }).lastAutoTable;
+    expect(doc.getNumberOfPages()).toBeGreaterThan(1);
+    for (let page = 1; page <= doc.getNumberOfPages(); page++) {
+      expect((doc.internal.pages as unknown as string[][])[page].join("\n")).toContain(`(${subtitle.replace(/[()]/g, "\\$&")}) Tj`);
+    }
+    const textCalls = vi.mocked(doc.text).mock.calls as unknown as Array<[string | string[], number, number]>;
+    const subtitleCall = textCalls.find(([text]) => (Array.isArray(text) ? text.join(" ") : text) === subtitle)!;
+    const titleCall = textCalls.find(([text]) => Array.isArray(text) && text.join(" ") === options.title)!;
+    expect(subtitleCall[2]).toBeGreaterThan(titleCall[2]);
+    expect(table.settings.margin.top).toBeGreaterThan(subtitleCall[2]);
+  });
 });

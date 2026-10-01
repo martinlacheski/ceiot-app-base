@@ -46,4 +46,12 @@ describe("downloadReport", () => {
     expect(toFilenamePart("DVEM/OLD 0001")).toBe("DVEM_OLD_0001");
     expect(toFilenamePart("DVEM-OLD_0001")).toBe("DVEM-OLD_0001");
   });
+
+  it("forwards the subtitle and shrinks the PDF font for very wide tables", async () => {
+    const columns = Array.from({ length: 12 }, (_, i) => String(i));
+    await downloadReport("pdf", { ...base, columns, subtitle: "Período: x" });
+    await downloadReport("pdf", { ...base, columns: ["1", "2"] });
+    expect(exportToPdf.mock.calls[0][0]).toMatchObject({ subtitle: "Período: x", fontSize: 7, margin: 8 });
+    expect(exportToPdf.mock.calls[1][0].fontSize).toBeUndefined();
+  });
 });

@@ -1,5 +1,5 @@
 import { appApi } from "@/api/appApi";
-import type { DeviceSensor, SensorCatalogModel, TelemetryPage } from "../types/environmentalSensor.types";
+import type { DailyTelemetry, DeviceSensor, SensorCatalogModel, TelemetryPage } from "../types/environmentalSensor.types";
 
 export interface DeviceSensorCreate {
   sensorId: string;
@@ -43,6 +43,11 @@ export const environmentalSensorService = {
   async getHistory(deviceId: string, start: string, end: string, page = 1, perPage = 1000): Promise<TelemetryPage> {
     const params = new URLSearchParams({ start, end, page: String(page), per_page: String(perPage) });
     const { data } = await appApi.get<TelemetryPage>(`/devices/${deviceId}/telemetry/history`, { params });
+    return data;
+  },
+  async getDaily(deviceId: string, start: string, end: string, utcOffsetMinutes: number): Promise<DailyTelemetry> {
+    const params = new URLSearchParams({ start, end, utc_offset_minutes: String(utcOffsetMinutes) });
+    const { data } = await appApi.get<DailyTelemetry>(`/devices/${deviceId}/telemetry/daily`, { params });
     return data;
   },
 };

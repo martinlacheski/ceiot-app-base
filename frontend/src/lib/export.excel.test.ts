@@ -202,4 +202,16 @@ describe("typed export cells (Excel numeric/date cells)", () => {
     expect(totals.numFmt).toBe("0.00");
     expect(totals.font).toMatchObject({ bold: true });
   });
+
+  it("writes an optional subtitle under the title and keeps the header layout without one", async () => {
+    const { buildExcelWorkbook } = await import("./export.utils");
+    const subtitle = "Dispositivo: Sala (IOT-DEM0-0003) · Período: 01/09/2026 00:00 - 30/09/2026 23:59";
+    const withSubtitle = (await buildExcelWorkbook({ ...options, subtitle })).getWorksheet("Reporte")!;
+    expect(withSubtitle.getCell("A5").value).toBe(subtitle);
+    expect(withSubtitle.getRow(7).values).toEqual([undefined, ...options.columns]);
+    expect(withSubtitle.getRow(8).values).toEqual([undefined, "Equipo 1", "100"]);
+    const plain = (await buildExcelWorkbook(options)).getWorksheet("Reporte")!;
+    expect(plain.getCell("A5").value).toBeNull();
+    expect(plain.getRow(6).values).toEqual([undefined, ...options.columns]);
+  });
 });
