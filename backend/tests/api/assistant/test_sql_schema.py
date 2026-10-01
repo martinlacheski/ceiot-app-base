@@ -33,6 +33,17 @@ def test_format_schema_describes_catalog_columns_and_hints_only():
     assert "LIMIT" in text and "now() - INTERVAL" in text
 
 
+def test_format_schema_lists_each_device_value_under_its_own_column_quoted():
+    # Regression: "serial / name en environment" made the model use the whole
+    # string as device_name, so the query matched no rows.
+    hints = Hints(devices=[("IOT-DEM0-0003", "Demo DHT22 + BMP280", "Demo · Monitoreo ambiental")])
+    text = format_schema([], hints)
+    assert "device_name='Demo DHT22 + BMP280'" in text
+    assert "device_serial='IOT-DEM0-0003'" in text
+    assert "environment_name='Demo · Monitoreo ambiental'" in text
+    assert " en Demo" not in text
+
+
 def test_format_schema_without_hints_says_no_data():
     text = format_schema([], Hints())
     assert "(sin datos)" in text and "ai_read.telemetry(" in text  # falls back to the static catalog columns

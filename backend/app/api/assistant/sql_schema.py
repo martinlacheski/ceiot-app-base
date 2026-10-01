@@ -90,9 +90,16 @@ def format_schema(columns: list[tuple[str, str, str]], hints: Hints) -> str:
     lines.append("Valores exactos presentes (respetá mayúsculas y minúsculas):")
     lines.append("- variable: " + _listing([f"{c} ({n}, unidad {u})" for c, n, u in hints.variables]))
     lines.append("- sensor_model_code: " + _listing([f"{c} ({n})" for c, n in hints.sensor_models]))
+    # One field per column, quoted, so the model never merges serial, name and
+    # establishment into a single device_name value.
     lines.append(
-        "- equipos (device_serial / device_name): "
-        + _listing([f"{s} / {n}" + (f" en {e}" if e else "") for s, n, e in hints.devices])
+        "- equipos (usá cada valor en su propia columna): "
+        + _listing(
+            [
+                f"device_serial='{s}', device_name='{n}'" + (f", environment_name='{e}'" if e else "")
+                for s, n, e in hints.devices
+            ]
+        )
     )
     lines.append("- environment_name: " + _listing(hints.environments))
     lines.append(RULES)
