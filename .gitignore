@@ -37,3 +37,8 @@ backend/postgres_data/
 
 # Vitest reports and artifacts
 .vitest/
+
+# Python virtual environments (e.g. for tools/emulador-dispositivo.py)
+.venv/
+venv/
+backend/.venv/
