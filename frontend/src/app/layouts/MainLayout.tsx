@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
+import { AssistantChat } from "@/app/assistant/AssistantChat";
 import { Footer } from "@/app/components/Footer";
 import { useLivePulse } from "@/app/live/useLivePulse";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -71,6 +72,8 @@ const MainLayout = () => {
 
         <Footer />
       </div>
+
+      <AssistantChat />
     </div>
   );
 };
