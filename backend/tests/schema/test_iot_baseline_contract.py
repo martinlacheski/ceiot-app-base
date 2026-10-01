@@ -48,6 +48,8 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0009_remove_sensor_read_permission.py",
         "0010_add_user_activity_timestamps.py",
         "0011_add_document.py",
+        "0012_ai_read_views.py",
+        "0013_assistant_query_log.py",
     ]
 
 

@@ -60,6 +60,13 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY: SecretStr | None = None
     S3_SECRET_KEY: SecretStr | None = None
 
+    # AI assistant (OpenRouter). Without the key the assistant answers 503
+    # "Asistente no configurado"; the rest of the app is unaffected.
+    OPENROUTER_API_KEY: SecretStr | None = None
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
+    OPENROUTER_MAX_COMPLETION_TOKENS: int = 400
+
     # MQTT Backoff Config (producción)
     MQTT_RETRY_INITIAL_DELAY: int = 1  # Segundos inicial
     MQTT_RETRY_MAX_DELAY: int = 60  # Máximo entre reintentos

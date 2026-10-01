@@ -93,6 +93,9 @@ def test_downgrade_and_upgrade_round_trip_in_transaction(postgres_rls_config):
             try:
                 operations = Operations(MigrationContext.configure(connection))
                 with patch.object(module, "op", operations):
+                    # The ai_read views (0012) depend on telemetry/device_sensor/...; peel
+                    # them off inside this rolled-back transaction, as a real downgrade would.
+                    connection.execute(sa.text("DROP SCHEMA IF EXISTS ai_read CASCADE"))
                     module.downgrade()
                     assert connection.scalar(sa.text("SELECT to_regclass('public.telemetry')")) is None
                     assert connection.scalar(sa.text("SELECT is_active FROM device_type WHERE code='relay_1'")) is True

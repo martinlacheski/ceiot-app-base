@@ -41,7 +41,10 @@ def test_revision_is_chained_to_current_head():
     script = ScriptDirectory.from_config(Config("alembic.ini"))
     revision = script.get_revision(REVISION)
     assert revision is not None and revision.down_revision == DOWN_REVISION
-    assert script.get_heads() == [REVISION]
+    # Later revisions extend the chain, so 0011 must stay an ancestor of the single head.
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert REVISION in {r.revision for r in script.walk_revisions(base=DOWN_REVISION, head=heads[0])}
 
 
 def test_upgrade_creates_document_table_with_constraints():

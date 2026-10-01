@@ -25,6 +25,7 @@ from app.api.device.history.router import router as history_router
 from app.api.device.emulator.router import router as emulator_router
 from app.api.live.router import router as live_router
 from app.api.document.router import router as document_router
+from app.api.assistant.router import router as assistant_router
 
 router.include_router(provisioning_router, prefix="/provisioning", tags=["Provisioning"])
 router.include_router(device_type_router, prefix="/devices/types", tags=["Device Types"])
@@ -33,6 +34,7 @@ router.include_router(device_router, prefix="/devices", tags=["Devices"])
 router.include_router(emulator_router, prefix="/devices", tags=["Device Emulator"])
 router.include_router(live_router, prefix="/live", tags=["Live"])
 router.include_router(document_router, prefix="/documents", tags=["Documents"])
+router.include_router(assistant_router, prefix="/assistant", tags=["Assistant"])
 router.include_router(catalog_router, prefix="/sensor-catalog", tags=["Sensor Catalog"])
 router.include_router(sensor_device_router, prefix="/devices", tags=["Device Sensors and Telemetry"])
 router.include_router(
