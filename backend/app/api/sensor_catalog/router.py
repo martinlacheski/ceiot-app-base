@@ -219,12 +219,13 @@ async def get_variable(id: uuid.UUID, session: AuthedAsyncDBSession):
             dependencies=[Depends(_admin_write)])
 async def create_variable(body: VariableCreate, session: AuthedAsyncDBSession):
     row = Variable(**body.model_dump())
-    session.add(row)
+    # SAVEPOINT: a full rollback would also revert the uncommitted RLS identity of this session.
     try:
-        await session.commit()
+        async with session.begin_nested():
+            session.add(row)
     except IntegrityError:
-        await session.rollback()
         raise HTTPException(409, 'Variable code already exists') from None
+    await session.commit()
     await session.refresh(row)
     return row
 
@@ -266,13 +267,14 @@ async def get_sensor(id: uuid.UUID, session: AuthedAsyncDBSession):
             dependencies=[Depends(_admin_write)])
 async def create_sensor(body: SensorCreate, session: AuthedAsyncDBSession):
     row = Sensor(**body.model_dump(exclude={'variables'}))
-    session.add(row)
+    # SAVEPOINT: a full rollback would also revert the uncommitted RLS identity of this session.
     try:
-        await _replace_sensor_variables(session, row.id, body.variables)
-        await session.commit()
+        async with session.begin_nested():
+            session.add(row)
+            await _replace_sensor_variables(session, row.id, body.variables)
     except IntegrityError:
-        await session.rollback()
         raise HTTPException(409, 'Sensor code already exists') from None
+    await session.commit()
     await session.refresh(row)
     return await _sensor_admin(session, row)
 
@@ -343,12 +345,13 @@ async def create_device_sensor(device_id: uuid.UUID, body: DeviceSensorCreate,
     if key in keys:
         raise HTTPException(409, 'Sensor key already exists on this device')
     row = DeviceSensor(device_id=device_id, sensor_id=sensor.id, key=key, config=body.config)
-    session.add(row)
+    # SAVEPOINT: a full rollback would also revert the uncommitted RLS identity of this session.
     try:
-        await session.commit()
+        async with session.begin_nested():
+            session.add(row)
     except IntegrityError:
-        await session.rollback()
         raise HTTPException(409, 'Sensor key already exists on this device') from None
+    await session.commit()
     await session.refresh(row)
     return row
 
@@ -380,18 +383,18 @@ async def patch_device_sensor(device_id: uuid.UUID, id: uuid.UUID, body: DeviceS
     if 'is_active' in changes:
         row.removed_at = None if row.is_active else datetime.now(UTC)
     try:
-        if old_key is not None:
-            # Keep the prior key/model mapping for already-stored JSONB rows.
-            # The full UNIQUE(device_id,key) constraint requires flushing the
-            # renamed live row before inserting this inactive historical alias.
-            await session.flush()
-            session.add(DeviceSensor(device_id=device_id, sensor_id=row.sensor_id,
-                key=old_key, config=old_config, is_active=False,
-                installed_at=old_installed_at, removed_at=datetime.now(UTC)))
-        await session.commit()
+        async with session.begin_nested():
+            if old_key is not None:
+                # Keep the prior key/model mapping for already-stored JSONB rows.
+                # The full UNIQUE(device_id,key) constraint requires flushing the
+                # renamed live row before inserting this inactive historical alias.
+                await session.flush()
+                session.add(DeviceSensor(device_id=device_id, sensor_id=row.sensor_id,
+                    key=old_key, config=old_config, is_active=False,
+                    installed_at=old_installed_at, removed_at=datetime.now(UTC)))
     except IntegrityError:
-        await session.rollback()
         raise HTTPException(409, 'Sensor key already exists on this device') from None
+    await session.commit()
     await session.refresh(row)
     return row
 

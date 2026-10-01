@@ -487,15 +487,17 @@ class DeviceRepository:
             environment_id=None,  # Always created unpaired
         )
         try:
-            self.session.add(db_device)
-            await self.session.flush()  # To get ID
-            for sensor_id, key, config in installations:
-                self.session.add(DeviceSensor(device_id=db_device.id, sensor_id=sensor_id,
-                                              key=key, config=config))
-            await self.session.commit()
+            # SAVEPOINT: a full rollback would also revert the uncommitted RLS identity
+            # (set_config) of the authed/system session.
+            async with self.session.begin_nested():
+                self.session.add(db_device)
+                await self.session.flush()  # To get ID
+                for sensor_id, key, config in installations:
+                    self.session.add(DeviceSensor(device_id=db_device.id, sensor_id=sensor_id,
+                                                  key=key, config=config))
         except IntegrityError:
-            await self.session.rollback()
             raise HTTPException(422, "No se pudo crear el dispositivo con esos sensores") from None
+        await self.session.commit()
         return await self.get(db_device.id, include_inactive=True)
 
     async def update(self, db_device: Device, device_in: DeviceUpdate) -> Device:
