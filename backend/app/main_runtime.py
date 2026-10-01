@@ -15,6 +15,7 @@ import app.core.model_registry  # noqa: F401  (resolves ORM relationships in thi
 from app.core.config import settings
 from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
+from app.core.redis import close_redis
 from app.core.mqtt.handlers import (
     process_device_status_message,
     process_sensor_message_pub,
@@ -43,6 +44,7 @@ async def lifespan(app: FastAPI):
     yield
 
     mqtt_client.stop()
+    await close_redis()
 
 
 app = FastAPI(

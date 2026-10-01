@@ -14,6 +14,7 @@ import {
 import { PageHeader } from "@/app/components/PageHeader";
 import { deviceService } from "@/app/services/device.service";
 import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
+import { LiveIndicator } from "@/app/live/LiveIndicator";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
 import { Button } from "@/components/ui/button";
@@ -140,7 +141,10 @@ export default function DeviceDetailPage() {
               Últimos datos de conectividad reportados por el dispositivo.
             </CardDescription>
           </div>
-          <DevicePresenceBadge brokerConnected={device.brokerConnected} />
+          <div className="flex items-center gap-3">
+            <LiveIndicator />
+            <DevicePresenceBadge brokerConnected={device.brokerConnected} />
+          </div>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div>

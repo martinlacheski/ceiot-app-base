@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "timescaledb")
+COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "redis", "timescaledb")
 
 DUMMY_ENV = {
     "backend": """\
@@ -41,6 +41,7 @@ PUBLIC_GCP_MAPS_API_KEY=dummy-map-key
 PUBLIC_MAP_LOCATIONS_URL=/map-locations.json
 """,
     "mailpit": "",
+    "redis": "",
     "mqtt": """\
 MQTT_LISTENER_TCP=11884
 MQTT_LISTENER_TLS=18884
@@ -124,11 +125,11 @@ class ComposeConfigTest(unittest.TestCase):
             raise AssertionError(f"expected one publication for container port {target}")
         return matches[0]
 
-    def test_root_include_renders_six_services_on_one_private_network(self):
+    def test_root_include_renders_seven_services_on_one_private_network(self):
         config = self.render_config()
         self.assertEqual(
             set(config["services"]),
-            {"backend", "mqtt-runtime", "frontend", "landing", "emqx", "postgresql"},
+            {"backend", "mqtt-runtime", "frontend", "landing", "emqx", "postgresql", "redis"},
         )
         self.assertEqual(set(config["networks"]), {"app-network"})
         self.assertNotIn("external", config["networks"]["app-network"])
@@ -192,6 +193,27 @@ class ComposeConfigTest(unittest.TestCase):
         for service in (backend, runtime):
             self.assertEqual(service["environment"]["EMQX_USER"], "backend-services")
             self.assertEqual(service["environment"]["EMQX_PASSWORD"], "dummy-backend-password")
+
+    def test_redis_is_internal_only_persistent_and_wired_to_backend_and_runtime(self):
+        services = self.render_config()["services"]
+        redis = services["redis"]
+
+        self.assertEqual(redis["image"], "redis:7-alpine")
+        # Internal network only: no host publication, no password to leak.
+        self.assertNotIn("ports", redis)
+        self.assertEqual(set(redis["networks"]), {"app-network"})
+        self.assertIn("healthcheck", redis)
+        self.assertIn("--appendonly", redis["command"])
+        self.assertEqual(redis["command"][redis["command"].index("--appendonly") + 1], "yes")
+        data_mounts = [m for m in redis["volumes"] if m["target"] == "/data"]
+        self.assertEqual(len(data_mounts), 1)
+        self.assertEqual(data_mounts[0]["type"], "bind")
+        self.assertTrue(data_mounts[0]["source"].endswith("/redis/data"))
+
+        for name in ("backend", "mqtt-runtime"):
+            service = services[name]
+            self.assertEqual(service["environment"]["REDIS_URL"], "redis://redis:6379/0")
+            self.assertIn("redis", service["depends_on"])
 
     def test_mailpit_profile_is_optional_and_transport_is_explicit(self):
         default_services = self.render_config()["services"]

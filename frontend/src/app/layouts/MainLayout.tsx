@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Outlet } from "react-router";
 
 import { Footer } from "@/app/components/Footer";
+import { useLivePulse } from "@/app/live/useLivePulse";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Sidebar } from "../components/Sidebar";
 import { SidebarHeader } from "../components/SidebarHeader";
@@ -12,6 +13,7 @@ const getIsBelowBreakpoint = () =>
   typeof window !== "undefined" && window.innerWidth < DESKTOP_BREAKPOINT;
 
 const MainLayout = () => {
+  useLivePulse();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(getIsBelowBreakpoint);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isBelowBreakpointRef = useRef(getIsBelowBreakpoint());

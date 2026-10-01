@@ -6,8 +6,10 @@ from app.api.device.operations.models import DeviceOperationStatus, DeviceOperat
 from app.api.device.operations.service import DeviceOperationService
 from app.api.device.repository import DeviceRepository
 from app.api.device.service import DeviceService
+from app.core import live
 from app.core.db import system_session
 from app.core.mqtt.client import get_mqtt_client
+from app.core.redis import get_redis
 
 _MAX_TIME_REQUEST_ID_LENGTH = 64
 
@@ -33,6 +35,26 @@ _RUNTIME_HEALTH_KEYS = (
     "last_error",
 )
 _RETIRED_COMMANDS = {"DISPENSE_ACK", "DISPENSE"}
+
+
+async def _publish_live_telemetry(device, serial: str, data: dict, reading, telemetry) -> None:
+    """Mirror the stored message to Redis (latest state + pulse); best effort."""
+    device_id = getattr(device, "id", None)
+    if device_id is None:
+        return
+    try:
+        health = {key: data.get(key) for key in (*_RUNTIME_HEALTH_KEYS, *_HEALTH_SIGNAL_KEYS)}
+        await live.record_telemetry(
+            get_redis(),
+            device_id=device_id,
+            serial=getattr(device, "serial", None) or serial,
+            environment_id=getattr(device, "environment_id", None),
+            time=telemetry.time if telemetry is not None else reading.time,
+            values=telemetry.values if telemetry is not None else None,
+            health=health,
+        )
+    except Exception:
+        logger.warning("Could not publish live state for serial=%r", serial, exc_info=True)
 
 
 def _clean_mac_address(value) -> str | None:
@@ -204,6 +226,7 @@ async def process_sensor_message_pub(topic: str, payload: str):
             logger.info(f"🛑 Comando retirado ignorado: {data.get('command')}")
             return
 
+        live_update = None
         async with system_session() as session:
             repo = DeviceRepository(session)
             op_service = DeviceOperationService(session)
@@ -294,9 +317,10 @@ async def process_sensor_message_pub(topic: str, payload: str):
                 )
                 logger.info(f"📊 Lectura de sensor guardada: {serial}")
 
+                telemetry = None
                 if "sensors" in data:
                     try:
-                        await sensor_service.save_sensor_telemetry(
+                        telemetry = await sensor_service.save_sensor_telemetry(
                             device_id=device.id if device else None,
                             device_serial=serial,
                             sensors=data["sensors"],
@@ -304,6 +328,12 @@ async def process_sensor_message_pub(topic: str, payload: str):
                         )
                     except Exception:
                         logger.exception("Failed to ingest sensor-key telemetry for device %r", serial)
+                if device is not None:
+                    live_update = (device, reading, telemetry)
+
+        # After the database work is committed and its session released.
+        if live_update is not None:
+            await _publish_live_telemetry(live_update[0], serial, data, live_update[1], live_update[2])
 
     except Exception as e:
         logger.error(f"❌ Error al procesar sensor pub: {e}")
@@ -351,6 +381,19 @@ async def process_device_status_message(topic: str, payload: str):
                     DeviceService.normalize_serial(serial),
                 )
                 return
+            device_id = getattr(device, "id", None)
+            device_serial = getattr(device, "serial", None) or serial
+            environment_id = getattr(device, "environment_id", None)
+
+        if device_id is not None:
+            await live.record_presence(
+                get_redis(),
+                device_id=device_id,
+                serial=device_serial,
+                environment_id=environment_id,
+                connected=broker_connected,
+                time=datetime.now(timezone.utc),
+            )
 
         logger.info(
             "🔌 Broker presence actualizada serial=%s connected=%s",

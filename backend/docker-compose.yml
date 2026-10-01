@@ -13,6 +13,9 @@ services:
       EMQX_USER: backend-services
       EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
       MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+      # Optional live layer (no password: internal network only). The app
+      # keeps working without Redis; see app/core/redis.py.
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
@@ -21,6 +24,8 @@ services:
       - 127.0.0.1:${BACKEND_PORT:?BACKEND_PORT is required}:8000
     depends_on:
       postgresql:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     healthcheck:
       test:
@@ -52,6 +57,9 @@ services:
       EMQX_USER: backend-services
       EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
       MAIL_TRANSPORT: ${MAIL_TRANSPORT:-smtp}
+      # Optional live layer (no password: internal network only). The app
+      # keeps working without Redis; see app/core/redis.py.
+      REDIS_URL: redis://redis:6379/0
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
@@ -61,6 +69,8 @@ services:
         condition: service_healthy
       emqx:
         condition: service_started
+      redis:
+        condition: service_healthy
     healthcheck:
       test:
         - CMD

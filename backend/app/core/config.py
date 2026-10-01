@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     EMQX_API_KEY: SecretStr | None = None
     EMQX_API_SECRET: SecretStr | None = None
 
+    # Redis (optional live layer: device state + pulse). Unset or unreachable
+    # means the app degrades to database reads and no live pulse.
+    REDIS_URL: str | None = None
+
     # MQTT Backoff Config (producción)
     MQTT_RETRY_INITIAL_DELAY: int = 1  # Segundos inicial
     MQTT_RETRY_MAX_DELAY: int = 60  # Máximo entre reintentos

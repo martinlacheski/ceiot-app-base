@@ -1,0 +1,28 @@
+services:
+  # Live device state + pulse channel (iot:pulse). Internal network only: no
+  # host port and no password, so nothing outside app-network can reach it.
+  # Everything stored here is derived and expirable (every key carries a TTL);
+  # the app degrades to database reads when Redis is down.
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - volatile-lru
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    networks:
+      - app-network
+    restart: unless-stopped

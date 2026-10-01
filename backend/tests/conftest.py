@@ -29,6 +29,17 @@ class UnavailablePresenceClient:
         return PresenceSnapshot.unavailable()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_redis(monkeypatch):
+    """Tests never reach the dev Redis (compose sets REDIS_URL inside the container)."""
+    from app.core import redis as redis_module
+
+    monkeypatch.setattr(redis_module.settings, "REDIS_URL", None)
+    redis_module.reset_redis_state()
+    yield
+    redis_module.reset_redis_state()
+
+
 @compiles(JSONB, "sqlite")
 def compile_jsonb_sqlite(type_, compiler, **kw):
     return "JSON"

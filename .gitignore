@@ -20,6 +20,7 @@ mqtt/data/
 mqtt/log/
 mqtt/pki/ca/
 mqtt/pki/devices/
+redis/data/
 esp32/cert/
 backend/postgres_data/
 

@@ -2,8 +2,10 @@
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from redis.asyncio import Redis
 from sqlalchemy import case, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 
@@ -16,9 +18,11 @@ from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permi
 from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
     SensorRead, SensorVariableRead, VariableRead, VariableAdminRead, VariableCreate, VariablePatch,
     SensorAdminRead, SensorAdminVariableRead, SensorCreate, SensorPatch)
-from app.api.sensor_catalog.telemetry import (DailyTelemetry, TelemetryPage, daily_sensor_descriptions,
+from app.api.sensor_catalog.telemetry import (DailyTelemetry, LiveTelemetry, TelemetryPage, daily_sensor_descriptions,
                                               daily_telemetry, sensor_descriptions)
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
+from app.core.live import read_device_state
+from app.core.redis import get_live_redis
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.time import utc_now
 
@@ -425,6 +429,38 @@ async def latest_telemetry(device_id: uuid.UUID, session: AuthedAsyncDBSession,
         .where(*predicate))).scalar_one()
     return TelemetryPage(items=rows, total=total,
         sensors=await sensor_descriptions(session, rows, {device_id}))
+
+
+@device_router.get('/{device_id}/telemetry/live', response_model=LiveTelemetry,
+            dependencies=[Depends(PermissionChecker(Permissions.TELEMETRY_READ))])
+async def live_telemetry(device_id: uuid.UUID, session: AuthedAsyncDBSession,
+                         redis: Redis | None = Depends(get_live_redis),
+                         current_user: User = Depends(get_current_user)):
+    """Latest values and health: from Redis when present, else the newest stored row.
+
+    Authorization runs first and is identical to ``/telemetry/latest``; Redis only
+    replaces the data read. A guest never sees state older than their access grant.
+    """
+    start = await _resolve_access_start(device_id, session, current_user)
+    state = await read_device_state(redis, device_id)
+    if state is not None and state.telemetry_at is not None:
+        reported = _as_utc_naive(state.telemetry_at)
+        if start is None or reported >= start:
+            sensors = await sensor_descriptions(
+                session, [SimpleNamespace(values=state.values)], {device_id})
+            return LiveTelemetry(source='redis', time=state.telemetry_at, values=state.values,
+                health=state.health, presence=state.presence, sensors=sensors)
+    predicate = [Telemetry.device_id == device_id]
+    if start is not None:
+        predicate.append(Telemetry.time >= start)
+    row = (await session.execute(select(Telemetry).where(*predicate)
+        .order_by(Telemetry.time.desc(), Telemetry.id.desc()).limit(1))).scalars().first()
+    if row is None:
+        return LiveTelemetry(source='database', values={}, sensors=[],
+                             presence=state.presence if state else None)
+    return LiveTelemetry(source='database', time=row.time, values=row.values,
+        presence=state.presence if state else None,
+        sensors=await sensor_descriptions(session, [row], {device_id}))
 
 
 @device_router.get('/{device_id}/telemetry/history', response_model=TelemetryPage,

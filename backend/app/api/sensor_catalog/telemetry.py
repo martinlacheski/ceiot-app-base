@@ -3,6 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Literal
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,6 +37,19 @@ class TelemetryPage(CamelModel):
     page: int | None = None
     per_page: int | None = None
     pages: int | None = None
+
+
+class LiveTelemetry(CamelModel):
+    """Latest known state of a device, from Redis when present or the database."""
+
+    source: Literal["redis", "database"]
+    time: datetime | None = None
+    values: dict
+    # Last health fields the device reported (uptime, firmware_version, wifi_rssi, ...).
+    health: dict = {}
+    # Broker presence last seen by the runtime ("online"/"offline"), Redis only.
+    presence: str | None = None
+    sensors: list[TelemetrySensor]
 
 
 async def sensor_descriptions(session: AsyncSession, items: list, device_ids: set[uuid.UUID]) -> list[TelemetrySensor]:
