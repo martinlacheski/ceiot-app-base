@@ -7,8 +7,6 @@ services:
   # timescaledb variables interpolated below.
   pgadmin:
     image: dpage/pgadmin4:9.18.0
-    profiles:
-      - tools
     entrypoint: ["/usr/local/bin/pgadmin-entrypoint.sh"]
     env_file:
       # Optional so the default stack renders without it; without the login

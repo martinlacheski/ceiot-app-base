@@ -130,7 +130,7 @@ class ComposeConfigTest(unittest.TestCase):
             raise AssertionError(f"expected one publication for container port {target}")
         return matches[0]
 
-    def test_root_include_renders_eight_services_on_one_private_network(self):
+    def test_root_include_renders_default_services_on_one_private_network(self):
         config = self.render_config()
         self.assertEqual(
             set(config["services"]),
@@ -143,6 +143,8 @@ class ComposeConfigTest(unittest.TestCase):
                 "postgresql",
                 "redis",
                 "seaweedfs",
+                "pgadmin",
+                "redisinsight",
             },
         )
         self.assertEqual(set(config["networks"]), {"app-network"})
@@ -295,12 +297,8 @@ class ComposeConfigTest(unittest.TestCase):
             "backend-fixture",
         )
 
-    def test_tools_profile_adds_pgadmin_and_redisinsight_on_loopback(self):
-        default_services = self.render_config()["services"]
-        self.assertNotIn("pgadmin", default_services)
-        self.assertNotIn("redisinsight", default_services)
-
-        services = self.render_config(profile="tools")["services"]
+    def test_pgadmin_and_redisinsight_start_by_default_on_loopback(self):
+        services = self.render_config()["services"]
         for name, image_prefix, target, published in (
             ("pgadmin", "dpage/pgadmin4:", 80, "15050"),
             ("redisinsight", "redis/redisinsight:", 5540, "15540"),
@@ -357,7 +355,6 @@ class ComposeConfigTest(unittest.TestCase):
 
     def test_tools_ports_can_be_overridden(self):
         services = self.render_config(
-            profile="tools",
             environment_override={"PGADMIN_PORT": "25050", "REDISINSIGHT_PORT": "25540"},
         )["services"]
         self.assertEqual(str(self.published_port(services["pgadmin"], 80)["published"]), "25050")

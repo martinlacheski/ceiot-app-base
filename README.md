@@ -9,8 +9,14 @@ son accesibles únicamente desde tu máquina, a través de la interfaz local.
 Ejecutá este comando desde la raíz del proyecto:
 
 ```bash
-docker compose -p iot-app-base -f docker-compose.yml up -d --build --wait --wait-timeout 180
+scripts/levantar.sh --build
 ```
+
+El script levanta todo el stack con los correos redirigidos a Mailpit, arranca
+pgAdmin y RedisInsight, y solo crea el contenedor de embeddings locales si
+`backend/.env` tiene `EMBEDDING_PROVIDER=local` (si no, lo elimina). Sin
+`--build` levanta sin reconstruir las imágenes; con `--dry-run` muestra los
+comandos sin ejecutarlos.
 
 - La landing en: 
 <http://localhost:14321>
@@ -20,6 +26,10 @@ docker compose -p iot-app-base -f docker-compose.yml up -d --build --wait --wait
 <http://localhost:18000/api>
 - Mailpit en: 
 <http://localhost:8025>
+- pgAdmin en: 
+<http://localhost:15050> (credenciales en `pgadmin/.env`)
+- RedisInsight en: 
+<http://localhost:15540>
 
 Para comprobar el estado del backend, usá: <http://localhost:18000/health>.
 

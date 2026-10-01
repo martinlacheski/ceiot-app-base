@@ -6,8 +6,6 @@ services:
   # in the volume; see README.md.
   redisinsight:
     image: redis/redisinsight:2.66.0
-    profiles:
-      - tools
     ports:
       - 127.0.0.1:${REDISINSIGHT_PORT:-15540}:5540
     volumes:

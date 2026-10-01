@@ -8,8 +8,8 @@ Solo para desarrollo local. Ambas herramientas viven bajo el perfil `tools`: el
 
 ```bash
 cp pgadmin/.env.example pgadmin/.env   # una sola vez; editá email y contraseña
-docker compose --profile tools up -d pgadmin redisinsight
-docker compose --profile tools stop pgadmin redisinsight
+scripts/levantar.sh   # arrancan junto con el resto del stack
+docker compose stop pgadmin redisinsight   # para apagarlas
 ```
 
 | Herramienta | URL | Puerto (variable, opcional) |
@@ -23,7 +23,7 @@ Las variables de puerto se leen del entorno del shell o de un `.env` en la raíz
 
 - **Login**: `PGADMIN_DEFAULT_EMAIL` y `PGADMIN_DEFAULT_PASSWORD` de
   `pgadmin/.env` (git-ignorado). Sin ellos el contenedor se niega a arrancar y
-  lo dice en sus logs (`docker compose --profile tools logs pgadmin`); no hay
+  lo dice en sus logs (`docker compose logs pgadmin`); no hay
   contraseña por defecto.
 - **Servidor preconfigurado** "IoT App (TimescaleDB)": host `postgresql`,
   puerto `5432`, base y usuario tomados de `DB_DATABASE` y `DB_USER` de
@@ -31,7 +31,7 @@ Las variables de puerto se leen del entorno del shell o de un `.env` en la raíz
   passfile (`0600`) en su `/tmp` a partir de `DB_PASSWORD`: la contraseña nunca
   se escribe en el disco del host y no se pide al conectar.
 - El servidor se importa solo la primera vez (con el volumen vacío). Si cambian
-  la base, el usuario o la contraseña de la base: `docker compose --profile tools
+  la base, el usuario o la contraseña de la base: `docker compose
   rm -sf pgadmin && docker volume rm iot-app-base_pgadmin-data` y volver a levantar.
 - **Persistencia**: volumen con nombre `pgadmin-data` (pgAdmin corre como uid
   5050 y un directorio bind creado por Docker quedaría de root, sin permisos de
