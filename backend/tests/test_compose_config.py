@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "redis", "seaweedfs", "timescaledb")
+COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "pgadmin", "redis", "redisinsight", "seaweedfs", "timescaledb")
 
 DUMMY_ENV = {
     "backend": """\
@@ -41,7 +41,9 @@ PUBLIC_GCP_MAPS_API_KEY=dummy-map-key
 PUBLIC_MAP_LOCATIONS_URL=/map-locations.json
 """,
     "mailpit": "",
+    "pgadmin": "",
     "redis": "",
+    "redisinsight": "",
     # Intentionally no S3 credentials: the stack must render and start without them.
     "seaweedfs": "",
     "mqtt": """\
@@ -290,6 +292,50 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertEqual(
             overridden["services"]["backend"]["environment"]["SAFE_BACKEND_SENTINEL"],
             "backend-fixture",
+        )
+
+    def test_tools_profile_adds_pgadmin_and_redisinsight_on_loopback(self):
+        default_services = self.render_config()["services"]
+        self.assertNotIn("pgadmin", default_services)
+        self.assertNotIn("redisinsight", default_services)
+
+        services = self.render_config(profile="tools")["services"]
+        for name, image_prefix, target, published in (
+            ("pgadmin", "dpage/pgadmin4:", 80, "15050"),
+            ("redisinsight", "redis/redisinsight:", 5540, "15540"),
+        ):
+            service = services[name]
+            self.assertTrue(service["image"].startswith(image_prefix), name)
+            self.assertNotIn(":latest", service["image"])
+            self.assertEqual(set(service["networks"]), {"app-network"}, name)
+            self.assertNotIn("container_name", service)
+            self.assertNotIn("labels", service)
+            self.assertIn("healthcheck", service)
+            self.assertEqual(len(service["ports"]), 1)
+            port = self.published_port(service, target)
+            self.assertEqual(port["host_ip"], "127.0.0.1")
+            self.assertEqual(str(port["published"]), published)
+        self.assertEqual(
+            services["pgadmin"]["depends_on"]["postgresql"]["condition"], "service_healthy"
+        )
+        self.assertEqual(
+            services["redisinsight"]["depends_on"]["redis"]["condition"], "service_healthy"
+        )
+        # Server preconfiguration comes from the timescaledb variables.
+        env = services["pgadmin"]["environment"]
+        self.assertEqual(env["PGADMIN_DB_NAME"], "dummy_database")
+        self.assertEqual(env["PGADMIN_DB_USER"], "dummy_user")
+        self.assertEqual(env["PGADMIN_SERVER_JSON_FILE"], "/tmp/servers.json")
+        self.assertNotIn("RI_REDIS_HOST", services["redisinsight"].get("environment", {}))
+
+    def test_tools_ports_can_be_overridden(self):
+        services = self.render_config(
+            profile="tools",
+            environment_override={"PGADMIN_PORT": "25050", "REDISINSIGHT_PORT": "25540"},
+        )["services"]
+        self.assertEqual(str(self.published_port(services["pgadmin"], 80)["published"]), "25050")
+        self.assertEqual(
+            str(self.published_port(services["redisinsight"], 5540)["published"]), "25540"
         )
 
     def test_ports_use_component_fixture_values_and_loopback_only(self):

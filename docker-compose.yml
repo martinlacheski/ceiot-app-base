@@ -21,8 +21,14 @@ include:
     project_directory: mqtt
     env_file:
       - mqtt/.env
+  - path: pgadmin/docker-compose.yml
+    project_directory: pgadmin
+    env_file:
+      - timescaledb/.env
   - path: redis/docker-compose.yml
     project_directory: redis
+  - path: redisinsight/docker-compose.yml
+    project_directory: redisinsight
   - path: seaweedfs/docker-compose.yml
     project_directory: seaweedfs
   - path: timescaledb/docker-compose.yml

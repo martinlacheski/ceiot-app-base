@@ -1,0 +1,48 @@
+services:
+  # Dev-only database explorer (profile "tools"; not part of the default stack).
+  # Loopback only. Login comes from pgadmin/.env (PGADMIN_DEFAULT_EMAIL /
+  # PGADMIN_DEFAULT_PASSWORD): the image refuses to start without them, so
+  # there is no weak default. The wrapper renders the preconfigured server and
+  # a passfile into the container's /tmp (never on host disk) from the
+  # timescaledb variables interpolated below.
+  pgadmin:
+    image: dpage/pgadmin4:9.18.0
+    profiles:
+      - tools
+    entrypoint: ["/usr/local/bin/pgadmin-entrypoint.sh"]
+    env_file:
+      # Optional so the default stack renders without it; without the login
+      # variables the pgAdmin container exits with an explicit message.
+      - path: .env
+        required: false
+    environment:
+      PGADMIN_SERVER_JSON_FILE: /tmp/servers.json
+      PGADMIN_DB_NAME: ${DB_DATABASE:?DB_DATABASE is required}
+      PGADMIN_DB_USER: ${DB_USER:?DB_USER is required}
+      PGADMIN_DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    ports:
+      - 127.0.0.1:${PGADMIN_PORT:-15050}:80
+    volumes:
+      # Named volume: pgAdmin runs as uid 5050 and a host bind directory
+      # would be created root-owned by Docker, which pgAdmin cannot write.
+      - pgadmin-data:/var/lib/pgadmin
+      - ./docker-entrypoint-wrapper.sh:/usr/local/bin/pgadmin-entrypoint.sh:ro
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:80/misc/ping', timeout=3)
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - app-network
+    restart: on-failure:3
+
+volumes:
+  pgadmin-data:

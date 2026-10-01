@@ -1,0 +1,31 @@
+services:
+  # Dev-only Redis browser (profile "tools"; not part of the default stack).
+  # Loopback only. This image version has no env-based preconfiguration
+  # (RI_REDIS_* is ignored), so the connection to the internal `redis` service
+  # is added once in the UI (host redis, port 6379, no password) and persists
+  # in the volume; see README.md.
+  redisinsight:
+    image: redis/redisinsight:2.66.0
+    profiles:
+      - tools
+    ports:
+      - 127.0.0.1:${REDISINSIGHT_PORT:-15540}:5540
+    volumes:
+      # Named volume: avoids host-owned bind directories the image user
+      # (uid 1000) may not be able to write.
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:5540/api/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  redisinsight-data:
