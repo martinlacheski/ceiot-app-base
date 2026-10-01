@@ -3,9 +3,10 @@
 import uuid
 from datetime import datetime
 
-from pydantic import model_validator
+from pydantic import computed_field, model_validator
 
 from app.api.document.constants import MAX_TITLE_LENGTH
+from app.core.embeddings import canonical_model, current_identity
 from app.core.utils import CamelModel
 
 
@@ -21,8 +22,25 @@ class DocumentRead(CamelModel):
     ingestion_status: str
     ingested_at: datetime | None
     error: str | None
+    chunk_count: int = 0
+    embedding_provider: str | None = None
+    embedding_model: str | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def needs_reindex(self) -> bool:
+        """Indexed with a provider/model other than the configured ones: retrieval would skip it."""
+        if self.ingestion_status != "ready":
+            return False
+        stored = (self.embedding_provider, canonical_model(self.embedding_model or ""))
+        return stored != current_identity()
+
+
+class IngestionQueued(CamelModel):
+    queued: int
+    document_ids: list[uuid.UUID]
 
 
 class DocumentPatch(CamelModel):

@@ -27,6 +27,16 @@ describe("documentsApi", () => {
     expect(progress).toHaveBeenCalledWith(25);
   });
 
+  it("queues ingestion of one document and reindexing of the stale or all documents", async () => {
+    vi.mocked(appApi.post).mockResolvedValue({ data: { id: "d1", queued: 2, documentIds: ["a", "b"] } });
+    await documentsApi.ingest("d1");
+    expect(appApi.post).toHaveBeenLastCalledWith("/documents/d1/ingest");
+    expect(await documentsApi.reindex()).toEqual({ id: "d1", queued: 2, documentIds: ["a", "b"] });
+    expect(appApi.post).toHaveBeenLastCalledWith("/documents/reindex", null, { params: {} });
+    await documentsApi.reindex(true);
+    expect(appApi.post).toHaveBeenLastCalledWith("/documents/reindex", null, { params: { all: true } });
+  });
+
   it("downloads through the API as a blob and saves it with the original filename", async () => {
     vi.mocked(appApi.get).mockResolvedValue({ data: new Blob(["x"]) });
     const create = vi.fn(() => "blob:1");

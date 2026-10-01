@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
-import { Download, Pencil, Trash2, Upload } from "lucide-react";
+import { Download, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/app/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,9 @@ import {
   INGESTION_STATUSES,
   INGESTION_STATUS_LABELS,
   INGESTION_STATUS_VARIANTS,
+  embeddingLabel,
   formatBytes,
+  pollInterval,
   statusOf,
   typeLabelOf,
 } from "./documentUtils";
@@ -56,7 +58,9 @@ export function DocumentsPage() {
   const search = searchBox.debounced.trim();
 
   const listParams = { page, perPage, search, fileType, ingestionStatus, sort: `${sort.sortBy}:${sort.sortOrder}` };
-  const query = useQuery({ queryKey: [QUERY_KEY, listParams], queryFn: () => documentsApi.list(listParams), placeholderData: keepPreviousData });
+  const query = useQuery({ queryKey: [QUERY_KEY, listParams], queryFn: () => documentsApi.list(listParams), placeholderData: keepPreviousData,
+    // Live status: keep refreshing while any document is being indexed.
+    refetchInterval: (current) => pollInterval(current.state.data?.items) });
   const items = query.data?.items ?? [];
 
   const changePage = (nextPage: number, nextSize = perPage) => setParams({ page: String(nextPage), size: String(nextSize) });
@@ -75,16 +79,27 @@ export function DocumentsPage() {
       catch (error) { toast.error(documentErrorMessage(error, "No se pudo eliminar el documento")); }
     },
   );
+  const reindex = async (item: DocumentItem) => {
+    try { await documentsApi.ingest(item.id); await refresh(); toast.success("Indexación en curso"); }
+    catch (error) { toast.error(documentErrorMessage(error, "No se pudo iniciar la indexación")); }
+  };
+  const reindexStale = async () => {
+    try {
+      const { queued } = await documentsApi.reindex();
+      await refresh();
+      toast.success(queued ? `Se reindexan ${queued} documento${queued === 1 ? "" : "s"}` : "No hay documentos para reindexar");
+    } catch (error) { toast.error(documentErrorMessage(error, "No se pudo iniciar la reindexación")); }
+  };
   const rename = async (item: DocumentItem, title: string) => {
     try { await documentsApi.rename(item.id, title); await refresh(); setRenaming(null); toast.success("Documento renombrado"); }
     catch (error) { toast.error(documentErrorMessage(error, "No se pudo renombrar el documento")); }
   };
 
   const columns = useMemo<ColumnDef<DocumentItem>[]>(() => {
-    const iconAction = (label: string, icon: React.ReactNode, onClick: () => void) => (
+    const iconAction = (label: string, icon: React.ReactNode, onClick: () => void, disabled = false) => (
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon" className="size-11" aria-label={label} onClick={onClick}>{icon}</Button>
+          <Button variant="ghost" size="icon" className="size-11" aria-label={label} onClick={onClick} disabled={disabled}>{icon}</Button>
         </TooltipTrigger>
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
@@ -97,12 +112,19 @@ export function DocumentsPage() {
       { accessorKey: "sizeBytes", header: ({ column }) => <DataTableColumnHeader column={column} title="Tamaño" align="center" />,
         cell: ({ row }) => <div className="text-center">{formatBytes(row.original.sizeBytes)}</div> },
       { accessorKey: "ingestionStatus", header: ({ column }) => <DataTableColumnHeader column={column} title="Ingesta" align="center" />,
-        cell: ({ row }) => { const state = statusOf(row.original.ingestionStatus);
-          return <div className="flex justify-center"><Badge variant={INGESTION_STATUS_VARIANTS[state]} title={row.original.error ?? undefined}>{INGESTION_STATUS_LABELS[state]}</Badge></div>; } },
+        cell: ({ row }) => { const item = row.original; const state = statusOf(item.ingestionStatus);
+          const label = embeddingLabel(item.embeddingProvider, item.embeddingModel);
+          return <div className="flex flex-col items-center gap-1">
+            <Badge variant={INGESTION_STATUS_VARIANTS[state]}>{INGESTION_STATUS_LABELS[state]}</Badge>
+            {state === "ready" && <div className="text-xs text-muted-foreground"><div>{item.chunkCount} fragmentos</div>{label && <div>{label}</div>}</div>}
+            {item.needsReindex && <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">Requiere reindexar</Badge>}
+            {state === "failed" && item.error && <div className="max-w-60 text-xs text-destructive">{item.error}</div>}
+          </div>; } },
       { accessorKey: "createdAt", header: ({ column }) => <DataTableColumnHeader column={column} title="Subido" align="center" />,
         cell: ({ row }) => <div className="text-center">{formatDateTime(row.original.createdAt)}</div> },
       { id: "actions", header: () => <CenteredHeader>Acciones</CenteredHeader>,
         cell: ({ row }) => <div className="flex justify-center gap-1">
+          {iconAction("Reindexar", <RefreshCw className="size-4" />, () => reindex(row.original), row.original.ingestionStatus === "processing")}
           {iconAction("Descargar", <Download className="size-4" />, () => download(row.original))}
           {iconAction("Renombrar", <Pencil className="size-4" />, () => setRenaming(row.original))}
           {iconAction("Eliminar", <Trash2 className="size-4" />, () => remove(row.original))}
@@ -129,6 +151,7 @@ export function DocumentsPage() {
         search={<ListSearchInput value={searchBox.value} onChange={(value) => { searchBox.setValue(value.slice(0, 64)); changePage(1); }} onClear={() => { searchBox.clear(); changePage(1); }} />}
         primaryActions={<>
           <ListFiltersTrigger open={filters.open} onOpenChange={filters.setOpen} hasActiveFilters={hasActiveFilters} />
+          <Button variant="outline" className="h-11" onClick={reindexStale}><RefreshCw data-icon="inline-start" />Reindexar desactualizados</Button>
           <Button className="h-11" onClick={() => setUploadOpen(true)}><Upload data-icon="inline-start" />Subir documento</Button>
         </>}
       />

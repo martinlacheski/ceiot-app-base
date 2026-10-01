@@ -13,20 +13,25 @@ import re
 import unicodedata
 import uuid
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.api.auth.models import User
 from app.api.document import constants
+from app.api.document.chunks import replace_chunks
+from app.api.document.ingestion import claim, run_batch, select_for_reindex
 from app.api.document.models import Document
-from app.api.document.schemas import DocumentPatch, DocumentRead
+from app.api.document.schemas import DocumentPatch, DocumentRead, IngestionQueued
+from app.core.db import system_session
 from app.core.dependencies import AuthedAsyncDBSession, get_current_user
+from app.core.embeddings import EmbeddingClient, current_identity, get_embedder, get_optional_embedder
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
 from app.core.sorting import parse_sort
 from app.core.storage import ObjectStorage, StorageUnavailable, get_storage
@@ -57,6 +62,29 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 
 router = APIRouter(dependencies=[Depends(require_admin)])
+
+
+@dataclass(frozen=True)
+class IngestionRuntime:
+    """How a background ingestion reaches the database (its own session, never the request's)."""
+
+    session_factory: object = system_session
+    write_chunks: object = replace_chunks
+
+
+def get_ingestion_runtime() -> IngestionRuntime:
+    return IngestionRuntime()
+
+
+def _schedule(background: BackgroundTasks, ids, storage, embedder, runtime: IngestionRuntime) -> None:
+    background.add_task(
+        run_batch,
+        list(ids),
+        session_factory=runtime.session_factory,
+        storage=storage,
+        embedder=embedder,
+        write_chunks=runtime.write_chunks,
+    )
 
 
 @contextmanager
@@ -129,8 +157,11 @@ async def inspect_upload(file: UploadFile, extension: str) -> tuple[str, int]:
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     session: AuthedAsyncDBSession,
+    background: BackgroundTasks,
     admin: User = Depends(require_admin),
     storage: ObjectStorage = Depends(get_storage),
+    embedder: EmbeddingClient | None = Depends(get_optional_embedder),
+    runtime: IngestionRuntime = Depends(get_ingestion_runtime),
     file: UploadFile = File(...),
     title: str | None = Form(None),
 ):
@@ -176,6 +207,9 @@ async def upload_document(
     except Exception:
         await _discard_object(storage, document.storage_key)
         raise
+    # Without embeddings the document simply stays `pending` until an admin ingests it.
+    if embedder is not None and await claim(session, document.id):
+        _schedule(background, [document.id], storage, embedder, runtime)
     await session.refresh(document)
     return document
 
@@ -235,6 +269,29 @@ async def list_documents(
     }
 
 
+@router.post("/reindex", response_model=IngestionQueued, status_code=status.HTTP_202_ACCEPTED)
+async def reindex_documents(
+    session: AuthedAsyncDBSession,
+    background: BackgroundTasks,
+    all_documents: bool = Query(False, alias="all"),
+    storage: ObjectStorage = Depends(get_storage),
+    embedder: EmbeddingClient = Depends(get_embedder),
+    runtime: IngestionRuntime = Depends(get_ingestion_runtime),
+):
+    """Re-embed documents whose chunks do not match the configured provider/model.
+
+    Without ``all`` only stale, failed and pending documents are queued; with
+    ``all=true`` every idle document is. Vectors of different providers are
+    never mixed: each document's chunks are replaced as a whole.
+    """
+    provider, model = current_identity()
+    candidates = await select_for_reindex(session, provider=provider, model=model, everything=all_documents)
+    queued = [document_id for document_id in candidates if await claim(session, document_id)]
+    if queued:
+        _schedule(background, queued, storage, embedder, runtime)
+    return IngestionQueued(queued=len(queued), document_ids=queued)
+
+
 async def _get_or_404(session: AuthedAsyncDBSession, document_id: uuid.UUID) -> Document:
     document = await session.get(Document, document_id)
     if document is None:
@@ -245,6 +302,23 @@ async def _get_or_404(session: AuthedAsyncDBSession, document_id: uuid.UUID) -> 
 @router.get("/{document_id}", response_model=DocumentRead)
 async def get_document(document_id: uuid.UUID, session: AuthedAsyncDBSession):
     return await _get_or_404(session, document_id)
+
+
+@router.post("/{document_id}/ingest", response_model=DocumentRead, status_code=status.HTTP_202_ACCEPTED)
+async def ingest_document(
+    document_id: uuid.UUID,
+    session: AuthedAsyncDBSession,
+    background: BackgroundTasks,
+    storage: ObjectStorage = Depends(get_storage),
+    embedder: EmbeddingClient = Depends(get_embedder),
+    runtime: IngestionRuntime = Depends(get_ingestion_runtime),
+):
+    document = await _get_or_404(session, document_id)
+    if not await claim(session, document_id):
+        raise HTTPException(status.HTTP_409_CONFLICT, "El documento ya se está procesando")
+    _schedule(background, [document_id], storage, embedder, runtime)
+    await session.refresh(document)
+    return document
 
 
 @router.get("/{document_id}/download")

@@ -6,6 +6,7 @@ from typing import AsyncIterator, BinaryIO
 import pytest
 
 from app.core.security import create_access_token
+from app.core.embeddings import get_optional_embedder
 from app.core.storage import StorageUnavailable, get_storage
 from app.main import app
 
@@ -47,6 +48,13 @@ def storage_fixture(client):
     app.dependency_overrides[get_storage] = lambda: storage
     yield storage
     app.dependency_overrides.pop(get_storage, None)
+
+
+@pytest.fixture(autouse=True)
+def _no_embeddings_by_default(client):
+    """Uploads stay `pending` unless a test provides embeddings (never reach a real provider)."""
+    app.dependency_overrides[get_optional_embedder] = lambda: None
+    yield
 
 
 def _headers(user):

@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_MAX_COMPLETION_TOKENS: int = 400
 
+    # Embeddings for RAG (BAAI/bge-m3, 1024 dimensions). ``openrouter`` reuses
+    # OPENROUTER_API_KEY/OPENROUTER_BASE_URL; ``local`` talks to a Text
+    # Embeddings Inference container (compose profile ``embeddings-local``) at
+    # EMBEDDING_LOCAL_URL and needs no key. Each stored chunk keeps the provider
+    # and model that produced it; switching either requires a re-index.
+    EMBEDDING_PROVIDER: Literal["openrouter", "local"] = "openrouter"
+    EMBEDDING_LOCAL_URL: str | None = None
+    MODELO_EMBEDDING: str = "BAAI/bge-m3"
+
+    # RAG retrieval. The cosine-distance cutoff is model specific: recalibrate
+    # it if MODELO_EMBEDDING changes (see backend/README.md).
+    RAG_MAX_COSINE_DISTANCE: float = 0.55
+    RAG_TOP_K: int = 4
+
     # MQTT Backoff Config (producción)
     MQTT_RETRY_INITIAL_DELAY: int = 1  # Segundos inicial
     MQTT_RETRY_MAX_DELAY: int = 60  # Máximo entre reintentos

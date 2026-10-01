@@ -12,6 +12,11 @@ export interface DocumentItem {
   ingestionStatus: string;
   ingestedAt: string | null;
   error: string | null;
+  chunkCount: number;
+  embeddingProvider: string | null;
+  embeddingModel: string | null;
+  /** Indexed with another provider/model than the configured ones: retrieval skips it until reindexed. */
+  needsReindex: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -31,6 +36,11 @@ export interface DocumentListParams {
   fileType?: string;
   ingestionStatus?: string;
   sort?: string;
+}
+
+export interface ReindexResult {
+  queued: number;
+  documentIds: string[];
 }
 
 /** The API answers `detail` in Spanish; fall back to a generic message. */
@@ -62,6 +72,18 @@ export const documentsApi = {
         if (onProgress && event.total) onProgress(Math.round((event.loaded / event.total) * 100));
       },
     });
+    return data;
+  },
+
+  /** Queues (re)indexing of one document; the server answers 202 with status "processing". */
+  async ingest(id: string): Promise<DocumentItem> {
+    const { data } = await appApi.post(`/documents/${id}/ingest`);
+    return data;
+  },
+
+  /** Queues the stale/failed/pending documents, or every document with `all`. */
+  async reindex(all = false): Promise<ReindexResult> {
+    const { data } = await appApi.post("/documents/reindex", null, { params: all ? { all: true } : {} });
     return data;
   },
 

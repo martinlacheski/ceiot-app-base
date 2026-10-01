@@ -23,6 +23,9 @@ services:
       # Object storage (SeaweedFS S3, internal network only).
       S3_ENDPOINT_URL: http://seaweedfs:8333
       S3_BUCKET: ceiot-documents
+      # Local embeddings (optional profile `embeddings-local`); only used when
+      # EMBEDDING_PROVIDER=local. Without the profile it is simply unreachable.
+      EMBEDDING_LOCAL_URL: http://embeddings:80
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
@@ -74,6 +77,9 @@ services:
       # Object storage (SeaweedFS S3, internal network only).
       S3_ENDPOINT_URL: http://seaweedfs:8333
       S3_BUCKET: ceiot-documents
+      # Local embeddings (optional profile `embeddings-local`); only used when
+      # EMBEDDING_PROVIDER=local. Without the profile it is simply unreachable.
+      EMBEDDING_LOCAL_URL: http://embeddings:80
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\

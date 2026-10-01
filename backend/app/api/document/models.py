@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, ForeignKey, Text, func
+from sqlalchemy import BigInteger, CheckConstraint, Column, DateTime, ForeignKey, Integer, Text, func
 from sqlmodel import Field, SQLModel
 
 
@@ -40,6 +40,11 @@ class Document(SQLModel, table=True):
     ingestion_status: str = Field(default="pending", max_length=16)
     ingested_at: datetime | None = Field(default=None, sa_column=Column(DateTime(timezone=True), nullable=True))
     error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # Provider/model that produced the current chunks (migration 0014). The chunks
+    # themselves live in `document_chunk`, which is migration-only (pgvector).
+    chunk_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
+    embedding_provider: str | None = Field(default=None, max_length=16)
+    embedding_model: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(
         default_factory=utc_now,
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now(), index=True),

@@ -108,6 +108,34 @@ En modo Mailpit el backend ignora host, puerto, credenciales y banderas SMTP ext
 
 El remitente SMTP siempre es `MAIL_FROM`; en contactos, el correo del visitante se configura sólo como `Reply-To`. Guardá los valores del operador manualmente en `backend/.env`. Para la landing local, agregá `http://localhost:14321` a `BACKEND_CORS_ORIGINS` y ajustá `BACKEND_TRUSTED_HOSTS` a los hosts realmente usados. El rate limit del contacto es local al proceso y `X-Forwarded-For` requiere una política de proxy confiable antes de producción.
 
+## RAG sobre documentos (administración)
+
+Los administradores suben PDF, TXT, MD y DOCX en `/admin/documents`. Al subirlos (o con
+**Reindexar**) cada archivo se descarga de SeaweedFS, se parte en fragmentos de ~1200 caracteres
+con solape de 150 (con página o sección de origen), se calculan los embeddings BAAI/bge-m3
+(1024 dimensiones) y se guardan en PostgreSQL con pgvector (`document_chunk`, índice HNSW).
+
+| Variable | Descripción |
+| --- | --- |
+| `EMBEDDING_PROVIDER` | `openrouter` (predeterminado, usa `OPENROUTER_API_KEY`) o `local`. |
+| `EMBEDDING_LOCAL_URL` | URL del servidor TEI; compose ya define `http://embeddings:80` (perfil `embeddings-local`, ver `embeddings/README.md`). |
+| `MODELO_EMBEDDING` | Modelo; predeterminado `BAAI/bge-m3` (OpenRouter: `baai/bge-m3`). |
+| `RAG_MAX_COSINE_DISTANCE` | Corte de distancia coseno; predeterminado `0.55`. Es específico del modelo: recalibrarlo si se cambia. |
+| `RAG_TOP_K` | Fragmentos por consulta; predeterminado `4`, máximo `8`. |
+
+Cada fragmento guarda el proveedor y el modelo que lo generó; la recuperación sólo usa los del
+proveedor y modelo **actuales**, así que cambiar de proveedor deja los documentos como
+"Requiere reindexar" hasta que un administrador use **Reindexar** (`POST /api/documents/reindex`;
+`?all=true` rehace todos). Sin claves o sin servidor local la ingesta y las consultas responden
+503 y el resto de la aplicación sigue funcionando.
+
+Consulta: `POST /api/assistant/rag` `{question, documentId?}` para cualquier usuario autenticado
+(los documentos activos son contenido corporativo cargado por administradores). Sin evidencia por
+debajo del corte responde "No encontré información en los documentos." sin llamar al modelo. La
+tabla `document_chunk` es sólo para administradores (RLS); la recuperación pasa por la función
+`rag_search` (SECURITY DEFINER), que únicamente devuelve fragmentos de documentos activos y
+listos del proveedor/modelo vigente.
+
 ## Testing
 
 Ejecutar la suite de pruebas:

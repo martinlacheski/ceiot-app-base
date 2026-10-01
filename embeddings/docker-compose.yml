@@ -1,0 +1,40 @@
+services:
+  # Local embeddings for RAG (profile "embeddings-local"; not part of the
+  # default stack). Hugging Face Text Embeddings Inference (CPU) serving
+  # BAAI/bge-m3 (1024 dimensions) with an OpenAI-compatible POST /v1/embeddings.
+  # Internal network only: no host port, nothing outside app-network reaches it.
+  # The backend uses it when EMBEDDING_PROVIDER=local (EMBEDDING_LOCAL_URL is
+  # already set to http://embeddings:80). The first start downloads ~2 GB of
+  # model files into the named volume; later starts reuse them.
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.3
+    profiles:
+      - embeddings-local
+    command:
+      - --model-id
+      - BAAI/bge-m3
+      - --port
+      - "80"
+      - --auto-truncate
+      - --max-client-batch-size
+      - "32"
+      # CPU-friendly sizing: the defaults (16384 batch tokens, one tokenizer
+      # worker per core) made the warm-up exceed memory and get OOM-killed.
+      - --max-batch-tokens
+      - "4096"
+      - --tokenization-workers
+      - "2"
+    volumes:
+      - embeddings-data:/data
+    healthcheck:
+      test: [CMD, curl, -fsS, "http://127.0.0.1:80/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  embeddings-data:

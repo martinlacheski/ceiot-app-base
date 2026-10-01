@@ -67,3 +67,18 @@ export const typeLabelOf = (filename: string): string => {
 
 export const statusOf = (value: string): IngestionStatus =>
   (INGESTION_STATUSES as readonly string[]).includes(value) ? (value as IngestionStatus) : "pending";
+
+export const POLL_INTERVAL_MS = 3000;
+
+/** Refetch interval for the list: only while some document is being indexed. */
+export const pollInterval = (items: ReadonlyArray<{ ingestionStatus: string }> | undefined): number | false =>
+  items?.some((item) => item.ingestionStatus === "processing") ? POLL_INTERVAL_MS : false;
+
+const EMBEDDING_PROVIDER_LABELS: Record<string, string> = { local: "Local", openrouter: "OpenRouter" };
+
+/** "Local · bge-m3": which provider/model produced a document's vectors. */
+export function embeddingLabel(provider: string | null, model: string | null): string | null {
+  if (!provider) return null;
+  const shortModel = (model ?? "").split("/").pop() || "—";
+  return `${EMBEDDING_PROVIDER_LABELS[provider] ?? provider} · ${shortModel}`;
+}

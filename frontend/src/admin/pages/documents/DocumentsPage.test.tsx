@@ -9,12 +9,13 @@ import { documentsApi, type DocumentItem } from "./documentsApi";
 
 vi.mock("./documentsApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./documentsApi")>()),
-  documentsApi: { list: vi.fn(), upload: vi.fn(), rename: vi.fn(), remove: vi.fn(), download: vi.fn() },
+  documentsApi: { list: vi.fn(), upload: vi.fn(), rename: vi.fn(), remove: vi.fn(), download: vi.fn(), ingest: vi.fn(), reindex: vi.fn() },
 }));
 
 const doc = (overrides: Partial<DocumentItem> = {}): DocumentItem => ({
   id: "d1", title: "Manual", filename: "manual.pdf", contentType: "application/pdf", sizeBytes: 1536,
   sha256: "a".repeat(64), uploadedBy: "u1", isActive: true, ingestionStatus: "pending", ingestedAt: null, error: null,
+  chunkCount: 0, embeddingProvider: null, embeddingModel: null, needsReindex: false,
   createdAt: "2026-10-01T12:00:00Z", updatedAt: "2026-10-01T12:00:00Z", ...overrides,
 });
 
@@ -37,10 +38,50 @@ describe("DocumentsPage", () => {
     expect(screen.getByText("PDF")).toBeInTheDocument();
     expect(screen.getByText("1,5 KB")).toBeInTheDocument();
     expect(screen.getByText("Pendiente")).toBeInTheDocument();
-    for (const name of ["Descargar", "Renombrar", "Eliminar"]) {
+    for (const name of ["Reindexar", "Descargar", "Renombrar", "Eliminar"]) {
       expect(screen.getByRole("button", { name })).toHaveClass("size-11");
     }
     expect(screen.getByRole("button", { name: "Subir documento" })).toHaveClass("h-11");
+  });
+
+  it("shows chunk count, embedding provider and the reindex warning", async () => {
+    vi.mocked(documentsApi.list).mockResolvedValue({
+      items: [
+        doc({ id: "a", title: "Listo", filename: "a.pdf", ingestionStatus: "ready", chunkCount: 12, embeddingProvider: "local", embeddingModel: "baai/bge-m3" }),
+        doc({ id: "b", title: "Viejo", filename: "b.pdf", ingestionStatus: "ready", chunkCount: 3, embeddingProvider: "openrouter", embeddingModel: "baai/bge-m3", needsReindex: true }),
+        doc({ id: "c", title: "Roto", filename: "c.pdf", ingestionStatus: "failed", error: "El PDF no contiene texto extraíble; no se aplica OCR." }),
+      ],
+      total: 3, page: 1, perPage: 10, pages: 1,
+    });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <TooltipProvider><MemoryRouter><DocumentsPage /></MemoryRouter></TooltipProvider></QueryClientProvider>);
+    expect(await screen.findByText("12 fragmentos")).toBeInTheDocument();
+    expect(screen.getByText("Local · bge-m3")).toBeInTheDocument();
+    expect(screen.getAllByText("Requiere reindexar")).toHaveLength(1);
+    expect(screen.getByText("El PDF no contiene texto extraíble; no se aplica OCR.")).toBeInTheDocument();
+  });
+
+  it("queues ingestion from the row action and refreshes", async () => {
+    vi.mocked(documentsApi.ingest).mockResolvedValue(doc({ ingestionStatus: "processing" }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Reindexar" }));
+    await waitFor(() => expect(documentsApi.ingest).toHaveBeenCalledWith("d1"));
+    await waitFor(() => expect(documentsApi.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("disables the row reindex while the document is processing", async () => {
+    vi.mocked(documentsApi.list).mockResolvedValue({ items: [doc({ ingestionStatus: "processing" })], total: 1, page: 1, perPage: 10, pages: 1 });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <TooltipProvider><MemoryRouter><DocumentsPage /></MemoryRouter></TooltipProvider></QueryClientProvider>);
+    expect(await screen.findByRole("button", { name: "Reindexar" })).toBeDisabled();
+  });
+
+  it("queues every stale document from the toolbar", async () => {
+    vi.mocked(documentsApi.reindex).mockResolvedValue({ queued: 2, documentIds: ["a", "b"] });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Reindexar desactualizados" }));
+    await waitFor(() => expect(documentsApi.reindex).toHaveBeenCalledWith());
+    await waitFor(() => expect(documentsApi.list).toHaveBeenCalledTimes(2));
   });
 
   it("requests the server with search, type and status filters and sort", async () => {

@@ -50,6 +50,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0011_add_document.py",
         "0012_ai_read_views.py",
         "0013_assistant_query_log.py",
+        "0014_rag_document_chunks.py",
     ]
 
 

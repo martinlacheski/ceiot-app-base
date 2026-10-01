@@ -18,6 +18,7 @@ class AssistantQueryLog(SQLModel, table=True):
     question: str = Field(sa_column=Column(Text, nullable=False))
     generated_sql: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     validated: bool = False
+    kind: str = Field(default="sql", max_length=16, sa_column_kwargs={"server_default": "sql"})
     error_code: str | None = Field(default=None, max_length=40)
     row_count: int | None = None
     duration_ms: int | None = None

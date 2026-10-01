@@ -183,6 +183,11 @@ def postgres_rls_config() -> PostgresRLSConfig:
                 "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "
                 f"{quoted_schema} TO {quoted_role}"
             )
+            # SECURITY DEFINER doors (rag_search): in production the application
+            # login owns them; this role stands in for it without BYPASSRLS.
+            connection.exec_driver_sql(
+                f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {quoted_schema} TO {quoted_role}"
+            )
             connection.exec_driver_sql(
                 f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {quoted_schema} "
                 f"TO {quoted_role}"

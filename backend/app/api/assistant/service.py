@@ -65,6 +65,7 @@ class AuditRecord:
     error_code: str | None
     row_count: int | None
     duration_ms: int
+    kind: str = "sql"
 
 
 class AuditSink(Protocol):
@@ -85,6 +86,7 @@ class DbAuditSink:
                 question=record.question,
                 generated_sql=record.generated_sql,
                 validated=record.validated,
+                kind=record.kind,
                 error_code=record.error_code,
                 row_count=record.row_count,
                 duration_ms=record.duration_ms,

@@ -8,6 +8,7 @@ from app.api.router import router as api_router
 from app.core.config import settings
 from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
+from app.core.embeddings import close_embeddings
 from app.core.llm import close_llm
 from app.core.redis import close_redis
 
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 
     mqtt_client.stop()
     await close_llm()
+    await close_embeddings()
     await close_redis()
 
 

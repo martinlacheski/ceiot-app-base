@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "pgadmin", "redis", "redisinsight", "seaweedfs", "timescaledb")
+COMPONENTS = ("backend", "embeddings", "frontend", "landing", "mailpit", "mqtt", "pgadmin", "redis", "redisinsight", "seaweedfs", "timescaledb")
 
 DUMMY_ENV = {
     "backend": """\
@@ -40,6 +40,7 @@ PUBLIC_API_BASE_URL=http://localhost:18001/api
 PUBLIC_GCP_MAPS_API_KEY=dummy-map-key
 PUBLIC_MAP_LOCATIONS_URL=/map-locations.json
 """,
+    "embeddings": "",
     "mailpit": "",
     "pgadmin": "",
     "redis": "",
@@ -327,6 +328,32 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertEqual(env["PGADMIN_DB_USER"], "dummy_user")
         self.assertEqual(env["PGADMIN_SERVER_JSON_FILE"], "/tmp/servers.json")
         self.assertNotIn("RI_REDIS_HOST", services["redisinsight"].get("environment", {}))
+
+    def test_embeddings_local_profile_adds_an_internal_pinned_tei_service(self):
+        default = self.render_config()["services"]
+        self.assertNotIn("embeddings", default)
+        # The backend knows where the local server would be, but never waits for it.
+        for name in ("backend", "mqtt-runtime"):
+            self.assertEqual(default[name]["environment"]["EMBEDDING_LOCAL_URL"], "http://embeddings:80")
+            self.assertNotIn("embeddings", default[name]["depends_on"])
+
+        config = self.render_config(profile="embeddings-local")
+        service = config["services"]["embeddings"]
+        self.assertTrue(
+            service["image"].startswith("ghcr.io/huggingface/text-embeddings-inference:cpu-"), service["image"]
+        )
+        self.assertNotIn(":latest", service["image"])
+        self.assertNotRegex(service["image"], r":cpu-?$")
+        self.assertEqual(service["command"][:2], ["--model-id", "BAAI/bge-m3"])
+        self.assertNotIn("ports", service)  # internal network only
+        self.assertEqual(set(service["networks"]), {"app-network"})
+        self.assertIn("healthcheck", service)
+        self.assertNotIn("container_name", service)
+        self.assertNotIn("labels", service)
+        cache = [m for m in service["volumes"] if m["target"] == "/data"]
+        self.assertEqual(len(cache), 1)
+        self.assertEqual(cache[0]["type"], "volume")  # model cache survives recreation
+        self.assertIn("embeddings-data", config["volumes"])
 
     def test_tools_ports_can_be_overridden(self):
         services = self.render_config(

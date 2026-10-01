@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_DOCUMENT_BYTES, fileExtension, formatBytes, statusOf, typeLabelOf, validateDocumentFile } from "./documentUtils";
+import { MAX_DOCUMENT_BYTES, POLL_INTERVAL_MS, embeddingLabel, fileExtension, formatBytes, pollInterval, statusOf, typeLabelOf, validateDocumentFile } from "./documentUtils";
 
 describe("validateDocumentFile", () => {
   it("accepts PDF, TXT, MD and DOCX regardless of case", () => {
@@ -11,6 +11,24 @@ describe("validateDocumentFile", () => {
     expect(validateDocumentFile({ name: "a.txt", size: 0 })).toMatch(/vacío/);
     expect(validateDocumentFile({ name: "a.txt", size: MAX_DOCUMENT_BYTES })).toBeNull();
     expect(validateDocumentFile({ name: "a.txt", size: MAX_DOCUMENT_BYTES + 1 })).toMatch(/20 MB/);
+  });
+});
+
+describe("embedding labels", () => {
+  it("names providers and models for the ingestion column", () => {
+    expect(embeddingLabel("local", "baai/bge-m3")).toBe("Local · bge-m3");
+    expect(embeddingLabel("openrouter", "baai/bge-m3")).toBe("OpenRouter · bge-m3");
+    expect(embeddingLabel(null, null)).toBeNull();
+    expect(embeddingLabel("custom", "x/y")).toBe("custom · y");
+  });
+});
+
+describe("pollInterval", () => {
+  it("polls only while some document is being processed", () => {
+    expect(pollInterval([{ ingestionStatus: "ready" }, { ingestionStatus: "processing" }])).toBe(POLL_INTERVAL_MS);
+    expect(pollInterval([{ ingestionStatus: "ready" }, { ingestionStatus: "failed" }, { ingestionStatus: "pending" }])).toBe(false);
+    expect(pollInterval([])).toBe(false);
+    expect(pollInterval(undefined)).toBe(false);
   });
 });
 
