@@ -7,7 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   // Droplet,
-  // FileText,
+  FileText,
   LayoutDashboard,
   LockKeyhole,
   LogOut,
@@ -101,6 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 { icon: Gauge, label: "Variables", to: "/admin/variables" },
               ]
             : []),
+          { icon: FileText, label: "Documentos", to: "/admin/documents" },
           { icon: Users, label: "Usuarios", to: "/admin/users" },
         ]
       : [

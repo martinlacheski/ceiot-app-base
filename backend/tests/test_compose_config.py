@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "redis", "timescaledb")
+COMPONENTS = ("backend", "frontend", "landing", "mailpit", "mqtt", "redis", "seaweedfs", "timescaledb")
 
 DUMMY_ENV = {
     "backend": """\
@@ -42,6 +42,8 @@ PUBLIC_MAP_LOCATIONS_URL=/map-locations.json
 """,
     "mailpit": "",
     "redis": "",
+    # Intentionally no S3 credentials: the stack must render and start without them.
+    "seaweedfs": "",
     "mqtt": """\
 MQTT_LISTENER_TCP=11884
 MQTT_LISTENER_TLS=18884
@@ -125,11 +127,20 @@ class ComposeConfigTest(unittest.TestCase):
             raise AssertionError(f"expected one publication for container port {target}")
         return matches[0]
 
-    def test_root_include_renders_seven_services_on_one_private_network(self):
+    def test_root_include_renders_eight_services_on_one_private_network(self):
         config = self.render_config()
         self.assertEqual(
             set(config["services"]),
-            {"backend", "mqtt-runtime", "frontend", "landing", "emqx", "postgresql", "redis"},
+            {
+                "backend",
+                "mqtt-runtime",
+                "frontend",
+                "landing",
+                "emqx",
+                "postgresql",
+                "redis",
+                "seaweedfs",
+            },
         )
         self.assertEqual(set(config["networks"]), {"app-network"})
         self.assertNotIn("external", config["networks"]["app-network"])
@@ -214,6 +225,47 @@ class ComposeConfigTest(unittest.TestCase):
             service = services[name]
             self.assertEqual(service["environment"]["REDIS_URL"], "redis://redis:6379/0")
             self.assertIn("redis", service["depends_on"])
+
+    def test_seaweedfs_is_internal_only_persistent_and_optional_for_the_backend(self):
+        services = self.render_config()["services"]
+        seaweedfs = services["seaweedfs"]
+
+        self.assertTrue(seaweedfs["image"].startswith("chrislusf/seaweedfs:"))
+        self.assertNotEqual(seaweedfs["image"].split(":")[-1], "latest")
+        # Internal network only: the browser never talks to object storage.
+        self.assertNotIn("ports", seaweedfs)
+        self.assertIn("healthcheck", seaweedfs)
+        self.assertEqual(seaweedfs["entrypoint"], ["/usr/local/bin/seaweedfs-entrypoint.sh"])
+        self.assertEqual(seaweedfs["command"][0], "server")
+        self.assertIn("-s3", seaweedfs["command"])
+        data_mounts = [m for m in seaweedfs["volumes"] if m["target"] == "/data"]
+        self.assertEqual(len(data_mounts), 1)
+        self.assertEqual(data_mounts[0]["type"], "bind")
+        self.assertTrue(data_mounts[0]["source"].endswith("/seaweedfs/data"))
+
+        for name in ("backend", "mqtt-runtime"):
+            environment = services[name]["environment"]
+            self.assertEqual(environment["S3_ENDPOINT_URL"], "http://seaweedfs:8333")
+            self.assertEqual(environment["S3_BUCKET"], "ceiot-documents")
+            # Credentials are optional: the stack must not hard-fail without them,
+            # and the backend must not wait for (or require) the storage service.
+            self.assertNotIn("seaweedfs", services[name]["depends_on"])
+
+    def test_s3_credentials_come_from_the_optional_seaweedfs_env_file(self):
+        (self.project / "seaweedfs" / ".env").write_text(
+            "S3_ACCESS_KEY=dummy-access\nS3_SECRET_KEY=dummy-secret\n", encoding="utf-8"
+        )
+        services = self.render_config()["services"]
+        for name in ("seaweedfs", "backend", "mqtt-runtime"):
+            self.assertIn("S3_ACCESS_KEY", services[name]["environment"], name)
+            self.assertEqual(services[name]["environment"]["S3_ACCESS_KEY"], "dummy-access")
+            self.assertEqual(services[name]["environment"]["S3_SECRET_KEY"], "dummy-secret")
+
+    def test_stack_renders_without_a_seaweedfs_env_file(self):
+        (self.project / "seaweedfs" / ".env").unlink()
+        services = self.render_config()["services"]
+        for name in ("seaweedfs", "backend", "mqtt-runtime"):
+            self.assertNotIn("S3_SECRET_KEY", services[name].get("environment", {}), name)
 
     def test_mailpit_profile_is_optional_and_transport_is_explicit(self):
         default_services = self.render_config()["services"]

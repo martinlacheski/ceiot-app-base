@@ -23,6 +23,8 @@ include:
       - mqtt/.env
   - path: redis/docker-compose.yml
     project_directory: redis
+  - path: seaweedfs/docker-compose.yml
+    project_directory: seaweedfs
   - path: timescaledb/docker-compose.yml
     project_directory: timescaledb
     env_file:

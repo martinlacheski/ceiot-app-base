@@ -1,0 +1,31 @@
+services:
+  # Object storage for the admin documents corpus (the future RAG source).
+  # Single process (master + volume + filer + S3 gateway). Internal network
+  # only: nothing is published to the host, and the browser never talks to it;
+  # the backend streams files through its own authenticated API.
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    restart: unless-stopped
+    # The wrapper renders the S3 identities from S3_ACCESS_KEY / S3_SECRET_KEY
+    # and refuses to serve (idles, unhealthy) when they are missing. Compose
+    # drops the image CMD when only `entrypoint:` is overridden, so it is
+    # spelled out here (same reason as mqtt/docker-compose.yml).
+    entrypoint: ["/usr/local/bin/seaweedfs-entrypoint.sh"]
+    command: ["server", "-filer", "-s3", "-s3.config=/etc/seaweedfs/s3.json"]
+    env_file:
+      # Optional: the stack must start before the user creates seaweedfs/.env.
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/data
+      - ./docker-entrypoint-wrapper.sh:/usr/local/bin/seaweedfs-entrypoint.sh:ro
+    healthcheck:
+      # Master liveness; the wrapper's idle mode never opens this port, so a
+      # missing-credentials start reports unhealthy instead of silently up.
+      test: [CMD, wget, -q, -O, /dev/null, "http://127.0.0.1:9333/cluster/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - app-network

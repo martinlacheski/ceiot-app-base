@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env
+      # Optional S3 credentials (S3_ACCESS_KEY / S3_SECRET_KEY) shared with the
+      # seaweedfs service. Absent means document storage is disabled (503).
+      - path: ../seaweedfs/.env
+        required: false
     environment:
       MQTT_CLIENT_ID: Backend-Admin
       # EMQX built-in-database user shared by backend + mqtt-runtime (see
@@ -16,6 +20,9 @@ services:
       # Optional live layer (no password: internal network only). The app
       # keeps working without Redis; see app/core/redis.py.
       REDIS_URL: redis://redis:6379/0
+      # Object storage (SeaweedFS S3, internal network only).
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_BUCKET: ceiot-documents
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
@@ -52,6 +59,10 @@ services:
     command: ["uvicorn", "app.main_runtime:app", "--host", "0.0.0.0", "--port", "8000"]
     env_file:
       - .env
+      # Optional S3 credentials (S3_ACCESS_KEY / S3_SECRET_KEY) shared with the
+      # seaweedfs service. Absent means document storage is disabled (503).
+      - path: ../seaweedfs/.env
+        required: false
     environment:
       MQTT_CLIENT_ID: Backend-Runtime
       EMQX_USER: backend-services
@@ -60,6 +71,9 @@ services:
       # Optional live layer (no password: internal network only). The app
       # keeps working without Redis; see app/core/redis.py.
       REDIS_URL: redis://redis:6379/0
+      # Object storage (SeaweedFS S3, internal network only).
+      S3_ENDPOINT_URL: http://seaweedfs:8333
+      S3_BUCKET: ceiot-documents
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\

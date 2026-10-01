@@ -57,6 +57,7 @@ import { CreateEnvironmentTypePage } from "@/admin/pages/settings/environment/Cr
 import { EditEnvironmentTypePage } from "@/admin/pages/settings/environment/EditEnvironmentTypePage";
 import { CatalogListPage } from "@/admin/pages/sensorCatalog/CatalogListPage";
 import { CatalogFormPage } from "@/admin/pages/sensorCatalog/CatalogFormPage";
+import { DocumentsPage } from "@/admin/pages/documents/DocumentsPage";
 import { CatalogPermissionRoute } from "./routes/CatalogPermissionRoute";
 import EmulatorPage from "@/admin/pages/emulator/EmulatorPage";
 
@@ -204,6 +205,7 @@ export const appRouter = createBrowserRouter([
       { path: "sensors", element: <CatalogPermissionRoute permission="sensor_catalog:read"><CatalogListPage kind="sensors" /></CatalogPermissionRoute> },
       { path: "sensors/create", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="sensors" /></CatalogPermissionRoute> },
       { path: "sensors/edit/:id", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="sensors" /></CatalogPermissionRoute> },
+      { path: "documents", element: <DocumentsPage /> },
       { path: "variables", element: <CatalogPermissionRoute permission="sensor_catalog:read"><CatalogListPage kind="variables" /></CatalogPermissionRoute> },
       { path: "variables/create", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="variables" /></CatalogPermissionRoute> },
       { path: "variables/edit/:id", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="variables" /></CatalogPermissionRoute> },

@@ -10,6 +10,7 @@ from app.api.auth.models import User  # noqa: F401
 from app.api.device.device_type.models import DeviceTypeCatalog  # noqa: F401
 from app.api.device.models import Device, DeviceLocationReport  # noqa: F401
 from app.api.device.operations.models import DeviceOperation  # noqa: F401
+from app.api.document.models import Document  # noqa: F401
 from app.api.environment.environment.models import Environment, EnvironmentUser  # noqa: F401
 from app.api.environment.environment_type.models import EnvironmentType  # noqa: F401
 from app.api.environment.invitation.models import EnvironmentInvitation  # noqa: F401

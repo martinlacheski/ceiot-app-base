@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     # means the app degrades to database reads and no live pulse.
     REDIS_URL: str | None = None
 
+    # Object storage (SeaweedFS S3 gateway, internal network only). Without
+    # the keys the documents module answers 503 "Almacenamiento no configurado".
+    S3_ENDPOINT_URL: str | None = None
+    S3_BUCKET: str = "ceiot-documents"
+    S3_REGION: str = "us-east-1"
+    S3_ACCESS_KEY: SecretStr | None = None
+    S3_SECRET_KEY: SecretStr | None = None
+
     # MQTT Backoff Config (producción)
     MQTT_RETRY_INITIAL_DELAY: int = 1  # Segundos inicial
     MQTT_RETRY_MAX_DELAY: int = 60  # Máximo entre reintentos

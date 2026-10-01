@@ -140,6 +140,10 @@ describe("Sidebar", () => {
       "/app/devices",
     );
     expect(within(navigation).getByRole("link", { name: "Historial de dispositivos" })).toHaveAttribute("href", "/app/devices/history");
+    expect(within(navigation).getByRole("link", { name: "Documentos" })).toHaveAttribute(
+      "href",
+      "/admin/documents",
+    );
     expect(within(navigation).getByRole("link", { name: "Usuarios" })).toHaveAttribute(
       "href",
       "/admin/users",
@@ -148,7 +152,7 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 9)).toEqual([
+    expect(links.slice(0, 10)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
@@ -157,6 +161,7 @@ describe("Sidebar", () => {
       expect.stringContaining("Emulador"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
+      expect.stringContaining("Documentos"),
       expect.stringContaining("Usuarios"),
     ]);
     expect(screen.queryByRole("link", { name: "Generales" })).not.toBeInTheDocument();
