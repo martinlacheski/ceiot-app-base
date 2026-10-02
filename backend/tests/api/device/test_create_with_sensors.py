@@ -16,12 +16,13 @@ from app.api.sensor_catalog.models import DeviceSensor, Sensor
 from app.core.security import create_access_token
 
 
-def test_create_sensors_defaults_and_ambient_rule(client, session, test_user):
+def test_create_sensors_defaults_and_ambient_rule(client, session, test_user, make_ambient):
     test_user.permissions = [*test_user.permissions, DevicePermissions.CREATE, "device_sensor:write"]
-    session.add_all([test_user, DeviceTypeCatalog(id=DEFAULT_DEVICE_TYPE_ID, code="environmental", name="Ambiental")])
+    session.add(test_user)
     model = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
     session.add(model)
     session.commit()
+    make_ambient(model)
     token, _ = create_access_token({"id": str(test_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
     base = {"serial": "IOT-0000-0041", "name": "Ambiental", "deviceTypeId": str(DEFAULT_DEVICE_TYPE_ID)}
@@ -37,13 +38,14 @@ def test_create_sensors_defaults_and_ambient_rule(client, session, test_user):
     assert {row.key for row in rows} == {"dht22", "dht22_2"}
 
 
-def test_invalid_sensor_and_duplicate_key_do_not_create_device(client, session, test_user):
+def test_invalid_sensor_and_duplicate_key_do_not_create_device(client, session, test_user, make_ambient):
     test_user.permissions = [*test_user.permissions, DevicePermissions.CREATE, "device_sensor:write"]
-    session.add_all([test_user, DeviceTypeCatalog(id=DEFAULT_DEVICE_TYPE_ID, code="environmental", name="Ambiental")])
+    session.add(test_user)
     model = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
     inactive = Sensor(code="old", name="Old", manufacturer="Aosong", is_active=False)
     session.add_all([model, inactive])
     session.commit()
+    make_ambient(model, inactive)
     token, _ = create_access_token({"id": str(test_user.id)})
     headers = {"Authorization": f"Bearer {token}"}
     for serial, sensors in [

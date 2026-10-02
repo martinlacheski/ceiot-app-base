@@ -172,6 +172,36 @@ def admin_user_fixture(session: Session):
     return user
 
 
+@pytest.fixture(name="make_ambient")
+def make_ambient_fixture(session: Session):
+    """Seed the default Ambiental type with its compatible sensors (the migration seed, for SQLite tests)."""
+    from app.api.device.device_type.constants import DEFAULT_DEVICE_TYPE_ID
+    from app.api.device.device_type.models import DeviceTypeCatalog, DeviceTypeSensor
+
+    def _make(*sensors, min_sensors: int = 1, max_count: int = 2, defaults: tuple = ()):
+        device_type = session.get(DeviceTypeCatalog, DEFAULT_DEVICE_TYPE_ID)
+        if device_type is None:
+            device_type = DeviceTypeCatalog(
+                id=DEFAULT_DEVICE_TYPE_ID, code="environmental", name="Ambiental"
+            )
+        device_type.min_sensors = min_sensors
+        session.add(device_type)
+        session.flush()
+        for sensor in sensors:
+            session.add(
+                DeviceTypeSensor(
+                    device_type_id=device_type.id,
+                    sensor_id=sensor.id,
+                    max_count=max_count,
+                    included_by_default=sensor in defaults,
+                )
+            )
+        session.commit()
+        return device_type
+
+    return _make
+
+
 @pytest.fixture(name="token")
 def token_fixture(client: TestClient, test_user: User):
     response = client.post(

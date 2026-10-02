@@ -12,6 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from app.api.access.repository import GuestAccessRepository
 from app.api.access.service import GuestAccessService
 from app.api.auth.models import User
+from app.api.device.device_type.models import DeviceTypeCatalog
+from app.api.device.device_type.rules import check_new_installation
+from app.api.device.models import Device
 from app.api.sensor.models import Telemetry
 from app.api.sensor_catalog.models import DeviceSensor, Sensor, SensorVariable, Variable
 from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permissions
@@ -322,6 +325,15 @@ async def _authorize(device_id: uuid.UUID, session: AuthedAsyncDBSession,
     return context
 
 
+async def _check_type_rules(session, device_id: uuid.UUID, sensor: Sensor) -> None:
+    """The device type decides which sensor models, and how many of each, a device accepts."""
+    device = await session.get(Device, device_id)
+    if device is None:
+        raise HTTPException(404, 'Device not found')
+    await check_new_installation(session, await session.get(DeviceTypeCatalog, device.device_type_id),
+                                 device_id, sensor)
+
+
 async def _installed(session, device_id):
     rows = (await session.execute(select(DeviceSensor).where(DeviceSensor.device_id == device_id)
         .order_by(DeviceSensor.key))).scalars().all()
@@ -345,6 +357,7 @@ async def create_device_sensor(device_id: uuid.UUID, body: DeviceSensorCreate,
     sensor = await session.get(Sensor, body.sensor_id)
     if sensor is None or not sensor.is_active:
         raise HTTPException(404, 'Sensor model not found')
+    await _check_type_rules(session, device_id, sensor)
     keys = {row.key for row in await _installed(session, device_id)}
     key = body.key if body.key is not None else next_sensor_key(sensor.code, keys)
     if key in keys:
@@ -377,6 +390,10 @@ async def patch_device_sensor(device_id: uuid.UUID, id: uuid.UUID, body: DeviceS
         raise HTTPException(422, 'config cannot be null')
     if changes.get('is_active') is None and 'is_active' in changes:
         raise HTTPException(422, 'isActive cannot be null')
+    if changes.get('is_active') is True and not row.is_active:
+        # Re-activating an installation counts against the type's per-model maximum again.
+        reactivated = await session.get(Sensor, row.sensor_id)
+        await _check_type_rules(session, device_id, reactivated)
     if 'key' in changes and changes['key'] != row.key:
         if changes['key'] in {other.key for other in await _installed(session, device_id)}:
             raise HTTPException(409, 'Sensor key already exists on this device')

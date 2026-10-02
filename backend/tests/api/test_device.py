@@ -131,7 +131,7 @@ def _create_pairing_environment(session: Session, owner: User) -> Environment:
     return environment
 
 
-def test_create_device_admin(client: TestClient, admin_token: str, session: Session):
+def test_create_device_admin(client: TestClient, admin_token: str, session: Session, make_ambient):
     headers = {"Authorization": f"Bearer {admin_token}"}
     serial = DeviceService.generate_serial()
 
@@ -140,6 +140,7 @@ def test_create_device_admin(client: TestClient, admin_token: str, session: Sess
     session.add(sensor)
     session.commit()
     session.refresh(sensor)
+    make_ambient(sensor)
 
     data = {
         "serial": serial,
@@ -300,7 +301,7 @@ def test_uniqueness_check(client: TestClient, admin_token: str, session: Session
     assert r2.status_code == 409
 
 
-def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token: str, session: Session):
+def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token: str, session: Session, make_ambient):
     headers = {"Authorization": f"Bearer {admin_token}"}
 
     # POST /api/devices requires >=1 sensor for the Ambiental default type.
@@ -308,6 +309,7 @@ def test_list_devices_filters_by_device_type_id(client: TestClient, admin_token:
     session.add(sensor)
     session.commit()
     session.refresh(sensor)
+    make_ambient(sensor)
 
     default_response = client.post(
         "/api/devices",

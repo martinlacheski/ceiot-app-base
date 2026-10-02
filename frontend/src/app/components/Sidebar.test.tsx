@@ -20,6 +20,7 @@ describe("Sidebar", () => {
     // Visible without opening "Ajustes": they are root entries of the sidebar.
     expect(screen.getByRole("link", { name: "Sensores" })).toHaveAttribute("href", "/admin/sensors");
     expect(screen.getByRole("link", { name: "Variables" })).toHaveAttribute("href", "/admin/variables");
+    expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toHaveAttribute("href", "/admin/device-types");
   });
 
   it("pone Mapa inmediatamente después de Inicio para un usuario común", () => {
@@ -152,7 +153,7 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 10)).toEqual([
+    expect(links.slice(0, 11)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
@@ -161,6 +162,7 @@ describe("Sidebar", () => {
       expect.stringContaining("Emulador"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
+      expect.stringContaining("Tipos de dispositivo"),
       expect.stringContaining("Documentos"),
       expect.stringContaining("Usuarios"),
     ]);

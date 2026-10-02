@@ -96,7 +96,7 @@ export default function EditDevicePage({
         initialData={device}
         isLoading={saveMutation.isPending}
         extraContent={<div className="space-y-4">
-          {id && (user?.isAdmin || user?.permissions?.includes("device_sensor:write")) && <DeviceSensorsSection deviceId={id} canManage={Boolean(canManageGuests)} />}
+          {id && (user?.isAdmin || user?.permissions?.includes("device_sensor:write")) && <DeviceSensorsSection deviceId={id} canManage={Boolean(canManageGuests)} deviceTypeId={device?.deviceTypeId} />}
           {id && canManageGuests ? (
             <DeviceGuestManagementCard
               deviceId={id}

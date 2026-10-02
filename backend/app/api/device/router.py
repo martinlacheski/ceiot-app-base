@@ -12,8 +12,6 @@ from app.api.device.models import (
     DeviceUpdate,
 )
 from app.api.device.repository import DeviceRepository, DeviceStateChangedError
-from app.api.device.device_type.repository import DeviceTypeRepository
-from app.api.device.device_type.constants import DEFAULT_DEVICE_TYPE_CODE
 from app.api.device.service import DeviceService
 from app.api.device.permissions import DevicePermissions, DEVICES_PERMISSIONS
 from app.api.access.repository import GuestAccessRepository
@@ -329,25 +327,13 @@ async def create_device(
             detail=f"Device with serial {device_in.serial} already exists."
         )
 
-    # 2b. Manual registration policy: an Ambiental device must be registered
-    # with at least one sensor. This is a POST /api/devices-only rule (not a
-    # repository invariant): provisioning, pairing and other internal
-    # creation paths legitimately create sensorless devices and add sensors
-    # later.
-    if not device_in.sensors:
-        resolved_type = await DeviceTypeRepository(session).resolve_catalog_type(
-            device_type_id=device_in.device_type_id,
-            require_active=True,
-        )
-        if resolved_type is not None and resolved_type.code == DEFAULT_DEVICE_TYPE_CODE:
-            raise HTTPException(
-                status_code=422,
-                detail="Agregá al menos un sensor para un dispositivo Ambiental",
-            )
-
-    # 3. Create
+    # 3. Create. Manual registration enforces the type's data-driven sensor rules
+    # (min_sensors, required kit, compatibility, per-model maximum). This is a
+    # POST /api/devices-only policy (not a repository invariant): provisioning,
+    # pairing and other internal creation paths legitimately create sensorless
+    # devices and add sensors later.
     try:
-        return await repo.create_with_data(device_in)
+        return await repo.create_with_data(device_in, enforce_minimum=True)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

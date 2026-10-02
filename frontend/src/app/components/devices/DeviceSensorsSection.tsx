@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { Plus, Trash2 } from "lucide-react";
 
+import { deviceService } from "@/app/services/device.service";
 import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { Button } from "@/components/ui/button";
@@ -13,11 +14,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { showConfirmDialog } from "@/store/confirm.store";
 import { getSensorInstallationStatusLabel } from "@/utils/status-labels";
 
-interface DeviceSensorsSectionProps { deviceId: string; canManage: boolean }
+interface DeviceSensorsSectionProps { deviceId: string; canManage: boolean; deviceTypeId?: string }
+
+function serverMessage(error: unknown, fallback: string): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  return typeof detail === "string" ? detail : fallback;
+}
 
 const rangeFormatter = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
-export function DeviceSensorsSection({ deviceId, canManage }: DeviceSensorsSectionProps) {
+export function DeviceSensorsSection({ deviceId, canManage, deviceTypeId }: DeviceSensorsSectionProps) {
   const { user } = useAuthStore();
   const permissions = user?.permissions ?? [];
   const canRead = user?.isAdmin || permissions.includes("device_sensor:read");
@@ -30,8 +36,15 @@ export function DeviceSensorsSection({ deviceId, canManage }: DeviceSensorsSecti
   const [error, setError] = useState("");
   const { data: catalog = [], isLoading: catalogLoading, isError: catalogError } = useQuery({ queryKey: ["sensor-catalog", "sensors"], queryFn: environmentalSensorService.getCatalog, enabled: Boolean(canReadCatalog) });
   const { data: installed = [], isLoading, isError } = useQuery({ queryKey: ["device-sensors", deviceId], queryFn: () => environmentalSensorService.getDeviceSensors(deviceId), enabled: Boolean(canRead && deviceId) });
+  // The device type decides which models are compatible and how many of each are allowed.
+  const { data: types } = useQuery({ queryKey: ["devices", "types"], queryFn: () => deviceService.getTypes(), enabled: Boolean(deviceTypeId), staleTime: 1000 * 60 * 60 });
+  const typeLinks = deviceTypeId ? types?.items.find((type) => type.id === deviceTypeId)?.sensors : undefined;
+  const installedCount = (sensorId: string) => installed.filter((sensor) => sensor.isActive && sensor.sensorId === sensorId).length;
+  const modelOptions = typeLinks
+    ? catalog.filter((model) => { const link = typeLinks.find((entry) => entry.sensorId === model.id && entry.isActive); return Boolean(link) && installedCount(model.id) < link!.maxCount; })
+    : catalog;
   const invalidate = () => { queryClient.invalidateQueries({ queryKey: ["device-sensors", deviceId] }); setError(""); };
-  const add = useMutation({ mutationFn: (payload: { sensorId: string; config: Record<string, unknown> }) => environmentalSensorService.addDeviceSensor(deviceId, payload), onSuccess: invalidate, onError: () => setError("No se pudo agregar el sensor.") });
+  const add = useMutation({ mutationFn: (payload: { sensorId: string; config: Record<string, unknown> }) => environmentalSensorService.addDeviceSensor(deviceId, payload), onSuccess: invalidate, onError: (error) => setError(serverMessage(error, "No se pudo agregar el sensor.")) });
   const update = useMutation({ mutationFn: ({ id, config }: { id: string; config: Record<string, unknown> }) => environmentalSensorService.updateDeviceSensor(deviceId, id, { config }), onSuccess: () => { invalidate(); setEditId(null); }, onError: () => setError("No se pudo actualizar la configuración del sensor.") });
   const remove = useMutation({ mutationFn: (id: string) => environmentalSensorService.removeDeviceSensor(deviceId, id), onSuccess: invalidate, onError: () => setError("No se pudo quitar el sensor.") });
 
@@ -57,7 +70,7 @@ export function DeviceSensorsSection({ deviceId, canManage }: DeviceSensorsSecti
       </div>
       {canWrite && canReadCatalog && <select aria-label="Modelo de sensor" className="min-h-11 w-full max-w-sm rounded-md border border-input bg-background px-3 text-sm" value={modelId} onChange={(event) => setModelId(event.target.value)} disabled={catalogLoading || catalogError}>
         <option value="">Seleccionar modelo</option>
-        {catalog.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+        {modelOptions.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
       </select>}
       {isError ? <p role="alert" className="text-sm text-destructive">No se pudieron cargar los sensores.</p> : <Table className="min-w-[720px]">
         <TableHeader><TableRow><TableHead>Sensor</TableHead><TableHead>Variables</TableHead><TableHead>Instalado</TableHead><TableHead><CenteredHeader>Acciones</CenteredHeader></TableHead></TableRow></TableHeader>

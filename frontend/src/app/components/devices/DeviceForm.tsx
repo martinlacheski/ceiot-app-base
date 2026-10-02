@@ -1,6 +1,5 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format } from "date-fns";
@@ -35,7 +34,6 @@ import { generateSerial } from "@/lib/serial.utils";
 import { showConfirmDialog } from "@/store/confirm.store";
 import { useDeviceTypes, useUnpairDevice } from "@/app/hooks/useDevices";
 import { useAuthStore } from "@/auth/store/auth.store";
-import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
 
 import type {
   Device,
@@ -102,14 +100,9 @@ export function DeviceForm({
   const { data: deviceTypesData } = useDeviceTypes();
   const deviceTypes = deviceTypesData?.items ?? [];
   const canWriteSensors = Boolean(user?.isAdmin || user?.permissions?.includes("device_sensor:write"));
-  const canReadCatalog = Boolean(user?.isAdmin || user?.permissions?.includes("sensor_catalog:read"));
-  const { data: sensorCatalog = [], isError: catalogError } = useQuery({
-    queryKey: ["sensor-catalog", "sensors"],
-    queryFn: environmentalSensorService.getCatalog,
-    enabled: !isEditing && canWriteSensors && canReadCatalog,
-  });
   const [sensors, setSensors] = useState<{ sensorId: string }[]>([]);
   const [sensorError, setSensorError] = useState("");
+  const [kitTypeId, setKitTypeId] = useState<string>();
 
   const form = useForm<DeviceFormInput, unknown, DeviceFormValues>({
     resolver: zodResolver(buildDeviceSchema(!!isEditing)),
@@ -133,6 +126,37 @@ export function DeviceForm({
     },
   });
 
+  // The device type is the template: it decides which sensor models are offered, how many of
+  // each, the default kit and the minimum.
+  const selectedTypeId = form.watch("deviceTypeId");
+  const selectedType = deviceTypes.find((type) => type.id === selectedTypeId);
+  const compatible = (selectedType?.sensors ?? []).filter((link) => link.isActive);
+  const showSensors = !isEditing && canWriteSensors && compatible.length > 0;
+  if (!isEditing && selectedType && kitTypeId !== selectedType.id) {
+    // Selecting a type (and the first render once the types are loaded) pre-fills its default kit.
+    setKitTypeId(selectedType.id);
+    setSensors(compatible.filter((link) => link.includedByDefault).map((link) => ({ sensorId: link.sensorId })));
+    setSensorError("");
+  }
+  const usedCount = (sensorId: string, ignoreIndex = -1) =>
+    sensors.filter((row, index) => index !== ignoreIndex && row.sensorId === sensorId).length;
+  const optionsFor = (index: number) =>
+    compatible.filter((link) => link.sensorId === sensors[index].sensorId || usedCount(link.sensorId, index) < link.maxCount);
+  const canAddSensor = compatible.some((link) => usedCount(link.sensorId) < link.maxCount);
+
+  const validateSensors = (): string => {
+    if (isEditing || !selectedType || !canWriteSensors) return "";
+    if (sensors.some((row) => !row.sensorId)) return "Seleccioná un modelo para cada sensor";
+    for (const link of compatible) {
+      if (usedCount(link.sensorId) > link.maxCount) return `El tipo admite como máximo ${link.maxCount} sensor(es) ${link.name}`;
+    }
+    if (sensors.length < selectedType.minSensors) {
+      return selectedType.minSensors === 1 ? "Agregá al menos un sensor" : `Agregá al menos ${selectedType.minSensors} sensores`;
+    }
+    const missing = compatible.find((link) => link.required && usedCount(link.sensorId) === 0);
+    return missing ? `Falta el sensor obligatorio ${missing.name}` : "";
+  };
+
   const handleGenerateSerial = () => {
     form.setValue("serial", generateSerial(), { shouldValidate: true });
   };
@@ -150,14 +174,9 @@ export function DeviceForm({
   };
 
   const handleSubmit = (values: DeviceFormValues) => {
-    const selectedType = deviceTypes.find((type) => type.id === values.deviceTypeId);
-    const isEnvironmental = values.deviceTypeId === DEFAULT_DEVICE_TYPE_ID || selectedType?.code === "environmental";
-    if (!isEditing && isEnvironmental && sensors.filter((sensor) => sensor.sensorId).length === 0) {
-      setSensorError("Agregá al menos un sensor");
-      return;
-    }
-    if (!isEditing && sensors.some((sensor) => !sensor.sensorId)) {
-      setSensorError("Seleccioná un modelo para cada sensor");
+    const sensorProblem = validateSensors();
+    if (sensorProblem) {
+      setSensorError(sensorProblem);
       return;
     }
     setSensorError("");
@@ -186,7 +205,7 @@ export function DeviceForm({
         name: values.name || "",
         description: values.description,
         deviceTypeId: values.deviceTypeId,
-        model: values.model,
+        model: values.model?.trim() || selectedType?.hardwareModel || undefined,
         batch: values.batch,
         manufactureDate: values.manufactureDate
           ? format(values.manufactureDate, "yyyy-MM-dd")
@@ -393,21 +412,21 @@ export function DeviceForm({
 
         </div>
 
-        {!isEditing && canWriteSensors && canReadCatalog && (
+        {showSensors && (
           <section className="space-y-4" aria-label="Sensores">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-sm font-medium">Sensores</h3>
-              <Button type="button" className="min-h-11" onClick={() => { setSensors((rows) => [...rows, { sensorId: "" }]); setSensorError(""); }}><Plus aria-hidden="true" />Agregar sensor</Button>
+              <Button type="button" className="min-h-11" disabled={!canAddSensor} onClick={() => { setSensors((rows) => [...rows, { sensorId: "" }]); setSensorError(""); }}><Plus aria-hidden="true" />Agregar sensor</Button>
             </div>
             <Table className="min-w-[640px]">
               <TableHeader><TableRow><TableHead>Sensor</TableHead><TableHead>Variables</TableHead><TableHead><CenteredHeader>Acciones</CenteredHeader></TableHead></TableRow></TableHeader>
               <TableBody>
                 {sensors.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground">Todavía no agregaste sensores.</TableCell></TableRow> : sensors.map((sensor, index) => {
-                  const model = sensorCatalog.find((entry) => entry.id === sensor.sensorId);
+                  const model = compatible.find((entry) => entry.sensorId === sensor.sensorId);
                   return <TableRow key={index}>
                     <TableCell className="min-w-48"><select aria-label={`Modelo del sensor ${index + 1}`} className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm" value={sensor.sensorId} onChange={(event) => setSensors((rows) => rows.map((row, rowIndex) => rowIndex === index ? { sensorId: event.target.value } : row))}>
                       <option value="">Seleccionar modelo</option>
-                      {sensorCatalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                      {optionsFor(index).map((entry) => <option key={entry.sensorId} value={entry.sensorId}>{entry.name}</option>)}
                     </select></TableCell>
                     <TableCell className="min-w-64 whitespace-normal text-xs text-muted-foreground">{model ? model.variables.map((variable) => `${variable.name}: ${variable.min}–${variable.max} ${variable.unit}`).join(" · ") : "—"}</TableCell>
                     <TableCell className="text-center"><Button type="button" variant="ghost" size="icon" className="min-h-11 min-w-11" onClick={() => setSensors((rows) => rows.filter((_, rowIndex) => rowIndex !== index))} aria-label="Quitar sensor" title="Quitar sensor"><Trash2 aria-hidden="true" /></Button></TableCell>
@@ -415,7 +434,6 @@ export function DeviceForm({
                 })}
               </TableBody>
             </Table>
-            {catalogError && <p role="alert" className="text-sm text-destructive">No se pudo cargar el catálogo de sensores.</p>}
             {sensorError && <p role="alert" className="text-sm text-destructive">{sensorError}</p>}
           </section>
         )}
@@ -435,7 +453,7 @@ export function DeviceForm({
                     <FormLabel>Modelo</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Modelo del dispositivo"
+                        placeholder={selectedType?.hardwareModel || "Modelo del dispositivo"}
                         {...field}
                         disabled={isEditing}
                       />

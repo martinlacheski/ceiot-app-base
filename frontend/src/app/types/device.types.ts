@@ -1,10 +1,32 @@
 import type { PaginatedResponse } from "./common.types";
+import type { SensorVariable } from "./environmentalSensor.types";
+
+export interface DeviceTypeSensorLink {
+  sensorId: string;
+  code: string;
+  name: string;
+  manufacturer: string;
+  isActive: boolean;
+  required: boolean;
+  maxCount: number;
+  includedByDefault: boolean;
+  variables: SensorVariable[];
+}
 
 export interface DeviceTypeCatalog {
   id: string;
   name: string;
-  code?: string;
-  is_active: boolean;
+  code?: string | null;
+  description?: string | null;
+  hardwareModel?: string | null;
+  telemetryIntervalS?: number | null;
+  offlineAfterS?: number | null;
+  minSensors: number;
+  configTemplate: Record<string, unknown>;
+  isActive: boolean;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  sensors: DeviceTypeSensorLink[];
 }
 
 export interface DeviceTypeRead {
@@ -100,7 +122,7 @@ export interface DeviceTypesResponse {
   items: DeviceTypeCatalog[];
   total: number;
   page: number;
-  per_page: number;
+  perPage: number;
   pages: number;
 }
 

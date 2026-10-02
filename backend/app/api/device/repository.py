@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
@@ -13,6 +14,12 @@ from app.api.sensor_catalog.models import DeviceSensor, Sensor
 from app.api.sensor_catalog.schemas import next_sensor_key
 from fastapi import HTTPException
 from app.api.device.device_type.repository import DeviceTypeRepository
+from app.api.device.device_type.rules import (
+    check_sensor_counts,
+    installed_counts,
+    load_compatible,
+    sensor_names,
+)
 from app.api.device.models import (
     Device,
     DeviceCreate,
@@ -445,7 +452,17 @@ class DeviceRepository:
         result = await self.session.exec(query)
         return result.one() or 0
 
-    async def create_with_data(self, device_in: DeviceCreate) -> Device:
+    async def create_with_data(
+        self, device_in: DeviceCreate, *, enforce_minimum: bool = False
+    ) -> Device:
+        """Create a device (and its sensors) atomically.
+
+        Compatibility with the device type and the per-model maximum always apply to the
+        requested sensors. The type's ``min_sensors`` and ``required`` entries are a manual
+        registration (POST /api/devices) policy, enabled with ``enforce_minimum``: provisioning,
+        pairing and other internal creation paths legitimately create sensorless devices
+        (sensors are added later).
+        """
         device_type_repo = DeviceTypeRepository(self.session)
         resolved_type = await device_type_repo.resolve_catalog_type(
             device_type_id=device_in.device_type_id,
@@ -454,16 +471,11 @@ class DeviceRepository:
         if resolved_type is None:
             raise ValueError("Invalid device type reference")
 
-        # The "an Ambiental device must have >=1 sensor" rule is a manual
-        # registration (POST /api/devices) policy, not a repository-wide
-        # invariant: provisioning, pairing and other internal creation paths
-        # legitimately create sensorless devices (sensors are added later).
-        # It is enforced by the caller (see app.api.device.router.create_device),
-        # not here.
-
         # Validate before inserting the device, then commit both tables together.
         installations = []
         used_keys: set[str] = set()
+        counts: Counter = Counter()
+        names: dict[uuid.UUID, str] = {}
         for requested in device_in.sensors:
             sensor = await self.session.get(Sensor, requested.sensor_id)
             if sensor is None or not sensor.is_active:
@@ -473,6 +485,16 @@ class DeviceRepository:
                 raise HTTPException(422, "Hay claves de sensor duplicadas")
             used_keys.add(key)
             installations.append((sensor.id, key, requested.config))
+            counts[sensor.id] += 1
+            names[sensor.id] = sensor.name
+        if installations or enforce_minimum:
+            check_sensor_counts(
+                resolved_type,
+                await load_compatible(self.session, resolved_type.id),
+                counts,
+                names,
+                enforce_minimum=enforce_minimum,
+            )
 
         # 1. Create Device
         db_device = Device(
@@ -513,6 +535,16 @@ class DeviceRepository:
             )
             if resolved_type is None:
                 raise ValueError("Invalid device type reference")
+            if resolved_type.id != db_device.device_type_id:
+                # Never silently drop installed sensors: the new type must accept them all.
+                counts = await installed_counts(self.session, db_device.id)
+                check_sensor_counts(
+                    resolved_type,
+                    await load_compatible(self.session, resolved_type.id),
+                    counts,
+                    await sensor_names(self.session, counts.keys()),
+                    action="cambiar el tipo",
+                )
             db_device.device_type_id = resolved_type.id
         if device_in.enabled is not None:
             db_device.enabled = device_in.enabled

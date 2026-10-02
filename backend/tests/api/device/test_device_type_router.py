@@ -31,6 +31,7 @@ def create_device_admin(session: Session) -> User:
 
     user = User(
         email="device-types@example.com",
+        is_admin=True,
         username="device_types_admin",
         password=hash_password("testpassword"),
         is_verified=True,
@@ -74,27 +75,27 @@ def test_device_type_catalog_crud_flow(client: TestClient, session: Session):
     create_response = client.post(
         "/api/devices/types",
         headers=headers,
-        json={"name": "2 Relés", "code": "expendedora"},
+        json={"name": "2 Relés", "code": "relays_2"},
     )
     assert create_response.status_code == 201
     created = create_response.json()
     assert created["name"] == "2 Relés"
     assert created["isActive"] is True
-    assert created["code"] is None
+    assert created["code"] == "relays_2"
 
     get_response = client.get(f"/api/devices/types/{created['id']}", headers=headers)
     assert get_response.status_code == 200
     assert get_response.json()["name"] == "2 Relés"
-    assert get_response.json()["code"] is None
+    assert get_response.json()["code"] == "relays_2"
 
     update_response = client.put(
         f"/api/devices/types/{created['id']}",
         headers=headers,
-        json={"name": "2 Relés Plus", "code": "other"},
+        json={"name": "2 Relés Plus"},
     )
     assert update_response.status_code == 200
     assert update_response.json()["name"] == "2 Relés Plus"
-    assert update_response.json()["code"] is None
+    assert update_response.json()["code"] == "relays_2"
 
     delete_response = client.delete(f"/api/devices/types/{created['id']}", headers=headers)
     assert delete_response.status_code == 200
@@ -109,6 +110,7 @@ def test_device_type_catalog_crud_flow(client: TestClient, session: Session):
 def test_device_read_includes_nested_device_type_code(
     client: TestClient,
     session: Session,
+    make_ambient,
 ):
     # This test's whole point is the nested type.code for the *Ambiental*
     # default type, so it must keep deviceTypeId=DEFAULT_DEVICE_TYPE_ID.
@@ -119,6 +121,7 @@ def test_device_read_includes_nested_device_type_code(
     sensor = Sensor(code="dht22", name="DHT22", manufacturer="Aosong")
     session.add_all([user, sensor])
     session.commit()
+    make_ambient(sensor)
     headers = {"Authorization": f"Bearer {make_token(user.id)}"}
     serial = DeviceService.generate_serial()
 
@@ -192,19 +195,19 @@ def test_device_type_create_rejects_duplicate_name_case_insensitively(
     first_response = client.post(
         "/api/devices/types",
         headers=headers,
-        json={"name": "Legacy Duplicate"},
+        json={"name": "Legacy Duplicate", "code": "legacy_one"},
     )
     assert first_response.status_code == 201
 
     duplicate_response = client.post(
         "/api/devices/types",
         headers=headers,
-        json={"name": "legacy duplicate"},
+        json={"name": "legacy duplicate", "code": "legacy_two"},
     )
 
-    assert duplicate_response.status_code == 400
+    assert duplicate_response.status_code == 409
     assert duplicate_response.json() == {
-        "detail": "Device type with this name already exists"
+        "detail": "Ya existe un tipo de dispositivo con ese nombre"
     }
 
 

@@ -106,7 +106,7 @@ def test_upgrade_handles_existing_violations_and_round_trips(scratch_url):
 
     engine = create_engine(scratch_url)
     with engine.begin() as connection:
-        assert _version(connection) == "0017"
+        assert _version(connection) == "0018"
         # 1) device_id backfilled by canonical serial; the orphan stays NULL.
         rows = dict(connection.execute(text("SELECT device_serial, device_id FROM deviceoperation")).all())
         assert rows["IOT-ABCD-EFGH"] == ids["device"]

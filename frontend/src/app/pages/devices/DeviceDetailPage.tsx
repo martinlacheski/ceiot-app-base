@@ -161,7 +161,7 @@ export default function DeviceDetailPage() {
           </div>
         </CardContent>
       </Card>
-      <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} />
+      <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} deviceTypeId={device.deviceTypeId} />
       {canReadTelemetry && <>
         <div role="group" aria-label="Vista de las lecturas" className="grid w-full grid-cols-3 items-center gap-1 rounded-md border p-1 sm:inline-grid sm:w-auto">
           {VIEWS.map(({ id: viewId, label, Icon }) => <Button key={viewId} type="button"

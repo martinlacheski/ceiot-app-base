@@ -54,6 +54,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0015_deviceoperation_device_id.py",
         "0016_catalog_and_membership_uniqueness.py",
         "0017_environment_coordinates.py",
+        "0018_device_type_template.py",
     ]
 
 

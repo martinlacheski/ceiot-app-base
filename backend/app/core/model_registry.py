@@ -7,7 +7,7 @@ fail to configure on the first database access.
 
 from app.api.access.models import ScopedGuestInvitation, ScopedGuestRelation  # noqa: F401
 from app.api.auth.models import User  # noqa: F401
-from app.api.device.device_type.models import DeviceTypeCatalog  # noqa: F401
+from app.api.device.device_type.models import DeviceTypeCatalog, DeviceTypeSensor  # noqa: F401
 from app.api.device.models import Device, DeviceLocationReport  # noqa: F401
 from app.api.device.operations.models import DeviceOperation  # noqa: F401
 from app.api.document.models import Document  # noqa: F401
