@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional
+from sqlalchemy import Index, text
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.core.utils import CamelModel
 
@@ -20,13 +21,21 @@ class LocationCityBase(SQLModel):
 
 # Models
 
+# Names are unique case-insensitively (the services already compare lower(name)); the
+# expression indexes are portable to the SQLite unit tests and mirror the migration.
 class LocationCountry(LocationCountryBase, table=True):
+    __table_args__ = (Index("uq_locationcountry_lower_name", text("lower(name)"), unique=True),)
+
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
     states: List["LocationState"] = Relationship(back_populates="country")
 
 class LocationState(LocationStateBase, table=True):
+    __table_args__ = (
+        Index("uq_locationstate_country_lower_name", "country_id", text("lower(name)"), unique=True),
+    )
+
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
@@ -34,6 +43,10 @@ class LocationState(LocationStateBase, table=True):
     cities: List["LocationCity"] = Relationship(back_populates="state")
 
 class LocationCity(LocationCityBase, table=True):
+    __table_args__ = (
+        Index("uq_locationcity_state_lower_name", "state_id", text("lower(name)"), unique=True),
+    )
+
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})

@@ -81,6 +81,19 @@ async def test_create_operation_has_only_generic_runtime_contract(
         DeviceOperationService.create_operation
     ).parameters
     assert not hasattr(operation, "merchant_order_id")
-    assert not hasattr(operation, "device_id")
+    # The FK column exists; the service stores the device id it is given.
+    assert operation.device_id == device_id
     assert not hasattr(operation, "payload")
     assert not hasattr(operation, "response")
+
+
+@pytest.mark.asyncio
+async def test_create_operation_without_device_keeps_serial_only(session: Session, async_session):
+    operation = await DeviceOperationService(async_session).create_operation(
+        operation_type=DeviceOperationType.KEEP_ACTIVE,
+        device_serial="IOT-UNKNOWN",
+        status=DeviceOperationStatus.SUCCESS,
+    )
+
+    assert operation.device_id is None
+    assert operation.device_serial == "IOT-UNKNOWN"

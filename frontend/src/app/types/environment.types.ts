@@ -48,6 +48,8 @@ export interface EnvironmentCreate {
   name: string;
   address: string;
   location: string;
+  latitude?: number;
+  longitude?: number;
   description: string;
   phone?: string;
   cityId: string;
@@ -60,6 +62,8 @@ export interface EnvironmentUpdate {
   name?: string;
   address?: string;
   location?: string;
+  latitude?: number;
+  longitude?: number;
   description?: string;
   phone?: string;
   cityId?: string;

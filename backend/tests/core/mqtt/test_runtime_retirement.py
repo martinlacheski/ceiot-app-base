@@ -410,6 +410,9 @@ async def test_flat_environmental_keys_warn_and_still_persist_runtime_and_health
     operations = isolated_handler_boundaries["operations"]
     assert len(operations) == 1
     assert operations[0]["operation_type"] == handlers.DeviceOperationType.KEEP_ACTIVE
+    # The operation is linked to the device row (FK), not only to its serial.
+    assert operations[0]["device_id"] == "synthetic-device-id"
+    assert operations[0]["device_serial"] == "SYNTHETIC-1000"
     readings = isolated_handler_boundaries["sensor_readings"]
     assert len(readings) == 1
     assert readings[0]["device_serial"] == "SYNTHETIC-1000"

@@ -32,6 +32,17 @@ class DeviceOperation(SQLModel, table=True):
     
     # Operational identifier. Devices are resolved through their unique serial.
     device_serial: Optional[str] = Field(default=None) 
+    # FK to the device row; NULL for history whose device no longer exists or was never
+    # registered. device_serial stays because former-owner history is read by serial.
+    device_id: Optional[uuid.UUID] = Field(
+        default=None,
+        sa_column=Column(
+            Uuid(),
+            ForeignKey("device.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     environment_id: Optional[uuid.UUID] = Field(
         default=None,
         sa_column=Column(

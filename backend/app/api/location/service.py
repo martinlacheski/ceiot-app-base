@@ -34,6 +34,7 @@ from app.api.location.models import (
     LocationCity, LocationCityCreate, LocationCityUpdate
 )
 from app.api.location.repository import LocationRepository
+from app.core.db_errors import conflict_on_duplicate
 from app.core.sorting import SortSpec
 
 class LocationService:
@@ -45,7 +46,7 @@ class LocationService:
         # 1. Check if exists active
         if await self.repo.get_country_by_name(payload.name, is_active=True):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="El país con este nombre ya existe"
             )
         
@@ -57,7 +58,8 @@ class LocationService:
                 detail={"code": "INACTIVE_DUPLICATE", "message": "El país existe pero está inactivo.", "id": str(inactive_duplicate.id)}
             )
         country = LocationCountry(**payload.model_dump())
-        return await self.repo.create_country(country)
+        async with conflict_on_duplicate(self.repo.db, "El país con este nombre ya existe"):
+            return await self.repo.create_country(country)
 
     async def get_all_countries(
         self,
@@ -80,14 +82,15 @@ class LocationService:
 
     async def update_country(self, country_id: uuid.UUID, payload: LocationCountryUpdate) -> LocationCountry:
         if payload.name:
-            existing = await self.repo.get_country_by_name(payload.name)
+            existing = await self.repo.get_country_by_name(payload.name, is_active=None)
             if existing and existing.id != country_id:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail="El país con este nombre ya existe"
                 )
 
-        country = await self.repo.update_country(country_id, payload)
+        async with conflict_on_duplicate(self.repo.db, "El país con este nombre ya existe"):
+            country = await self.repo.update_country(country_id, payload)
         if not country:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -118,7 +121,7 @@ class LocationService:
         # 1. Check uniqueness within country (Active)
         if await self.repo.get_state_by_name(payload.name, payload.country_id, is_active=True):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="La provincia con este nombre ya existe en este país"
             )
 
@@ -131,7 +134,8 @@ class LocationService:
             )
 
         state = LocationState(**payload.model_dump())
-        return await self.repo.create_state(state)
+        async with conflict_on_duplicate(self.repo.db, "La provincia con este nombre ya existe en este país"):
+            return await self.repo.create_state(state)
 
     async def get_all_states(
         self,
@@ -168,15 +172,18 @@ class LocationService:
                     detail="País no encontrado"
                 )
 
-        if payload.name:
-            existing = await self.repo.get_state_by_name(payload.name, target_country_id)
+        if payload.name or payload.country_id:
+            existing = await self.repo.get_state_by_name(
+                payload.name or current_state.name, target_country_id, is_active=None
+            )
             if existing and existing.id != state_id:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail="La provincia con este nombre ya existe en este país"
                 )
 
-        state = await self.repo.update_state(state_id, payload)
+        async with conflict_on_duplicate(self.repo.db, "La provincia con este nombre ya existe en este país"):
+            state = await self.repo.update_state(state_id, payload)
         if not state:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -207,7 +214,7 @@ class LocationService:
         # 1. Check uniqueness within state (Active)
         if await self.repo.get_city_by_name(payload.name, payload.state_id, is_active=True):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+                status_code=status.HTTP_409_CONFLICT,
                 detail="La ciudad con este nombre ya existe en esta provincia"
             )
         
@@ -220,7 +227,8 @@ class LocationService:
             )
 
         city = LocationCity(**payload.model_dump())
-        return await self.repo.create_city(city)
+        async with conflict_on_duplicate(self.repo.db, "La ciudad con este nombre ya existe en esta provincia"):
+            return await self.repo.create_city(city)
 
     async def get_all_cities(
         self,
@@ -258,15 +266,18 @@ class LocationService:
                     detail="Provincia no encontrada"
                 )
 
-        if payload.name:
-            existing = await self.repo.get_city_by_name(payload.name, target_state_id)
+        if payload.name or payload.state_id:
+            existing = await self.repo.get_city_by_name(
+                payload.name or current_city.name, target_state_id, is_active=None
+            )
             if existing and existing.id != city_id:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
+                    status_code=status.HTTP_409_CONFLICT,
                     detail="La ciudad con este nombre ya existe en esta provincia"
                 )
 
-        city = await self.repo.update_city(city_id, payload)
+        async with conflict_on_duplicate(self.repo.db, "La ciudad con este nombre ya existe en esta provincia"):
+            city = await self.repo.update_city(city_id, payload)
         if not city:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

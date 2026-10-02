@@ -147,6 +147,7 @@ class DeviceOperationService:
     ) -> DeviceOperation:
         operation = DeviceOperation(
             operation_type=operation_type,
+            device_id=device_id,
             device_serial=device_serial,
             status=status,
             # time is auto-set by DB default (now()) or we can pass it if event time is known

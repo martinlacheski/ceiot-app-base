@@ -7,7 +7,6 @@ Only non-sensitive, publicly-safe data is returned.
 
 # pyright: reportMissingImports=false
 
-import re
 import time
 import uuid
 from collections import deque
@@ -121,44 +120,6 @@ class PublicMapLocationResponse(BaseModel):
 # Helpers
 # ---------------------------------------------------------------------------
 
-_LAT_LNG_RE = re.compile(r"([-+]?\d{1,2}\.\d+),\s*([-+]?\d{1,3}\.\d+)")
-_MAPS_AT_RE = re.compile(r"@([-+]?\d{1,2}\.\d+),([-+]?\d{1,3}\.\d+)")
-_MAPS_Q_RE = re.compile(r"[?&]q=([-+]?\d{1,2}\.\d+),([-+]?\d{1,3}\.\d+)")
-
-
-def _parse_location(location: str) -> tuple[float, float] | None:
-    """
-    Parse a location string to (lat, lng).
-
-    Accepts:
-    - "lat,lng"  or  "lat, lng"
-    - Google Maps URL containing @lat,lng or ?q=lat,lng
-    Returns None if the string cannot be parsed as coordinates.
-    """
-    if not location:
-        return None
-
-    try:
-        # Plain "lat,lng"
-        m = _LAT_LNG_RE.search(location)
-        if m:
-            return float(m.group(1)), float(m.group(2))
-
-        # Google Maps URL — @lat,lng
-        m = _MAPS_AT_RE.search(location)
-        if m:
-            return float(m.group(1)), float(m.group(2))
-
-        # Google Maps URL — ?q=lat,lng
-        m = _MAPS_Q_RE.search(location)
-        if m:
-            return float(m.group(1)), float(m.group(2))
-    except ValueError:
-        return None
-
-    return None
-
-
 _PUBLIC_MAP_COUNTED_STATUSES = frozenset(
     {DeviceStatus.PAIRED, DeviceStatus.ACTIVE, DeviceStatus.MAINTENANCE}
 )
@@ -195,7 +156,8 @@ def _build_public_map_locations(devices: Iterable[Device]) -> list[PublicMapLoca
         if (
             not environment
             or not environment.is_active
-            or not environment.location
+            or environment.latitude is None
+            or environment.longitude is None
         ):
             continue
         if (
@@ -205,8 +167,8 @@ def _build_public_map_locations(devices: Iterable[Device]) -> list[PublicMapLoca
         ):
             continue
 
-        coords = _parse_location(environment.location)
-        if coords is None or environment.id is None:
+        coords = (environment.latitude, environment.longitude)
+        if environment.id is None:
             continue
 
         active_device_counts[environment.id] = active_device_counts.get(environment.id, 0) + 1

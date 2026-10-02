@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional
+from sqlalchemy import Index, text
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.core.utils import CamelModel
 
@@ -16,6 +17,8 @@ class EnvironmentTypeBase(SQLModel):
     name: str = Field(index=True)
 
 class EnvironmentType(EnvironmentTypeBase, table=True):
+    __table_args__ = (Index("uq_environmenttype_lower_name", text("lower(name)"), unique=True),)
+
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})

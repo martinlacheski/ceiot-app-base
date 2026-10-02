@@ -78,7 +78,7 @@ def test_create_country_duplicate(client: TestClient, location_token: str):
         json={"name": "Chile"} # Case sensitive check usually? No, we implemented lazy check? 
         # We implemented case INSENSITIVE check.
     )
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert "ya existe" in response.json()["detail"] or "already exists" in response.json()["detail"]
 
     # Case insensitive check
@@ -87,7 +87,7 @@ def test_create_country_duplicate(client: TestClient, location_token: str):
         headers={"Authorization": f"Bearer {location_token}"},
         json={"name": "chile"} 
     )
-    assert response.status_code == 400
+    assert response.status_code == 409
 
 
 def test_get_countries(client: TestClient, location_token: str):

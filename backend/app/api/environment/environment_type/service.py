@@ -6,6 +6,9 @@ from app.api.environment.environment_type.models import (
     EnvironmentType, EnvironmentTypeCreate, EnvironmentTypeUpdate
 )
 from app.api.environment.environment_type.repository import EnvironmentTypeRepository
+from app.core.db_errors import conflict_on_duplicate
+
+DUPLICATE_MESSAGE = "El tipo de establecimiento con este nombre ya existe"
 
 class EnvironmentTypeService:
     def __init__(self, repo: EnvironmentTypeRepository):
@@ -15,8 +18,8 @@ class EnvironmentTypeService:
         # 1. Check active
         if await self.repo.get_by_name(payload.name, is_active=True):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El tipo de establecimiento con este nombre ya existe"
+                status_code=status.HTTP_409_CONFLICT,
+                detail=DUPLICATE_MESSAGE
             )
         
         # 2. Check inactive
@@ -28,7 +31,8 @@ class EnvironmentTypeService:
             )
             
         env_type = EnvironmentType(**payload.model_dump(exclude_none=True))
-        return await self.repo.create(env_type)
+        async with conflict_on_duplicate(self.repo.db, DUPLICATE_MESSAGE):
+            return await self.repo.create(env_type)
 
     async def get_all(
         self,
@@ -51,14 +55,15 @@ class EnvironmentTypeService:
 
     async def update(self, type_id: uuid.UUID, payload: EnvironmentTypeUpdate) -> EnvironmentType:
         if payload.name:
-            existing = await self.repo.get_by_name(payload.name)
+            existing = await self.repo.get_by_name(payload.name, is_active=None)
             if existing and existing.id != type_id:
                 raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="El tipo de establecimiento con este nombre ya existe"
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=DUPLICATE_MESSAGE
                 )
         
-        env_type = await self.repo.update(type_id, payload)
+        async with conflict_on_duplicate(self.repo.db, DUPLICATE_MESSAGE):
+            env_type = await self.repo.update(type_id, payload)
         if not env_type:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -91,7 +96,8 @@ class EnvironmentTypeService:
         # Create new
         new_type_data = EnvironmentTypeCreate(name=normalized_name)
         env_type = EnvironmentType(**new_type_data.model_dump())
-        created = await self.repo.create(env_type)
+        async with conflict_on_duplicate(self.repo.db, DUPLICATE_MESSAGE):
+            created = await self.repo.create(env_type)
         return created
 
     async def delete(self, type_id: uuid.UUID) -> dict:

@@ -255,6 +255,7 @@ async def process_sensor_message_pub(topic: str, payload: str):
             # Guardar operación
             await op_service.create_operation(
                 operation_type=op_type,  # SQLAlchemy manejará esto
+                device_id=device.id if device else None,
                 device_serial=serial,
                 status=DeviceOperationStatus.SUCCESS,
             )
