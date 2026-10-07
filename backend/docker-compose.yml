@@ -32,7 +32,9 @@ services:
       ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
         ${DB_PASSWORD:?}@postgresql:5432/${DB_DATABASE:?}"
     ports:
-      - 127.0.0.1:${BACKEND_PORT:?BACKEND_PORT is required}:8000
+      # LAN_BIND_IP (default loopback) lets real devices on the LAN download
+      # firmware images; it applies to this port and the MQTT mTLS port only.
+      - ${LAN_BIND_IP:-127.0.0.1}:${BACKEND_PORT:?BACKEND_PORT is required}:8000
     depends_on:
       postgresql:
         condition: service_healthy

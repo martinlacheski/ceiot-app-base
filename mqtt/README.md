@@ -57,13 +57,17 @@ Para regenerarla (invalida TODOS los certificados ya emitidos):
 ### 2. Emitir el certificado del broker
 
 ```bash
-./emitir-certificado-broker.sh [hostname-publico-opcional]
+./emitir-certificado-broker.sh [host-o-ip ...]
 ```
 
 Instala directamente `emqx.crt`, `emqx.key` y `ca.crt` en `mqtt/certs/`
 (leído por el contenedor `emqx`). Incluye SANs de desarrollo (`emqx`,
-`localhost`, `127.0.0.1`); pase un hostname como argumento para producción
-(por ejemplo `mqtt.miproyecto.com`).
+`localhost`, `127.0.0.1`); pase como argumentos los nombres o IP adicionales
+por los que se conectarán los clientes: un hostname para producción (por
+ejemplo `mqtt.miproyecto.com`) o la IP de esta máquina en la red local para
+dispositivos reales en desarrollo (por ejemplo `192.168.1.50`). Cada argumento
+con forma de IPv4 se agrega como SAN de tipo IP; el resto, como DNS. Puede
+combinar ambos: `./emitir-certificado-broker.sh mqtt.miproyecto.com 192.168.1.50`.
 
 Recree el contenedor para que tome el certificado nuevo:
 
@@ -199,8 +203,8 @@ es manual:
   ambos desde la misma CA si no coinciden).
 - **Error de hostname / SAN mismatch**: el hostname al que se conecta el
   cliente no está en los SAN del certificado del broker. Reemita el
-  certificado del broker con `./emitir-certificado-broker.sh <hostname>`
-  incluyendo ese hostname.
+  certificado del broker con `./emitir-certificado-broker.sh <hostname-o-ip>`
+  incluyendo ese hostname o esa IP.
 - **El certificado "parece" inválido por fecha (`certificate has expired`/`not yet valid`) aunque las fechas son correctas**:
   con `CONFIG_MBEDTLS_HAVE_TIME_DATE` deshabilitado (el valor por defecto en
   ESP-IDF), mbedTLS **no** valida las fechas del certificado, así que este
@@ -313,7 +317,7 @@ certificado de EMQX son `emqx`, `localhost` y `127.0.0.1`. Conectate con
 `--host localhost` (desde el host) o `--host emqx` (desde otro contenedor de
 la misma red) para que la verificación de hostname TLS funcione; cualquier
 otro hostname/IP requiere reemitir el certificado del broker con ese SAN
-(`./emitir-certificado-broker.sh <hostname>`).
+(`./emitir-certificado-broker.sh <hostname-o-ip>`).
 
 ## Qué nunca se sube a git
 

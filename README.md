@@ -65,6 +65,56 @@ funcionamiento de los clientes WebSocket. La contraseña configurada para EMQX
 corresponde a su panel de administración de desarrollo: no crea un usuario para
 las conexiones MQTT de la aplicación.
 
+## Acceso desde la red local (dispositivos reales)
+
+Por defecto todos los puertos se publican solo en `127.0.0.1`. Para que un
+ESP32 real conectado a la misma red local llegue al stack, se exponen
+únicamente dos puertos en la IP de la máquina:
+
+- el puerto MQTT TLS (`MQTT_LISTENER_TLS`, autenticación por certificado de
+  cliente), y
+- el puerto HTTP del backend (`BACKEND_PORT`), desde el que el dispositivo
+  descarga las imágenes de firmware (OTA).
+
+El puerto MQTT TCP sin cifrar, el WebSocket, el panel de EMQX, PostgreSQL,
+pgAdmin y Redis siguen disponibles solo en `127.0.0.1`.
+
+Pasos:
+
+1. Defina la IP de la máquina en la red local (por ejemplo `192.168.1.50`) en
+   `mqtt/.env` y en `backend/.env`:
+
+   ```dotenv
+   LAN_BIND_IP=192.168.1.50
+   ```
+
+2. En `backend/.env`, indique la base de la URL de descarga que recibirán los
+   dispositivos, con el puerto publicado del backend:
+
+   ```dotenv
+   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.50:18000
+   ```
+
+3. Reemita el certificado del broker para que incluya esa IP (los
+   dispositivos validan el certificado contra la dirección a la que se
+   conectan) y recree `emqx`:
+
+   ```bash
+   cd mqtt/pki && ./emitir-certificado-broker.sh 192.168.1.50
+   ```
+
+4. Recree los servicios para aplicar los cambios:
+
+   ```bash
+   MAIL_TRANSPORT=mailpit docker compose up -d emqx backend mqtt-runtime
+   ```
+
+La descarga por HTTP sin cifrar se acepta solo en desarrollo: la orden de
+actualización llega por MQTT con TLS mutuo e incluye el SHA-256 y el tamaño de
+la imagen, que el dispositivo verifica antes de instalarla. En producción, la
+URL de descarga debe ser HTTPS. Si la IP de la máquina cambia, repita los
+pasos 1 a 4.
+
 ## Captura local de correos con Mailpit
 
 Mailpit captura mensajes dentro de Docker para inspeccionarlos durante el desarrollo; **no los entrega a casillas reales**. El perfil y el transporte son decisiones separadas y explícitas. Persistí estas variables manualmente en `backend/.env` si querés conservarlas entre comandos:
