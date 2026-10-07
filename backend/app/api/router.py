@@ -23,6 +23,7 @@ from app.api.device.router import router as device_router
 from app.api.device.operations.router import router as operations_router
 from app.api.device.history.router import router as history_router
 from app.api.device.emulator.router import router as emulator_router
+from app.api.device.firmware.router import router as firmware_router
 from app.api.live.router import router as live_router
 from app.api.document.router import router as document_router
 from app.api.assistant.router import router as assistant_router
@@ -32,6 +33,7 @@ router.include_router(device_type_router, prefix="/devices/types", tags=["Device
 router.include_router(history_router, prefix="/devices/history", tags=["Device History"])
 router.include_router(device_router, prefix="/devices", tags=["Devices"])
 router.include_router(emulator_router, prefix="/devices", tags=["Device Emulator"])
+router.include_router(firmware_router, prefix="/firmware", tags=["Firmware"])
 router.include_router(live_router, prefix="/live", tags=["Live"])
 router.include_router(document_router, prefix="/documents", tags=["Documents"])
 router.include_router(assistant_router, prefix="/assistant", tags=["Assistant"])

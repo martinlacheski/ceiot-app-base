@@ -11,6 +11,7 @@ class DeviceOperationType(str, Enum):
     SESSION_REQUEST = "session_request"
     ERROR = "error"
     OTHER = "other"
+    FIRMWARE_UPDATE = "firmware_update"
 
 class DeviceOperationStatus(str, Enum):
     SUCCESS = "success"

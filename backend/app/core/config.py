@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     BACKEND_HOST_URL: str
     BACKEND_PORT: str
     BACKEND_PUBLIC_BASE_URL: str | None = None
+    # Base of the firmware download URL sent to devices in `ota/command`
+    # (`{base}/api/firmware/download/{token}`). Must be reachable from the
+    # devices (e.g. http://<LAN IP>:<BACKEND_PORT> in development). Falls back
+    # to BACKEND_PUBLIC_BASE_URL, then BACKEND_HOST_URL.
+    FIRMWARE_DOWNLOAD_BASE_URL: str | None = None
 
     # Base de datos
     DATABASE_URL: str

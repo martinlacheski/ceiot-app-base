@@ -12,6 +12,11 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 import app.core.model_registry  # noqa: F401  (resolves ORM relationships in this process)
+from app.api.device.firmware.mqtt_handlers import (
+    process_ota_check,
+    process_ota_request,
+    process_ota_status,
+)
 from app.core.config import settings
 from app.core.logging_config import quiet_http_client_logs
 from app.core.mqtt.client import mqtt_client
@@ -37,6 +42,10 @@ async def lifespan(app: FastAPI):
     mqtt_client.subscribe("iot/devices/+/telemetry", process_sensor_message_pub, qos=2)
     mqtt_client.subscribe("iot/devices/+/events", process_sensor_message_sub, qos=2)
     mqtt_client.subscribe("iot/devices/+/status", process_device_status_message, qos=1)
+    # OTA (firmware updates): only this process subscribes, so each message is handled once.
+    mqtt_client.subscribe("iot/devices/+/ota/status", process_ota_status, qos=1)
+    mqtt_client.subscribe("iot/devices/+/ota/check", process_ota_check, qos=1)
+    mqtt_client.subscribe("iot/devices/+/ota/request", process_ota_request, qos=1)
     mqtt_client.subscribe("iot/devices/+/time/request", process_time_sync_request, qos=1)
 
     logger.info("Generic MQTT runtime started")

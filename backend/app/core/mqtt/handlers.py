@@ -401,8 +401,24 @@ async def process_device_status_message(topic: str, payload: str):
             DeviceService.normalize_serial(serial),
             broker_connected,
         )
+
+        if not broker_connected and device_id is not None:
+            await _interrupt_firmware_updates(device_serial)
     except Exception as e:
         logger.error(f"❌ Error al procesar broker status: {e}")
+
+
+async def _interrupt_firmware_updates(serial: str) -> None:
+    """The device left the broker: an OTA attempt it had not finished ends `interrupted` (see
+    ``FirmwareService.interrupt_updates``). Its own session, so a failure here never undoes the
+    presence update."""
+    from app.api.device.firmware.service import FirmwareService
+
+    try:
+        async with system_session() as session:
+            await FirmwareService(session).interrupt_updates(serial)
+    except Exception:
+        logger.exception("OTA interruption failed serial=%s", serial)
 
 
 def _parse_time_request_req_id(payload) -> str | None:
