@@ -37,6 +37,9 @@ EXPECTED_RUNTIME_SUBSCRIPTIONS = {
     ("iot/devices/+/events", "process_sensor_message_sub", 2),
     ("iot/devices/+/status", "process_device_status_message", 1),
     ("iot/devices/+/time/request", "process_time_sync_request", 1),
+    ("iot/devices/+/ota/status", "process_ota_status", 1),
+    ("iot/devices/+/ota/check", "process_ota_check", 1),
+    ("iot/devices/+/ota/request", "process_ota_request", 1),
 }
 
 RETIRED_EXECUTABLE_PATHS = (
