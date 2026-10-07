@@ -19,19 +19,26 @@ interface DataTablePaginationProps<TData> {
   table: Table<TData>;
   totalItems?: number;
   entityName?: string;
+  /** Used instead of `entityName` when the count is exactly 1; omitted keeps the plural. */
+  entityNameSingular?: string;
 }
 
 export function DataTablePagination<TData>({
   table,
   totalItems,
   entityName = "registros",
+  entityNameSingular,
 }: DataTablePaginationProps<TData>) {
+  const nameFor = (count: number) =>
+    count === 1 && entityNameSingular ? entityNameSingular : entityName;
+  const filteredCount = table.getFilteredRowModel().rows.length;
+
   return (
     <div className="flex flex-col gap-3 px-2 md:flex-row md:items-center md:justify-between">
       <div className="text-sm text-muted-foreground md:flex-1">
         {totalItems !== undefined
-          ? `${totalItems} ${entityName} en total`
-          : `${table.getFilteredRowModel().rows.length} ${entityName}`}
+          ? `${totalItems} ${nameFor(totalItems)} en total`
+          : `${filteredCount} ${nameFor(filteredCount)}`}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 md:flex-nowrap md:justify-end md:gap-6 lg:gap-8">
         <div className="flex items-center gap-2">
