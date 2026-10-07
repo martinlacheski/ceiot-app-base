@@ -7,6 +7,8 @@ import {
   getInvitationStatusLabel,
   getConnectionStatusLabel,
   getBooleanLabel,
+  getFirmwareUpdateStateLabel,
+  OPERATION_TYPE_OPTIONS,
   humanizeCode,
   labelFrom,
 } from "./status-labels";
@@ -33,6 +35,16 @@ describe("status labels", () => {
     expect(getOperationStatusLabel("success")).toBe("Exitoso");
     expect(getInvitationStatusLabel("pending")).toBe("Pendiente");
     expect(getConnectionStatusLabel("offline")).toBe("Fuera de línea");
+  });
+
+  it("labels firmware updates and every attempt state", () => {
+    expect(getOperationTypeLabel("firmware_update")).toBe("Actualización de firmware");
+    expect(OPERATION_TYPE_OPTIONS).toContainEqual({ value: "firmware_update", label: "Actualización de firmware" });
+    expect(getFirmwareUpdateStateLabel("requested")).toBe("Solicitada");
+    expect(getFirmwareUpdateStateLabel("downloading")).toBe("Descargando");
+    expect(getFirmwareUpdateStateLabel("succeeded")).toBe("Completada");
+    expect(getFirmwareUpdateStateLabel("rolled_back")).toBe("Revertida");
+    expect(getFirmwareUpdateStateLabel("rejected")).toBe("Rechazada");
   });
 
   it("labels nullable booleans without losing false", () => {

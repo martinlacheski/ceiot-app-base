@@ -23,6 +23,7 @@ OPERATION_TYPE_LABELS: dict[str, str] = {
     "session_request": "Solicitud de sesión",
     "error": "Error",
     "other": "Otro",
+    "firmware_update": "Actualización de firmware",
 }
 
 OPERATION_STATUS_LABELS: dict[str, str] = {

@@ -14,6 +14,7 @@ export const OPERATION_TYPE_LABELS: Record<string, string> = {
   session_request: "Solicitud de sesión",
   error: "Error",
   other: "Otro",
+  firmware_update: "Actualización de firmware",
 };
 
 /** Raw API enum values for operation filters; labels remain display-only. */
@@ -23,7 +24,22 @@ export const OPERATION_TYPE_OPTIONS = [
   { value: "session_request", label: OPERATION_TYPE_LABELS.session_request },
   { value: "error", label: OPERATION_TYPE_LABELS.error },
   { value: "other", label: OPERATION_TYPE_LABELS.other },
+  { value: "firmware_update", label: OPERATION_TYPE_LABELS.firmware_update },
 ];
+
+/** States of a firmware update attempt (`firmware_update.state`). */
+export const FIRMWARE_UPDATE_STATE_LABELS: Record<string, string> = {
+  requested: "Solicitada",
+  accepted: "Aceptada",
+  rejected: "Rechazada",
+  downloading: "Descargando",
+  verifying: "Verificando",
+  installing: "Instalando",
+  rebooting: "Reiniciando",
+  succeeded: "Completada",
+  failed: "Fallida",
+  rolled_back: "Revertida",
+};
 
 export const OPERATION_STATUS_LABELS: Record<string, string> = {
   success: "Exitoso",
@@ -88,4 +104,5 @@ export const getConnectionStatusLabel = labelFrom(CONNECTION_STATUS_LABELS);
 export const getSensorInstallationStatusLabel = labelFrom(SENSOR_INSTALLATION_STATUS_LABELS);
 export const getEnvironmentRoleLabel = labelFrom(ENVIRONMENT_ROLE_LABELS);
 export const getDeviceLocationSourceCodeLabel = labelFrom(DEVICE_LOCATION_SOURCE_LABELS);
+export const getFirmwareUpdateStateLabel = labelFrom(FIRMWARE_UPDATE_STATE_LABELS);
 export const getBooleanLabel = (value: boolean | null | undefined): string => value == null ? "-" : value ? "Sí" : "No";
