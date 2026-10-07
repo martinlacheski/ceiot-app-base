@@ -68,14 +68,63 @@ ejemplo `mqtt.miproyecto.com`) o la IP de esta máquina en la red local para
 dispositivos reales en desarrollo (por ejemplo `192.168.1.50`). Cada argumento
 con forma de IPv4 se agrega como SAN de tipo IP; el resto, como DNS. Puede
 combinar ambos: `./emitir-certificado-broker.sh mqtt.miproyecto.com 192.168.1.50`.
-Sin argumentos usa `LAN_BIND_IP` de `mqtt/.env`, si está definida. El paso a
-paso para la red local está en [`pki/README.md`](pki/README.md).
+Sin argumentos usa `LAN_BIND_IP` de `mqtt/.env`, si está definida (ver
+abajo).
 
 Recree el contenedor para que tome el certificado nuevo:
 
 ```bash
-docker compose up -d emqx
+docker compose up -d --force-recreate emqx
 ```
+
+#### Con la IP de la red local (dispositivos reales)
+
+Los dispositivos reales se conectan al broker por la IP de esta máquina en la
+red local y validan que el certificado del broker incluya esa IP. Hay que
+volver a emitirlo cada vez que cambia esa IP.
+
+1. Averigüe la IP de la máquina en la red local:
+
+   ```bash
+   hostname -I | awk '{print $1}'
+   ```
+
+2. Cárguela como `LAN_BIND_IP` en `mqtt/.env` y en `backend/.env` (el mismo
+   valor en los dos), y en `backend/.env` también la URL de descarga de
+   firmware:
+
+   ```dotenv
+   LAN_BIND_IP=192.168.1.33
+   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.33:18000
+   ```
+
+3. Emita el certificado del broker. Sin argumentos, el script toma
+   `LAN_BIND_IP` de `mqtt/.env`:
+
+   ```bash
+   cd mqtt/pki
+   ./emitir-certificado-broker.sh
+   ```
+
+   La salida muestra los nombres incluidos, por ejemplo
+   `SAN: DNS:emqx,DNS:localhost,IP:127.0.0.1,IP:192.168.1.33`.
+
+4. Desde la raíz del proyecto, recree el broker y vuelva a levantar el stack:
+
+   ```bash
+   docker compose up -d --force-recreate emqx
+   scripts/levantar.sh
+   ```
+
+5. Compruebe que el certificado instalado incluye la IP:
+
+   ```bash
+   openssl x509 -in mqtt/certs/emqx.crt -noout -ext subjectAltName
+   ```
+
+Reemitir el certificado del broker no invalida los certificados de los
+dispositivos: siguen firmados por la misma CA. Conviene reservar la IP de la
+máquina en el router (DHCP estático) para no tener que repetir este proceso.
 
 ### 3. Emitir un certificado de dispositivo
 
