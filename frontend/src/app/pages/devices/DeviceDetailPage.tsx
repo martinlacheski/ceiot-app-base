@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router";
 
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
+import { DeviceFirmwareSection } from "@/app/components/devices/DeviceFirmwareSection";
 import { DeviceDailySummary, DeviceDetailedReadings } from "@/app/components/devices/DeviceTelemetryTables";
 import { DeviceSensorsSection } from "@/app/components/devices/DeviceSensorsSection";
 import {
@@ -161,6 +162,7 @@ export default function DeviceDetailPage() {
           </div>
         </CardContent>
       </Card>
+      {user?.isAdmin && <DeviceFirmwareSection device={device} />}
       <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} deviceTypeId={device.deviceTypeId} />
       {canReadTelemetry && <>
         <div role="group" aria-label="Vista de las lecturas" className="grid w-full grid-cols-3 items-center gap-1 rounded-md border p-1 sm:inline-grid sm:w-auto">

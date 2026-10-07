@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Device } from "@/app/types/device.types";
 import { formatDeviceGpsSummary, formatDeviceMac } from "./deviceTelemetry";
+import { DeviceFirmwareSection } from "./DeviceFirmwareSection";
 import { DevicePresenceBadge } from "./DevicePresenceBadge";
 import { getDeviceStatusLabel } from "@/utils/status-labels";
 
@@ -192,6 +193,8 @@ export function DeviceDetailDialog({
             </div>
 
           </div>
+
+          {user?.isAdmin && <DeviceFirmwareSection device={device} enabled={open} />}
 
           {canReadTelemetry && <><label className="flex items-center gap-2 text-sm" htmlFor="dialog-telemetry-range">Período de lecturas
             <select id="dialog-telemetry-range" className="rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => setRange(event.target.value as "24h" | "7d" | "30d")}>

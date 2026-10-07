@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
 const queryState = vi.hoisted(() => ({
   history: undefined as unknown,
   latest: undefined as unknown,
+  isAdmin: false,
 }));
 
 vi.mock("@tanstack/react-query", () => ({
@@ -30,7 +31,10 @@ vi.mock("@/app/services/environmentalSensor.service", () => ({
 vi.mock("@/components/dashboard/charts/EnvironmentalReadingsChart", () => ({
   EnvironmentalReadingsChart: ({ variableCode }: { variableCode: string }) => <div data-testid={`chart-${variableCode}`} />,
 }));
-vi.mock("@/auth/store/auth.store", () => ({ useAuthStore: () => ({ user: { permissions: ["telemetry:read"], isAdmin: false } }) }));
+vi.mock("@/auth/store/auth.store", () => ({ useAuthStore: () => ({ user: { permissions: ["telemetry:read"], isAdmin: queryState.isAdmin } }) }));
+vi.mock("./DeviceFirmwareSection", () => ({
+  DeviceFirmwareSection: ({ device, enabled }: { device: { id: string }; enabled: boolean }) => <div>Firmware de {device.id} {enabled ? "activo" : "inactivo"}</div>,
+}));
 
 const device: Device = {
   id: "device-1",
@@ -68,6 +72,7 @@ function renderDialog(brokerConnected: boolean | null = device.brokerConnected) 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  queryState.isAdmin = false;
   queryState.latest = queryResult({ items: [], total: 0, sensors: [] });
   queryState.history = queryResult({ items: [], total: 0, sensors: [] });
   mocks.useQuery.mockImplementation(
@@ -191,5 +196,14 @@ describe("DeviceDetailDialog", () => {
       document.querySelector('time[datetime="2026-09-21T12:30:00Z"]'),
     ).toBeInTheDocument();
     expect(screen.getByTestId("chart-temperature")).toBeInTheDocument();
+  });
+
+  it("offers the firmware update only to administrators while open", () => {
+    const { unmount } = renderDialog();
+    expect(screen.queryByText(/Firmware de device-1/)).not.toBeInTheDocument();
+    unmount();
+    queryState.isAdmin = true;
+    renderDialog();
+    expect(screen.getByText("Firmware de device-1 activo")).toBeInTheDocument();
   });
 });

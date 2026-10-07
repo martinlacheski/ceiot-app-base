@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DeviceDetailPage from "./DeviceDetailPage";
 
 const mocks = vi.hoisted(() => ({ getHistory: vi.fn(), getLatest: vi.fn(), guestCard: vi.fn(), tables: vi.fn(), useQuery: vi.fn() }));
-const state = vi.hoisted(() => ({ latest: undefined as unknown, history: undefined as unknown }));
+const state = vi.hoisted(() => ({ latest: undefined as unknown, history: undefined as unknown, isAdmin: false }));
 vi.mock("@tanstack/react-query", () => ({ useQuery: mocks.useQuery }));
 vi.mock("@/app/services/environmentalSensor.service", () => ({ environmentalSensorService: { getLatest: mocks.getLatest, getHistory: mocks.getHistory } }));
 vi.mock("@/app/components/devices/DeviceSensorsSection", () => ({ DeviceSensorsSection: () => <div>Sensores del dispositivo</div> }));
@@ -17,14 +17,15 @@ vi.mock("@/components/ui/date-range-picker", () => ({
   DateRangePicker: ({ onUpdate }: { onUpdate: (values: { range: { from: Date; to?: Date } }) => void }) =>
     <button onClick={() => onUpdate({ range: { from: new Date(2026, 8, 1, 15), to: new Date(2026, 8, 3, 9) } })}>Elegir fechas</button>,
 }));
-vi.mock("@/auth/store/auth.store", () => ({ useAuthStore: () => ({ user: { id: "owner-1", permissions: ["telemetry:read"] } }) }));
+vi.mock("@/auth/store/auth.store", () => ({ useAuthStore: () => ({ user: { id: "owner-1", permissions: ["telemetry:read"], isAdmin: state.isAdmin } }) }));
+vi.mock("@/app/components/devices/DeviceFirmwareSection", () => ({ DeviceFirmwareSection: ({ device }: { device: { id: string } }) => <div>Firmware de {device.id}</div> }));
 vi.mock("@/app/components/access/DeviceGuestManagementCard", () => ({ DeviceGuestManagementCard: (props: unknown) => { mocks.guestCard(props); return <div>Access management</div>; } }));
 const device = { id: "device-1", name: "Sensor norte", serial: "IOT-0000-0001", brokerConnected: true, environment: { name: "Establecimiento", ownerId: "owner-1" } };
 const sensors = [{ key: "dht22", sensorCode: "dht22", sensorName: "DHT22", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] }, { key: "bmp280", sensorCode: "bmp280", sensorName: "BMP280", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] }];
 const telemetry = { items: [{ time: "2026-09-21T12:30:00Z", values: { dht22: { temperature: 23.4 }, bmp280: { temperature: 22.9 } } }], total: 1, sensors };
 const result = (data?: unknown, opts: { isLoading?: boolean; isError?: boolean } = {}) => ({ data, isLoading: opts.isLoading ?? false, isError: opts.isError ?? false });
 function renderPage() { return render(<MemoryRouter initialEntries={["/app/devices/device-1"]}><Routes><Route path="/app/devices/:id" element={<DeviceDetailPage />} /></Routes></MemoryRouter>); }
-beforeEach(() => { vi.clearAllMocks(); state.latest = result({ items: [], total: 0, sensors: [] }); state.history = result({ items: [], total: 0, sensors: [] }); mocks.useQuery.mockImplementation((options: { queryKey: readonly unknown[] }) => options.queryKey[0] === "device" ? result(device) : options.queryKey[1] === "latest" ? state.latest : state.history); });
+beforeEach(() => { vi.clearAllMocks(); state.isAdmin = false; state.latest = result({ items: [], total: 0, sensors: [] }); state.history = result({ items: [], total: 0, sensors: [] }); mocks.useQuery.mockImplementation((options: { queryKey: readonly unknown[] }) => options.queryKey[0] === "device" ? result(device) : options.queryKey[1] === "latest" ? state.latest : state.history); });
 
 describe("DeviceDetailPage", () => {
   it("uses current-device telemetry endpoints with a rolling period", async () => {
@@ -88,5 +89,14 @@ describe("DeviceDetailPage", () => {
     expect(mocks.tables).toHaveBeenLastCalledWith("daily", expect.objectContaining({
       start: new Date(2026, 8, 1, 0, 0, 0, 0).toISOString(),
       end: new Date(2026, 8, 3, 23, 59, 59, 999).toISOString() }));
+  });
+
+  it("offers the firmware update only to administrators", () => {
+    const { unmount } = renderPage();
+    expect(screen.queryByText("Firmware de device-1")).toBeNull();
+    unmount();
+    state.isAdmin = true;
+    renderPage();
+    expect(screen.getByText("Firmware de device-1")).toBeInTheDocument();
   });
 });

@@ -56,6 +56,14 @@ export const FINAL_FIRMWARE_UPDATE_STATES: readonly FirmwareUpdateState[] = [
 export const isFinalFirmwareUpdateState = (state: string): boolean =>
   (FINAL_FIRMWARE_UPDATE_STATES as readonly string[]).includes(state);
 
+const POLL_MS = 2000;
+
+/** Poll a device's attempts (newest first) while the newest can still change; stop once final. */
+export const firmwareUpdatePollInterval = (updates: FirmwareUpdate[] | undefined): number | false => {
+  const latest = updates?.[0];
+  return latest && !isFinalFirmwareUpdateState(latest.state) ? POLL_MS : false;
+};
+
 export interface FirmwareUpdate {
   id: string;
   requestId: string;
