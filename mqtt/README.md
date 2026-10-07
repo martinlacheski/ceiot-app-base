@@ -68,6 +68,8 @@ ejemplo `mqtt.miproyecto.com`) o la IP de esta máquina en la red local para
 dispositivos reales en desarrollo (por ejemplo `192.168.1.50`). Cada argumento
 con forma de IPv4 se agrega como SAN de tipo IP; el resto, como DNS. Puede
 combinar ambos: `./emitir-certificado-broker.sh mqtt.miproyecto.com 192.168.1.50`.
+Sin argumentos usa `LAN_BIND_IP` de `mqtt/.env`, si está definida. El paso a
+paso para la red local está en [`pki/README.md`](pki/README.md).
 
 Recree el contenedor para que tome el certificado nuevo:
 
