@@ -309,8 +309,68 @@ temperatura 18-28°C, humedad 35-65%, presión 995-1025hPa por defecto).
 
 Argumentos: `--serial` (obligatorio), `--cert-dir` (default
 `mqtt/pki/devices/<serial>/`), `--host` (default `localhost`), `--port`
-(default `18883`), `--interval`, `--count`, `--sensors`, `--pedir-hora`. Ver
+(default `18883`), `--interval`, `--count`, `--sensors`, `--pedir-hora`,
+`--firmware-version` (default `emulador`) y los de OTA de abajo. Ver
 `python3 tools/emulador-dispositivo.py --help` para el detalle completo.
+
+### Actualización de firmware (OTA) sin el ESP32
+
+Con `--ota` el emulador se comporta como un equipo con cliente OTA: queda
+conectado con el serial como client id (igual que el firmware, así el backend
+lo ve en línea), con LWT `offline` retenido en `iot/devices/<serial>/status`,
+publica telemetría cada `--interval` segundos (con su `firmware_version`) y
+atiende `iot/devices/<serial>/ota/command`:
+
+1. Publica `accepted` en `iot/devices/<serial>/ota/status` (o `rejected` con
+   `busy`, `same_version` o `invalid_command`, como el firmware).
+2. Descarga la imagen de la `url` del comando (HTTP plano permitido,
+   redirecciones rechazadas) informando `downloading` con `progress` cada 10 %.
+3. `verifying`: compara tamaño y SHA-256 con los del comando. Si no coinciden
+   informa `failed` (`size_mismatch` / `sha256_mismatch`) y nunca instala.
+4. `installing`, `rebooting`, se desconecta y reconecta (2 s), informa
+   `succeeded` con `running_version` nueva y desde ahí reporta esa versión en
+   la telemetría.
+
+Cada `ota/status` repite el `request_id` del comando y lleva
+`running_version` y `target_version`. Se sale con Ctrl+C (publica `offline`).
+
+**URL de descarga desde el host.** La URL del comando se arma con
+`FIRMWARE_DOWNLOAD_BASE_URL` (o `BACKEND_PUBLIC_BASE_URL`, o
+`BACKEND_HOST_URL`). Si apunta a una IP de la LAN que no es la del equipo, o a
+un host interno de Docker, el emulador no la alcanza: pasá
+`--ota-url-base http://localhost:18000` (reemplaza solo esquema y host; el
+token del path se conserva). Con la IP de la LAN correcta en `.env` no hace
+falta.
+
+```bash
+# Equipo que acepta y completa la actualización (el admin la inicia desde
+# el detalle del dispositivo en la web)
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
+  --ota-url-base http://localhost:18000
+
+# Imagen corrupta en tránsito: failed con sha256_mismatch
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
+  --ota-url-base http://localhost:18000 --ota-fail-at verifying
+
+# Corte de conexión a mitad de la descarga: el broker publica el LWT y el
+# backend marca el intento failed / interrupted; reconecta a los 5 s con la
+# versión anterior
+python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
+  --ota-url-base http://localhost:18000 --ota-disconnect-at downloading
+```
+
+Opciones: `--ota-fail-at downloading|verifying` (falla simulada a mitad de la
+descarga, `download_failed`, o imagen corrupta, `sha256_mismatch`),
+`--ota-disconnect-at downloading`, `--ota-step-delay` (segundos entre estados,
+default `1`, para verlos en la web) y `--firmware-version` (versión con la que
+arranca). Las opciones `--ota-*` requieren `--ota`.
+
+**Ojo:** como usa el serial como client id, si el equipo real de ese serial
+está conectado el broker desconecta a uno de los dos. Usá un serial sin equipo
+físico conectado.
+
+Pruebas unitarias del emulador (en el venv de la opción A, con `pytest`):
+`python3 -m pytest -q tools/test_emulador_dispositivo.py`.
 
 **Nota sobre el hostname del certificado del broker:** los SAN del
 certificado de EMQX son `emqx`, `localhost` y `127.0.0.1`. Conectate con
