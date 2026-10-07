@@ -1,4 +1,4 @@
-# Cambios de DVEM-App (18 de septiembre–23 de septiembre de 2026) para portar a este proyecto
+# Cambios de DVEM-App (18 de septiembre–7 de octubre de 2026) para portar a este proyecto
 
 > Documento de traspaso para el agente que trabaja en **ceiot-app-base** (base de monitoreo ambiental).
 > Resume todo lo que se cambió en DVEM-App durante una larga sesión de trabajo, incluido lo que hizo otro agente
@@ -12,6 +12,26 @@
 > **Ampliado el 23 de septiembre** con los cambios 30 a 35: buckets diarios de reportes en la fecha local del usuario, dispositivos ordenables por
 > "Tipo", el aviso de privacidad de login/registro enlazado a la landing, un typecheck de producción limpio (con un fix genérico al `FormField` de shadcn),
 > la desactivación del tipo de dispositivo legado "Other" vía migración, y el mapa del formulario de establecimiento siguiendo la altura del formulario.
+>
+> **Ampliado el 1 de octubre** con los cambios 36 a 42, revisados contra el estado real de este proyecto (muchos cambios anteriores ya se habían portado:
+> presencia de EMQX, historial de dispositivos, timestamps de actividad de usuarios y la seguridad de EMQX en producción, que este proyecto ya tiene
+> implementada de forma correcta — sin certificados ni llaves privadas en el repositorio). Lo nuevo: celdas tipadas (numéricas y de fecha) en las
+> exportaciones a Excel; una lección de RLS sobre aislar una escritura en un SAVEPOINT dentro de una transacción con identidad fijada por sesión; dos
+> funciones reutilizables para la presencia de EMQX en pantallas de detalle de un tipo de dispositivo; columnas `last_owner_id`/`owner_since` en
+> `device` como una alternativa más simple que la reconstrucción histórica para saber quién fue el dueño anterior; la prop `actionsBreakpoint` de
+> `PageHeader`; y dos arreglos menores de higiene (`Dockerfile`, `.gitignore`). Se revisaron también los cambios de UI táctil/móvil de esta ventana
+> (`InfoCell`, tarjetas del dashboard de ingresos) y no se incorporan: dependen de componentes que este proyecto todavía no tiene y están atados a la
+> pantalla de ingresos de DVEM (ver el cierre de cada sección nueva).
+>
+> **Ampliado el 7 de octubre** con los cambios 43 a 54. El trabajo de DVEM en esta ventana fue mayormente el tipo de dispositivo 1 Relé 1 Pulso y los
+> cobros, que se excluyen. Lo que sí sirve aquí es la **actualización de firmware por OTA**, de punta a punta: catálogo de versiones e intentos de
+> actualización en el backend (43), descarga con una URL corta y un token de vida corta (44), estados del intento serializados y marcados como
+> "interrumpido" cuando el equipo se desconecta a mitad de la actualización (45), pantallas de administración de firmware (46), el cliente OTA del
+> firmware ESP-IDF con sus lecciones de memoria (49) y la configuración de mbedTLS en PSRAM con AES por software (50). Además, piezas sueltas: el
+> componente `FileInput` (47), la forma singular en `DataTablePagination` (48), el script de archivado y el procedimiento de versionado de firmware (51),
+> la limpieza de Docker y el swap del runbook de deploy (52), el inventario de claves y secretos a respaldar (53) y los placeholders `.example` de
+> certificados del firmware (54). El arreglo de la carrera de `esp_lvgl_port` del firmware 1 Relé 1 Pulso **no aplica**: el `esp32/` de este proyecto
+> usa `esp_lcd_axs15231b` directamente, sin LVGL ni `esp_lvgl_port`.
 
 ## Qué hay que hacer
 
@@ -24,49 +44,82 @@ Si tu sesión no puede leer `/home/martin/Code/DVEM-App`, pedile el permiso al u
 
 ### Trabajo a implementar (en este orden)
 
-- [ ] **1. Limpieza de la identidad RLS al devolver una conexión al pool** (seguridad). Integrar `install_rls_identity_reset` de `backend/app/core/db.py` y copiar
+> **Estado al 7 de octubre:** los cambios 1 a 42 están resueltos (seguimiento en `odd/tasks/dvem-porting.md`): el 38 quedó diferido por no
+> tener todavía un consumidor, y el 10 y el 39 no aplican a este proyecto. Quedan pendientes los cambios 43 a 54.
+
+- [x] **1. Limpieza de la identidad RLS al devolver una conexión al pool** (seguridad). Integrar `install_rls_identity_reset` de `backend/app/core/db.py` y copiar
   `backend/tests/postgres/test_rls_identity_reset.py`. Sin adaptación.
-- [ ] **13. Infraestructura de tests contra PostgreSQL real.** Copiar la carpeta `backend/tests/postgres/` (README, `conftest.py`, escenario) y los ajustes de
+- [x] **13. Infraestructura de tests contra PostgreSQL real.** Copiar la carpeta `backend/tests/postgres/` (README, `conftest.py`, escenario) y los ajustes de
   `frontend/vite.config.ts`. Quitar del escenario todo lo de pagos.
-- [ ] **2. Historial de dispositivo por dueño y por establecimiento.** Copiar el módulo `backend/app/api/device/history/`, la migración de historial y los cambios de
+- [x] **2. Historial de dispositivo por dueño y por establecimiento.** Copiar el módulo `backend/app/api/device/history/`, la migración de historial y los cambios de
   operaciones, sensores y router, con sus tests. Adaptar el backfill (no hay órdenes QR) y re-encadenar la migración a la cabeza de este proyecto.
-- [ ] **5. Presencia online/offline desde la API de EMQX.** Copiar `backend/app/core/emqx_presence.py`, los cambios de configuración, modelos, repositorio y router de
+- [x] **5. Presencia online/offline desde la API de EMQX.** Copiar `backend/app/core/emqx_presence.py`, los cambios de configuración, modelos, repositorio y router de
   dispositivos, la guía de despliegue y los cambios de frontend. Adaptar el formato del `client_id` al serial de este proyecto.
-- [ ] **4. Pulso de actividad para refrescar el dashboard sin recargar.** Copiar la migración del pulso, el modelo y el endpoint `activity`, el hook `useReportActivity` y
+- [x] **4. Pulso de actividad para refrescar el dashboard sin recargar.** Copiar la migración del pulso, el modelo y el endpoint `activity`, el hook `useReportActivity` y
   el uso en el dashboard. Poner los triggers sobre `sensorreading` en lugar de pagos.
-- [ ] **3. Dispositivos desvinculados visibles para el dueño anterior.** Copiar los endpoints de historial por serial y las pantallas de dispositivos desvinculados.
-- [ ] **6. Mover un dispositivo a otro establecimiento.** Copiar el endpoint, el método de repositorio y sus tests, y en el frontend el bloque "Establecimiento",
+- [x] **3. Dispositivos desvinculados visibles para el dueño anterior.** Copiar los endpoints de historial por serial y las pantallas de dispositivos desvinculados.
+- [x] **6. Mover un dispositivo a otro establecimiento.** Copiar el endpoint, el método de repositorio y sus tests, y en el frontend el bloque "Establecimiento",
   el diálogo y el hook. Quitar todo lo de comisiones.
-- [ ] **7. Búsqueda por nombre en establecimientos y selector con búsqueda en el servidor.** Copiar el parámetro `search`, las mejoras de `SearchableSelect` y `useDebouncedValue`.
-- [ ] **8. Mapa público de la landing alimentado por la API.** Copiar el endpoint público (con sesión de sistema por RLS) y, en `landing/`, los componentes del mapa completos,
+- [x] **7. Búsqueda por nombre en establecimientos y selector con búsqueda en el servidor.** Copiar el parámetro `search`, las mejoras de `SearchableSelect` y `useDebouncedValue`.
+- [x] **8. Mapa público de la landing alimentado por la API.** Copiar el endpoint público (con sesión de sistema por RLS) y, en `landing/`, los componentes del mapa completos,
   el cargador con refresco y la URL derivada. Definir qué significa "activo" en este proyecto.
-- [ ] **9. Mapa de la aplicación con un marcador por ubicación.** Copiar `MapContainer.tsx`, `dotLayout.ts` y `groupDispensersByLocation.ts` con sus tests.
-- [ ] **15. Reportes PDF y Excel con logos y títulos de marca.** Copiar `report-branding.ts`, la versión final de `export.utils.ts`, sus tests y ajustar los llamadores
+- [x] **9. Mapa de la aplicación con un marcador por ubicación.** Copiar `MapContainer.tsx`, `dotLayout.ts` y `groupDispensersByLocation.ts` con sus tests.
+- [x] **15. Reportes PDF y Excel con logos y títulos de marca.** Copiar `report-branding.ts`, la versión final de `export.utils.ts`, sus tests y ajustar los llamadores
   para esperar la exportación. Reemplazar logo, QR y frase institucional por los de este proyecto.
-- [ ] **12. No registrar URLs con claves en los logs HTTP.** Copiar `backend/app/core/logging_config.py` y llamarlo al arrancar el backend y el runtime.
-- [ ] **11. Búsqueda de direcciones sin sesgo a un país.** Aplicar los cambios de `GooglePlaceAutocomplete` y `AddressMapDialog`.
-- [ ] **14. Formulario de asociar con `noValidate`.** Aplicar solo el patrón (sin el campo de importe).
-- [ ] **16. Último login y última actividad de los usuarios, visibles en el admin.** Migración de `last_login_at` y `last_seen_at`, escritura en el login (contraseña y SSO) y desde `get_current_user` cada 15 minutos como máximo, corrección de `created_at`, y en el admin la columna "Último acceso" con tooltip. Cuidar que `updated_at` no cambie y que `created_at` use `default_factory`.
-- [ ] **17. Estándar de pantallas de listado.** Copiar las piezas compartidas (`ListSearchInput`, `ListExportActions`, `ListFiltersAccordion`, `ListFilterFields`, `useDebouncedSearch`, `fetchAllPages`, `serverSorting`, `downloadReport`, `url-params`, encabezados centrados) y aplicarlas a **todas** las listas de este proyecto: buscador en todos los campos, Filtros, Excel/PDF de todas las filas filtradas y encabezados centrados. Subir `MAX_PER_PAGE` a 10000.
-- [ ] **18. Botón "Volver" unificado** (`BackButton` al lado del título) en todas las pantallas, sin el texto a la vista.
-- [ ] **19. Selector de rango de fechas en móvil:** pasar `mobileLayout` y `triggerClassName="w-full sm:w-auto"` en todas las pantallas que lo usen.
-- [ ] **20. Panel inferior del mapa en móvil** (`Sheet` + `useMediaQuery`).
-- [ ] **21. Etiquetas en español** con un módulo central y respaldo "humanizado", y búsqueda por etiqueta en el servidor con test de paridad.
-- [ ] **22. Historial de dispositivos y de un dispositivo**, con la **telemetría** como pestaña principal (plantilla `HistoryTelemetryTab`), búsqueda, filtros y exportación.
-- [ ] **23. Dispositivos ordenables por propietario, establecimiento y estado**, y columna "Estado".
-- [ ] **24. Alineaciones menores** (Establecimientos en una fila, Permisos, altura de 44 px).
-- [ ] **29. Auditoría "Buscar en todos los campos": paridad completa** en las 14 pantallas de listado, más dos bugs de datos encontrados al arreglar los tests (código postal de ciudades, suites legacy sin el prefijo `/api`).
-- [ ] **25. Modo claro/oscuro persistente**, con la ronda de colores hardcodeados que rompían el tema (fondos, logos, autofill del navegador).
-- [ ] **26. Reorganización del menú lateral** (Dispositivos, Historial, Usuarios y Mapa a la raíz) y filtro/orden del historial por propietario para administradores.
-- [ ] **27. Pantallas de una sola tarjeta sin flecha de "Volver" cuando son raíz del sidebar** (`FormPageLayout` con `hideBackButton`), aplicado a Mi Perfil, Ajustes Generales y Cambiar Contraseña.
-- [ ] **28. "Limpiar todos" también en el dashboard**, sincronización del selector de fechas no controlado tras limpiar, y una X redundante de menos en el selector de usuarios.
-- [ ] **10. Catálogos de documentos y condiciones fiscales por país** (opcional; solo si este proyecto conserva datos fiscales de los usuarios).
-- [ ] **31. Dispositivos ordenables por "Tipo"** en el listado. Agregar `deviceTypeName` al enum de ordenamiento del backend y a la columna del frontend.
-- [ ] **34. Tipo de dispositivo legado "Other" desactivado vía migración**, en vez de recrearse y reactivarse solo. Copiar la migración de datos y simplificar el repositorio.
-- [ ] **32. Aviso de privacidad en login y registro** enlazado a `/privacidad` de la landing. Este proyecto ya tiene `PRIVACY_POLICY_URL` en `publicUrls.ts` y la página `landing/src/pages/privacidad.astro`: solo falta usarlo en las dos pantallas.
-- [ ] **33. Typecheck de producción limpio.** Verificar con `npm run build` (usa `tsc -b`, no `tsc --noEmit` sobre el tsconfig raíz) y aplicar el fix genérico al `FormField` compartido (tercer genérico `TTransformedValues`).
-- [ ] **35. Mapa del formulario de establecimiento siguiendo la altura del formulario** (bajar `xl:min-h-[44rem]` a algo más chico, por ejemplo `xl:min-h-[24rem]`).
-- [ ] **30. Buckets diarios de reportes en la fecha local del usuario, no en UTC** (solo si/cuando este proyecto tenga un endpoint de reportes con agregación por día, como el que trae el cambio 4): agregar `utc_offset_minutes` reutilizando `format_local`/`formatted_time` de `backend/app/api/device/history/query_utils.py` (cambio 22).
+- [x] **12. No registrar URLs con claves en los logs HTTP.** Copiar `backend/app/core/logging_config.py` y llamarlo al arrancar el backend y el runtime.
+- [x] **11. Búsqueda de direcciones sin sesgo a un país.** Aplicar los cambios de `GooglePlaceAutocomplete` y `AddressMapDialog`.
+- [x] **14. Formulario de asociar con `noValidate`.** Aplicar solo el patrón (sin el campo de importe).
+- [x] **16. Último login y última actividad de los usuarios, visibles en el admin.** Migración de `last_login_at` y `last_seen_at`, escritura en el login (contraseña y SSO) y desde `get_current_user` cada 15 minutos como máximo, corrección de `created_at`, y en el admin la columna "Último acceso" con tooltip. Cuidar que `updated_at` no cambie y que `created_at` use `default_factory`.
+- [x] **17. Estándar de pantallas de listado.** Copiar las piezas compartidas (`ListSearchInput`, `ListExportActions`, `ListFiltersAccordion`, `ListFilterFields`, `useDebouncedSearch`, `fetchAllPages`, `serverSorting`, `downloadReport`, `url-params`, encabezados centrados) y aplicarlas a **todas** las listas de este proyecto: buscador en todos los campos, Filtros, Excel/PDF de todas las filas filtradas y encabezados centrados. Subir `MAX_PER_PAGE` a 10000.
+- [x] **18. Botón "Volver" unificado** (`BackButton` al lado del título) en todas las pantallas, sin el texto a la vista.
+- [x] **19. Selector de rango de fechas en móvil:** pasar `mobileLayout` y `triggerClassName="w-full sm:w-auto"` en todas las pantallas que lo usen.
+- [x] **20. Panel inferior del mapa en móvil** (`Sheet` + `useMediaQuery`).
+- [x] **21. Etiquetas en español** con un módulo central y respaldo "humanizado", y búsqueda por etiqueta en el servidor con test de paridad.
+- [x] **22. Historial de dispositivos y de un dispositivo**, con la **telemetría** como pestaña principal (plantilla `HistoryTelemetryTab`), búsqueda, filtros y exportación.
+- [x] **23. Dispositivos ordenables por propietario, establecimiento y estado**, y columna "Estado".
+- [x] **24. Alineaciones menores** (Establecimientos en una fila, Permisos, altura de 44 px).
+- [x] **29. Auditoría "Buscar en todos los campos": paridad completa** en las 14 pantallas de listado, más dos bugs de datos encontrados al arreglar los tests (código postal de ciudades, suites legacy sin el prefijo `/api`).
+- [x] **25. Modo claro/oscuro persistente**, con la ronda de colores hardcodeados que rompían el tema (fondos, logos, autofill del navegador).
+- [x] **26. Reorganización del menú lateral** (Dispositivos, Historial, Usuarios y Mapa a la raíz) y filtro/orden del historial por propietario para administradores.
+- [x] **27. Pantallas de una sola tarjeta sin flecha de "Volver" cuando son raíz del sidebar** (`FormPageLayout` con `hideBackButton`), aplicado a Mi Perfil, Ajustes Generales y Cambiar Contraseña.
+- [x] **28. "Limpiar todos" también en el dashboard**, sincronización del selector de fechas no controlado tras limpiar, y una X redundante de menos en el selector de usuarios.
+- [x] **10. Catálogos de documentos y condiciones fiscales por país** (opcional; solo si este proyecto conserva datos fiscales de los usuarios).
+- [x] **31. Dispositivos ordenables por "Tipo"** en el listado. Agregar `deviceTypeName` al enum de ordenamiento del backend y a la columna del frontend.
+- [x] **34. Tipo de dispositivo legado "Other" desactivado vía migración**, en vez de recrearse y reactivarse solo. Copiar la migración de datos y simplificar el repositorio.
+- [x] **32. Aviso de privacidad en login y registro** enlazado a `/privacidad` de la landing. Este proyecto ya tiene `PRIVACY_POLICY_URL` en `publicUrls.ts` y la página `landing/src/pages/privacidad.astro`: solo falta usarlo en las dos pantallas.
+- [x] **33. Typecheck de producción limpio.** Verificar con `npm run build` (usa `tsc -b`, no `tsc --noEmit` sobre el tsconfig raíz) y aplicar el fix genérico al `FormField` compartido (tercer genérico `TTransformedValues`).
+- [x] **35. Mapa del formulario de establecimiento siguiendo la altura del formulario** (bajar `xl:min-h-[44rem]` a algo más chico, por ejemplo `xl:min-h-[24rem]`).
+- [x] **30. Buckets diarios de reportes en la fecha local del usuario, no en UTC** (solo si/cuando este proyecto tenga un endpoint de reportes con agregación por día, como el que trae el cambio 4): agregar `utc_offset_minutes` reutilizando `format_local`/`formatted_time` de `backend/app/api/device/history/query_utils.py` (cambio 22).
+- [x] **36. Celdas tipadas (numéricas y de fecha) en las exportaciones a Excel**. Copiar el modelo `ExportCell` de `export.utils.ts` y migrar las
+  exportaciones de este proyecto que tengan columnas numéricas o de fecha (telemetría, historial) para que el Excel traiga números y fechas reales en
+  vez de texto formateado.
+- [x] **37. SAVEPOINT para aislar una escritura dentro de una transacción con identidad RLS** (seguridad). Revisar todo lugar de este proyecto que capture
+  `IntegrityError`/una violación de restricción única y haga `await session.rollback()` sobre la sesión completa: si esa sesión fijó su identidad RLS con
+  `set_config(..., false)` sin haber hecho `commit` todavía, el `rollback()` también revierte la identidad. Reemplazar por `async with session.begin_nested()`
+  (SAVEPOINT) alrededor de la escritura conflictiva.
+- [x] **38. Helpers reutilizables de presencia de EMQX para el detalle de un tipo de dispositivo**: copiar `compute_live_broker_connected` y
+  `resolve_broker_presence` a `backend/app/core/emqx_presence.py` (este proyecto ya tiene ese archivo por el cambio 5) para cualquier pantalla de detalle
+  de un tipo de dispositivo que necesite presencia en vivo sin duplicar la normalización del serial.
+- [x] **39. `last_owner_id` y `owner_since` en `device`**: alternativa más simple que la reconstrucción histórica (cambio 2) para saber quién fue el
+  dueño anterior y desde cuándo es dueño el actual, sin depender de que el dispositivo haya registrado operaciones o lecturas.
+- [x] **40. Prop `actionsBreakpoint` de `PageHeader`** para pantallas con un grupo de acciones ancho junto a un subtítulo largo.
+- [x] **41. `Dockerfile` del frontend: `AS` en mayúsculas y comentario para saltear el chequeo de secretos** (higiene, sin cambio de comportamiento).
+- [x] **42. Ignorar el entorno virtual de Python del backend en `.gitignore`** (higiene).
+- [ ] **43. Catálogo de firmware y actualizaciones OTA (backend).** Copiar `backend/app/api/device/firmware/` con sus tests, en una sola migración `0019`.
+  Quitar todo lo de 1 Relé 1 Pulso, usar `backend/app/core/storage.py` y los tópicos `iot/devices/{serial}/ota/...`.
+- [ ] **44. URL corta con token para descargar la imagen** (junto con 43): `FIRMWARE_DOWNLOAD_BASE_URL` con respaldo en `BACKEND_PUBLIC_BASE_URL`.
+- [ ] **45. Estados del intento serializados** (`FOR UPDATE` + `populate_existing` + `may_transition`) e **"interrumpido" al quedar sin conexión**
+  (junto con 43), con el gancho en `process_device_status_message`.
+- [ ] **46. Pantallas de administración de firmware** (junto con 43): listado y alta con lectura del descriptor del `.bin` en el navegador, notas
+  precargadas y desactivación de las versiones anteriores. Sin el panel del 1 Relé 1 Pulso.
+- [ ] **47. Componente `FileInput`** (+ `fileSize.ts`).
+- [ ] **48. `entityNameSingular` en `DataTablePagination`** ("1 firmware en total" en vez de "1 registros").
+- [ ] **49. Cliente OTA en el firmware ESP-IDF** (`esp32/main/ota/`), con tests de host. Sin chequeos de ventas ni pantallas LVGL.
+- [ ] **50. mbedTLS en PSRAM y AES por software** en `esp32/sdkconfig.defaults`, cuando aparezca el síntoma o junto con 49.
+- [ ] **51. `tools/archive_firmware.sh` y procedimiento de versionado de firmware**, conservando el `.elf` de cada versión.
+- [ ] **52. Runbook de deploy:** `docker builder prune -af && docker image prune -af` después de cada deploy (nunca `volume prune`) y swap de 2 GB.
+- [ ] **53. Inventario de claves y secretos a respaldar** (sin los secretos de pagos).
+- [ ] **54. Placeholders `.example` de certificados del firmware y `*.p12`/`*.pfx` en `.gitignore`.**
 
 ### Cómo copiar cada archivo
 
@@ -98,6 +151,8 @@ Se comprobó contra `/home/martin/Code/ceiot-app-base`. **Leer antes de portar**
 - **`frontend/src/lib/export.utils.ts` existe aquí pero es una versión anterior** (sin encabezado de marca): para el cambio 15 hay que llevar la versión final de DVEM y
   adaptar los llamadores. `frontend/` sí tiene `@vis.gl/react-google-maps`.
 - **Este proyecto deriva de una versión anterior de DVEM, no de la actual.** No se comparó archivo por archivo: por eso los archivos "modificado" se integran a mano, comparando ambas versiones, y no se sobrescriben.
+- **Varios cambios de este documento ya están portados.** Al revisar el estado real para la ampliación del 1 de octubre se confirmó que este proyecto ya tiene, funcionando: la presencia por EMQX (cambio 5, `backend/app/core/emqx_presence.py`), el módulo de historial de dispositivo (cambio 2, `backend/app/api/device/history/`, sin `ownership.py`), los timestamps de actividad de usuarios (cambio 16, ya migrados), la exportación con marca (cambio 15, `report-branding.ts` y la versión de `export.utils.ts` sin celdas tipadas) y, de forma más completa que lo que pide este documento, la seguridad de EMQX en producción: mTLS por listener con `peer_cert_as_username = cn`, ACL por dispositivo (`mqtt/acl.conf`, tópico `iot/devices/${username}/#`), autenticación por usuario/contraseña para backend/runtime, y **sin ningún `.key`/`.pem` en el repositorio** (`.gitignore` ya excluye `*.key`, `*.pem` y `mqtt/certs/`). No hace falta portar nada de EMQX; no se agregó una sección nueva por eso.
+- **Numeración de migraciones de Alembic.** Este proyecto no usa los identificadores hexadecimales de 12 caracteres de DVEM (`z8a9b0c1d2e3`, `v7w8x9y0z1a2`, etc.): usa revisiones numéricas secuenciales de 4 dígitos (`0001` … `0018`, cabeza actual `0018_device_type_template.py`, verificado el 7 de octubre). Cualquier migración nueva de este documento debe encadenarse a partir de `0019` con `down_revision = "0018"` (y la siguiente sobre esa), no copiar el identificador de DVEM. Las referencias a `0011`/`0010` de la sección 39 se escribieron cuando la cabeza era `0010`: hoy le corresponde el número libre siguiente.
 
 ## Resumen y prioridad
 
@@ -138,8 +193,27 @@ Se comprobó contra `/home/martin/Code/ceiot-app-base`. **Leer antes de portar**
 | 33 | Typecheck de producción limpio (`tsc -b`) y fix genérico de `FormField` | Media | Ninguna |
 | 34 | Tipo de dispositivo legado "Other" desactivado vía migración | Baja | Ninguna |
 | 35 | Mapa del formulario de establecimiento sigue la altura del formulario | Baja | Ninguna |
+| 36 | Celdas tipadas (numéricas y de fecha) en las exportaciones a Excel | Media | Adaptar a las columnas de telemetría/historial propias (sin montos) |
+| 37 | SAVEPOINT para aislar una escritura dentro de una transacción con identidad RLS | **Alta (seguridad)** | Revisar los `rollback()` existentes sobre sesiones con identidad RLS |
+| 38 | Helpers reutilizables de presencia de EMQX (`compute_live_broker_connected`, `resolve_broker_presence`) | Baja | Ninguna |
+| 39 | `last_owner_id`/`owner_since` en `device` | Media | Migración con numeración propia de este proyecto |
+| 40 | Prop `actionsBreakpoint` de `PageHeader` | Baja | Ninguna |
+| 41 | `Dockerfile` del frontend: `AS` en mayúsculas y salteo del chequeo de secretos | Baja | Ninguna |
+| 42 | Ignorar el entorno virtual de Python del backend en `.gitignore` | Baja | Ninguna |
+| 43 | Catálogo de firmware y actualizaciones OTA (backend) | Alta | Quitar 1 Relé 1 Pulso; familia ↔ tipo de dispositivo; `app/core/storage.py`; tópicos `iot/devices/...`; migración `0019`; `FIRMWARE_UPDATE` y columnas de historial |
+| 44 | URL corta con token para descargar la imagen | Alta (con 43) | `FIRMWARE_DOWNLOAD_BASE_URL`; el token aparece en los logs de acceso |
+| 45 | Estados del intento serializados e "interrumpido" al quedar sin conexión | Alta (con 43) | Gancho en `process_device_status_message` de este proyecto |
+| 46 | Pantallas de administración de firmware | Alta (con 43) | Sin el panel del 1 Relé 1 Pulso ni las familias de DVEM |
+| 47 | Componente `FileInput` (+ `fileSize.ts`) | Media | Ninguna |
+| 48 | `entityNameSingular` en `DataTablePagination` | Media | Ninguna |
+| 49 | Cliente OTA en el firmware ESP-IDF | Media | Sin ventas, sesiones ni LVGL; tópicos `iot/devices/...`; `PROJECT_VER` |
+| 50 | mbedTLS en PSRAM y AES por software | Media | Solo con el síntoma o junto con 49 |
+| 51 | `tools/archive_firmware.sh` y procedimiento de versionado | Baja | Ruta `esp32/build/iot_device.bin`; guardar el `.elf` |
+| 52 | Runbook de deploy: limpieza de Docker y swap de 2 GB | Media | Solo esos dos bloques |
+| 53 | Inventario de claves y secretos a respaldar | Baja | Inventario propio, sin pagos |
+| 54 | Placeholders `.example` de certificados del firmware y `*.p12`/`*.pfx` en `.gitignore` | Baja | Archivos que usa este firmware |
 
-Orden sugerido: 1 → 13 → 2 → 5 → 4 → 3 → 6 y 7 → 8 y 9 → 15 → 16 → 17 → 29 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28 → 32 → 33 → 34 → 31 → 35 → 30 → resto.
+Orden sugerido: 1 → 37 → 13 → 2 → 39 → 5 → 38 → 4 → 3 → 6 y 7 → 8 y 9 → 15 → 36 → 16 → 17 → 29 → 18 → 19 → 20 → 21 → 22 → 23 → 24 → 25 → 26 → 27 → 28 → 32 → 33 → 34 → 31 → 35 → 40 → 41 → 42 → 47 y 48 → 43, 44, 45 y 46 → 49 y 50 → 51 → 52 → 53 → 54 → 30 → resto.
 
 ---
 
@@ -1187,6 +1261,526 @@ escribir esto), en el contenedor del mapa: aplica el mismo ajuste de altura, sin
 | --- | --- | --- | --- |
 | `frontend/src/app/components/environments/EnvironmentForm.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/environments/EnvironmentForm.tsx` | ⚠ el commit de origen también compacta el bloque de ubicación de Mercado Pago: portar solo el cambio de altura del mapa (`xl:min-h-[44rem]` → `xl:min-h-[24rem]`) y el `data-testid` |
 | `frontend/src/app/components/environments/EnvironmentForm.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/environments/EnvironmentForm.test.tsx` | solo el test que verifica `min-h-[44rem]` ausente en `environment-map-container` |
+
+---
+
+## 36. Celdas tipadas (numéricas y de fecha) en las exportaciones a Excel
+
+**Problema.** `exportToExcel`/`exportToPdf` reciben `data: string[][]`: todas las columnas, también las numéricas y las de fecha, llegan como el mismo
+texto ya formateado que se usa para la pantalla y el PDF (por ejemplo "27,50 °C" o "30/09/2026 14:32"). Excel escribe esas celdas como texto: no se
+pueden sumar ni promediar, y una columna de fecha no se puede filtrar ni ordenar como fecha. **Este proyecto tiene exactamente el mismo problema**:
+`frontend/src/lib/export.utils.ts` y `frontend/src/lib/downloadReport.ts` siguen en `data: string[][]`, y las exportaciones de telemetría
+(`HistoryTelemetryTab.tsx` → `historyTelemetryColumns.ts` → `buildTelemetryColumns`) y de historial (`HistoryTabBase.tsx`) arman cada celda con
+`String(column.value(row))`, perdiendo el tipo numérico de las lecturas de sensores.
+
+**Solución.** Un modelo de celda compartido entre PDF y Excel: `ExportCell = string | {kind, value, text, decimals?}`, con constructores
+`moneyCell`, `integerCell`, `decimalCell(value, text, decimals = 2)`, `percentCell`, `dateCell`, `datetimeCell`, y `cellText(cell)` para obtener el texto
+(lo que siempre vio el PDF). Cada celda no-`string` lleva **tanto** el valor crudo (lo que Excel escribe como número/fecha real, con su `numFmt`) **como**
+el texto ya formateado (lo que el PDF sigue mostrando sin cambios): así el PDF nunca cambia y Excel no necesita re-derivar el formato de cada llamador.
+`exportToExcel` delega en un `buildExcelWorkbook()` exportado aparte, que arma el `ExcelJS.Workbook` sin tocar el DOM ni la descarga (útil para tests).
+Para las fechas, `parseExportDate` (una fecha `YYYY-MM-DD` suelta se interpreta como medianoche local; el resto como UTC-naive, igual que
+`formatDateTime`) y `toExcelWallClock` (re-codifica los campos de hora local de un `Date` como si fueran UTC, porque ExcelJS serializa los campos
+**UTC** de un `Date`: sin esto Excel mostraría la hora UTC en vez de la hora local que ve la pantalla).
+
+**Para este proyecto:** las celdas de dinero (`moneyCell`, `MoneyInput`) no aplican — no hay importes. Sí aplican `decimalCell` (lecturas de sensores:
+temperatura, humedad, etc., con los decimales que use cada variable), `integerCell` (por ejemplo un contador o RSSI si se expone), `percentCell` (si hay
+alguna columna de porcentaje) y `dateCell`/`datetimeCell` (la columna "Fecha/Hora" del historial y la telemetría). Las columnas de texto quedan igual
+(usar `cellText`/el string directo, sin cambios).
+
+**Trampa de test:** todo `vi.mock("@/lib/export.utils", ...)` que reemplaza el módulo completo debe pasar antes por `importOriginal()` y extender el
+resultado (`{ ...(await importOriginal()), exportToExcel: vi.fn() }`), porque el código migrado importa `moneyCell`/`integerCell`/`decimalCell`/etc. del
+mismo módulo: sin el spread esos imports quedan `undefined` y el import falla. Revisar cada mock existente de `export.utils` en este proyecto (por
+ejemplo en los tests de `UsersTable`, `CountriesTable`, `StatesTable`, `CitiesTable`, `IdentificationTypesTable`, `PermissionsTable`, `EnvironmentTypesTable`,
+`HistoryTelemetryTab`, `HistoryTabBase`) antes de migrar sus llamadores.
+
+**Limpieza:** si `frontend/src/utils/export.utils.ts` (el helper CSV legado) no tiene importadores en este proyecto — se verificó que no los tiene
+(`grep -rln "utils/export.utils" frontend/src`, cero resultados fuera del propio archivo) —, eliminarlo igual que hizo DVEM.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/lib/export.utils.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/lib/export.utils.ts` | agrega `ExportCell`, los constructores de celda, `cellText`, `parseExportDate`, `toExcelWallClock` y `buildExcelWorkbook`; `data` pasa de `string[][]` a `ExportCell[][]` |
+| `frontend/src/lib/export.utils.test.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/lib/export.utils.test.ts` |  |
+| `frontend/src/lib/export.excel.test.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/lib/export.excel.test.ts` | lee el workbook generado y verifica tipos/formatos de celda |
+| `frontend/src/lib/downloadReport.ts` | modificado | `/home/martin/Code/DVEM-App/frontend/src/lib/downloadReport.ts` | `ReportOptions.data` pasa a `ExportCell[][]` |
+| `frontend/src/app/components/devices/historyTelemetryColumns.ts` | modificado (propio de este proyecto) | — | `buildTelemetryColumns` arma `ExportCell` (`decimalCell`) en vez de `String(...)` para las columnas numéricas; sin equivalente directo en DVEM (ver `readingFormat.ts`/`deviceOperationsColumns.tsx` como referencia del patrón) |
+| `frontend/src/app/components/devices/HistoryTelemetryTab.tsx` | modificado (propio de este proyecto) | — | `exportRows` arma `data` con las celdas tipadas de `buildTelemetryColumns` en vez de `String(column.value(row))` |
+| `frontend/src/app/components/devices/HistoryTabBase.tsx` | modificado (propio de este proyecto) | — | mismo cambio para el historial de operaciones, si sus columnas tienen valores numéricos o de fecha |
+| `frontend/src/admin/components/users/UsersTable.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/admin/components/users/UsersTable.tsx` | columna "Último acceso": "Nunca" se mantiene como texto plano cuando no hay registro |
+| `frontend/src/utils/export.utils.ts` | eliminar (sin importadores) | `/home/martin/Code/DVEM-App/frontend/src/utils/export.utils.ts` (ya eliminado en DVEM) | confirmar primero con `grep -rln "utils/export.utils" frontend/src` |
+
+**Cómo verificar:** copiar `export.excel.test.ts` y ampliar `export.utils.test.ts` con los casos de `moneyCell`/`decimalCell`/`dateCell` que apliquen;
+correr `cd frontend && npx vitest run`, `npm run lint` y `npx tsc -b` (el build real, no solo `tsc --noEmit` sobre el tsconfig raíz — ver cambio 33).
+
+## 37. SAVEPOINT para aislar una escritura dentro de una transacción con identidad RLS (ALTA PRIORIDAD, seguridad)
+
+**Problema.** Un patrón ya presente en el backend de DVEM (y, por construcción de este proyecto, potencialmente replicable acá): un bloque intenta una
+escritura que puede chocar con una restricción única (por ejemplo, "solo un registro de este tipo por fila relacionada") dentro de un `try`, y ante
+`IntegrityError` hace `await session.rollback()` sobre la **sesión completa** para poder seguir usándola. Si esa misma sesión fijó su identidad para RLS
+con `set_config('app.current_user_id', <id>, false)` como su primera sentencia (el patrón de `get_authed_session`/`get_system_session`, ya presente en
+este proyecto — ver cambio 1) y todavía no hizo ningún `commit`, Postgres trata ese `set_config` como parte de la transacción en curso: un
+`ROLLBACK` completo lo revierte, no solo la escritura que falló. El resultado es una sesión que sigue viva pero **sin identidad**, y cualquier consulta
+protegida por RLS que llegue después en ese mismo pedido ve cero filas, de forma silenciosa. Se reprodujo en DVEM contra una conexión real, no
+superusuario, con `FORCE ROW LEVEL SECURITY` (nunca aparece con SQLite ni con una conexión de superusuario, que se salta RLS).
+
+**Solución.** Aislar la escritura conflictiva en un **SAVEPOINT** (`async with session.begin_nested(): ...`), no en la transacción completa: la
+excepción solo deshace ese SAVEPOINT (`ROLLBACK TO SAVEPOINT`), y todo lo anterior en la sesión —incluida la identidad RLS, todavía no comprometida—
+queda intacto. El `commit()` real de la sesión se hace después, fuera del bloque `begin_nested()`, en el momento en que antes se hacía el `commit` de la
+escritura única.
+
+**Para este proyecto:** revisar cualquier repositorio/servicio que capture `IntegrityError` (o una violación de restricción única equivalente) y llame
+`await session.rollback()` en el `except`, cuando esa sesión proviene de `get_authed_session`/`get_system_session`. El patrón de "insertar y, si ya
+existe, tratarlo como éxito idempotente" (por ejemplo, cualquier tabla con una restricción única que sirva para deduplicar un reintento o una
+notificación repetida) es el candidato típico.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/tests/postgres/test_dispense_activation_rls_identity_postgres.py` | leer como referencia (no copiar tal cual: es específico de `dispensedelivery`/Mercado Pago) | `/home/martin/Code/DVEM-App/backend/tests/postgres/test_dispense_activation_rls_identity_postgres.py` | patrón de test: rol propio no superusuario con `FORCE ROW LEVEL SECURITY`, instala la política exacta de la tabla afectada y prueba que un `rollback()` sin SAVEPOINT pierde la identidad y que `begin_nested()` no la pierde |
+
+**Cómo verificar:** si se aplica el patrón a algún repositorio de este proyecto, escribir un test equivalente contra PostgreSQL real (infraestructura del
+cambio 13): instalar RLS forzado con un rol no superusuario sobre la tabla afectada, fijar la identidad sin `commit`, forzar la violación de la
+restricción única y comprobar que una consulta protegida por RLS inmediatamente después todavía ve filas (con el fix) o las pierde (sin el fix, para
+confirmar que el test realmente detecta el problema).
+
+## 38. Helpers reutilizables de presencia de EMQX para el detalle de un tipo de dispositivo
+
+**Problema.** Cada pantalla de detalle de un tipo de dispositivo que necesita mostrar presencia en vivo (conectado/desconectado por EMQX, cambio 5)
+tendría que repetir la normalización del serial y la búsqueda contra el snapshot de presencia.
+
+**Solución.** Dos funciones puras agregadas a `backend/app/core/emqx_presence.py` (que este proyecto ya tiene por el cambio 5):
+`compute_live_broker_connected(device, presence)` devuelve `True`/`False` si el snapshot está disponible, o `None` ("desconocido") si no — es el mismo
+cálculo que ya usa la lectura genérica de un dispositivo (`device_read_with_presence`); `resolve_broker_presence(device, presence)` devuelve siempre un
+`bool` no nulo: usa la presencia en vivo cuando está disponible y, si no, cae al último estado conocido en la base (`device.broker_connected`). Sirven
+para cualquier endpoint de detalle de un tipo de dispositivo específico que quiera reportar `connection.online: bool` sin duplicar la normalización del
+serial ni el `in presence.connected_serials`.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/core/emqx_presence.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/core/emqx_presence.py` | agrega `compute_live_broker_connected` y `resolve_broker_presence`; ya existe en este proyecto por el cambio 5, solo faltan estas dos funciones |
+
+**Cómo verificar:** solo tiene sentido portar esto cuando este proyecto tenga (o agregue) un endpoint de detalle propio de un tipo de dispositivo que
+necesite presencia en vivo; mientras no exista ese consumidor, es una pieza de baja prioridad a tener en cuenta para cuando se construya.
+
+## 39. `last_owner_id` y `owner_since` en `device`: una alternativa más simple que la reconstrucción histórica
+
+**Problema.** El cambio 2 de este documento resuelve "quién fue el dueño de este dispositivo en cada momento" reconstruyendo una línea de tiempo a
+partir de `deviceoperation`/`sensorreading` (o, en DVEM, de `qrorder`), lo que **no detecta nada para un dispositivo que nunca llegó a registrar una
+operación o una lectura** antes de ser desvinculado o movido. En DVEM esto se notó con dispositivos Expendedora nunca vendidos; en este proyecto el
+mismo caso límite existe para cualquier dispositivo asociado y desvinculado antes de que llegara su primera lectura de sensor.
+
+**Solución (más simple de portar en este proyecto que la reconstrucción del cambio 2, porque no depende de historial previo).** Dos columnas nuevas y
+**nullable** en `device`, nunca expuestas en `DeviceRead` (son bookkeeping interno):
+- `last_owner_id` (FK a `user.id`, `ondelete="SET NULL"`): el dueño del establecimiento al que pertenecía el dispositivo **justo antes** de su último
+  `unpair`/`move`. Se fija en `DeviceRepository.unpair`/`.move`, **antes** de que `environment_id` cambie, consultando
+  `GuestAccessRepository.get_environment_owner_role` sobre el establecimiento de origen.
+- `owner_since` (timestamp): desde cuándo el dueño **actual** tiene este dispositivo. Se fija al asociar por primera vez o al asociar/mover con un dueño
+  **distinto** al anterior; no cambia si el mismo dueño vuelve a asociar o mueve el dispositivo entre sus propios establecimientos; `unpair` no la toca.
+- Una función `resolve_owner_sales_start(session, device)` (en DVEM, `app/api/device/history/ownership.py`) usa `device.owner_since` como cota inferior
+  para "las operaciones/lecturas de este dueño", cayendo a la reconstrucción histórica del cambio 2 solo cuando `owner_since` es `None` (un dispositivo
+  asociado antes de que existiera esta columna). **En este proyecto, si todavía no se portó la reconstrucción del cambio 2, se puede omitir ese
+  fallback**: tratar `owner_since is None` como "sin cota inferior" (el comportamiento de hoy, sin regresión) y confiar en `owner_since` para todo lo
+  asociado después de la migración.
+- El router de operaciones (`backend/app/api/device/operations/router.py`, que este proyecto ya tiene) centraliza la regla de visibilidad en una función
+  `_resolve_access_starts_at`: admin/`device:read_all` ve todo; el dueño queda acotado a `resolve_owner_sales_start`; un invitado sigue con
+  `resolve_device_guest_access_start` (ya existente en este proyecto). Es el mismo patrón que ya usa `get_device_operations`, solo que compartido entre
+  dos endpoints en vez de duplicado.
+
+**Adaptación:** en DVEM, `DeviceRepository.move` también copia `dvem_commission_rate`/`guest_commission_rate` (comisiones) en el mismo `UPDATE`: **no
+portar esa parte**, solo `last_owner_id`. La migración debe encadenarse con la numeración propia de este proyecto (`0011`, `down_revision = "0010"` —
+ver "Correspondencia de rutas"), no con el identificador hexadecimal de DVEM.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/alembic/versions/0011_add_device_ownership_tracking.py` | nuevo (numeración propia) | `/home/martin/Code/DVEM-App/backend/alembic/versions/4939dc75c28d_add_last_owner_id_to_device.py` y `9f04b5850fcb_add_owner_since_to_device.py` | DVEM lo hizo en dos migraciones separadas; en este proyecto puede ir en una sola |
+| `backend/app/api/device/models.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/models.py` | agrega `last_owner_id` y `owner_since`, ambos nullable, ninguno en `DeviceRead` |
+| `backend/app/api/device/repository.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/repository.py` | `unpair`/`move` fijan `last_owner_id`; `move`/`pair` fijan `owner_since` cuando el dueño cambia — ⚠ `move` en DVEM también copia tasas de comisión: no portar esa parte |
+| `backend/app/api/device/history/ownership.py` | nuevo (opcional) | `/home/martin/Code/DVEM-App/backend/app/api/device/history/ownership.py` | `resolve_owner_sales_start`; portar el fallback a la reconstrucción histórica solo si ya existe el cambio 2 |
+| `backend/app/api/device/operations/router.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/operations/router.py` | agrega `_resolve_access_starts_at` compartida entre `get_device_operations` y el resumen |
+| `backend/tests/api/device/test_device_last_owner_id_rls.py` | nuevo | ver `backend/tests/postgres/test_device_last_owner_id_rls.py` en DVEM | ⚠ en DVEM quedó un fix de una etiqueta de enum/campos de operación en el commit `107a88aa`: revisar que la versión que se copie ya tenga esa corrección |
+| `backend/tests/api/device/test_owner_since_operations_bound.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/test_owner_since_operations_bound.py` |  |
+
+**Cómo verificar:** tests de API (asociar, desasociar, mover, con el mismo dueño y con un dueño distinto) y, si este proyecto tiene la infraestructura del
+cambio 13, un test contra PostgreSQL real que confirme que `last_owner_id`/`owner_since` sobreviven a un `rollback()` común (no dependen de RLS para
+escribirse, a diferencia del cambio 37).
+
+## 40. Prop `actionsBreakpoint` de `PageHeader`
+
+**Problema.** `PageHeader` apila las acciones debajo del título por debajo de `sm` y las pone al lado desde `sm` en adelante, sin forma de pedir un
+quiebre distinto. Un grupo de acciones ancho (varios botones, un selector de vista) al lado de un subtítulo largo no entra cómodo desde `sm` en pantallas
+medianas.
+
+**Solución.** Prop opcional `actionsBreakpoint?: "sm" | "lg"` (por defecto `"sm"`, no cambia ninguna pantalla existente): con `"lg"`, las acciones se
+apilan a ancho completo debajo del título hasta el quiebre `lg`, y desde ahí se ponen al lado, con `w-full lg:w-auto` para que ocupen todo el ancho
+mientras están apiladas.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/app/components/PageHeader.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/PageHeader.tsx` | agrega `actionsBreakpoint` y `ROW_CLASSES`; ya existe en este proyecto (cambio 17/18), compatible hacia atrás |
+| `frontend/src/app/components/PageHeader.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/PageHeader.test.tsx` | |
+
+**Nota:** en DVEM esta prop se agregó para el selector "Gráficos/Resumen diario/Vista detallada" del dashboard de ingresos (commit `91f41c0f` y
+siguientes): esa pantalla y ese selector no se portan (son del dashboard de cobros). Lo que se porta es solo el cambio genérico de `PageHeader`, para
+usarlo el día que una pantalla de este proyecto necesite un grupo de acciones ancho.
+
+**Cómo verificar:** correr los tests existentes de `PageHeader.test.tsx` más los nuevos casos para `actionsBreakpoint="lg"`.
+
+## 41. `Dockerfile` del frontend: `AS` en mayúsculas y salteo del chequeo de secretos
+
+Higiene sin cambio de comportamiento. `FROM node:22-alpine as build` pasa a `FROM node:22-alpine AS build` (BuildKit linter) y se agrega
+`# check=skip=SecretsUsedInArgOrEnv` como primera línea del archivo. **Este proyecto tiene el mismo `as build` en minúscula** en `frontend/Dockerfile`.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/Dockerfile` | modificado | `/home/martin/Code/DVEM-App/frontend/Dockerfile` | `as build` → `AS build`, agregar `# check=skip=SecretsUsedInArgOrEnv` como primera línea |
+
+**Cómo verificar:** `docker build` (o el build de CI) sin el warning de BuildKit sobre `as`/`AS`.
+
+## 42. Ignorar el entorno virtual de Python del backend en `.gitignore`
+
+Higiene. **Este proyecto todavía no ignora `backend/.venv` ni `.venv` en `.gitignore`** (se verificó: no hay ninguna entrada `venv`/`.venv`). Agregar la
+misma entrada que DVEM para evitar que alguien trackee el entorno virtual por accidente.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `.gitignore` | modificado | `/home/martin/Code/DVEM-App/.gitignore` | agregar la entrada del entorno virtual del backend |
+
+**Cómo verificar:** `git status` después de crear un `.venv` local no debe mostrarlo como archivo nuevo.
+
+## 43. Catálogo de firmware y actualizaciones OTA (backend)
+
+**Problema.** Este proyecto no tiene forma de actualizar el firmware de un equipo instalado sin ir con un cable. En DVEM se construyó la parte de
+plataforma completa: un catálogo de versiones (`firmware_release`), un intento de actualización por equipo (`firmware_update`), el comando MQTT al equipo,
+el seguimiento de sus estados y el registro en el historial del dispositivo.
+
+**Solución.** Módulo `backend/app/api/device/firmware/`:
+- `models.py`: `FirmwareRelease` (familia, versión, tamaño, SHA-256, notas, activa, clave en el almacenamiento) y `FirmwareUpdate` (intento por equipo
+  con `request_id`, estado, progreso, versión que corre y versión destino, código y mensaje de error, `created_by` nulo cuando lo pide el propio equipo,
+  token de descarga y su vencimiento).
+- `rules.py`: validación de la imagen ESP (`0xE9` en el primer byte, tamaño mínimo y `MAX_IMAGE_BYTES = 0x400000`), validación de la versión y lectura del
+  descriptor de aplicación (`esp_app_desc_t`, magic `0xABCD5432` en el offset 32: versión, nombre de proyecto, versión de IDF, fecha y hora de compilación)
+  con el mapa `FAMILY_BY_PROJECT` que deduce la familia del nombre de proyecto. Al subir un `.bin`, la versión y la familia salen del propio archivo; si no
+  coinciden con lo que se mandó, 422.
+- `service.py` (`FirmwareService`): alta de versiones (con `deactivate_previous`, por defecto `true`, que desactiva las otras versiones activas de la misma
+  familia en la misma transacción), listado paginado, activar/desactivar, `start_update` (equipo de una familia con cliente OTA, en línea, sin otro intento
+  en curso), emisión del `ota/command`, `handle_check`/`handle_request` (actualización pedida desde la pantalla del equipo), `apply_status` y el
+  historial ("Actualización de firmware"). Un intento sin estado final durante 30 minutos deja de bloquear (`STALE_ATTEMPT_AFTER`).
+- `status.py`: los estados del intento (`requested`, `accepted`, `downloading`, `verifying`, `installing`, `rebooting`, `succeeded`, `failed`,
+  `rolled_back`, `rejected`) y cuáles son finales.
+- `router.py`: `POST/GET /api/firmware/releases`, `GET /releases/page`, activar/desactivar, `POST /updates`, `GET` de intentos por equipo (todo solo para
+  administradores) y `GET /api/firmware/download/{token}` (cambio 44).
+- `mqtt_handlers.py`: `process_ota_status`, `process_ota_check` y `process_ota_request`, que parsean el serial del tópico y delegan en el servicio.
+- Tres migraciones en DVEM: tablas, ampliación de la familia (CHECK) y columnas del token de descarga.
+
+**Para este proyecto:**
+- **Una sola migración** `0019_add_firmware_release_and_update.py` con `down_revision = "0018"` que junte las tres de DVEM (ver "Correspondencia de rutas").
+  En la misma migración: `ALTER TYPE deviceoperationtype ADD VALUE 'FIRMWARE_UPDATE'` (aquí `operation_type` es un enum de PostgreSQL que hoy solo tiene
+  `SENSOR_DATA`, `KEEP_ACTIVE`, `SESSION_REQUEST`, `ERROR` y `OTHER`) y agregar el valor a `DeviceOperationType` en
+  `backend/app/api/device/operations/models.py`.
+- **Historial:** DVEM registra la operación con `product_name` y la hace idempotente con `activation_id` (restricción única
+  `uq_deviceoperation_serial_activation_id`). La tabla `deviceoperation` de este proyecto **no tiene** `activation_id`, `product_name` ni esa restricción:
+  agregarlas en la `0019` o resolver la idempotencia de otra forma (por ejemplo, registrar la operación una sola vez desde el `firmware_update`). Si se
+  conserva el patrón "insertar y, ante `IntegrityError`, actualizar", aislar el insert en un SAVEPOINT (cambio 37) cuando la sesión tenga identidad RLS.
+- ⚠ Quitar todo lo propio de 1 Relé 1 Pulso: `g1r1p_product_name` (import de `app.api.device.guition_1r1p.sale_service`), `is_g1r1p_family` (de
+  `app.api.device.repository`), la familia `g1r1p` y las familias de DVEM (`relay_1`, `expendedora`) en `FirmwareFamily`, `OTA_FAMILIES` y
+  `FAMILY_BY_PROJECT`. Aquí la familia corresponde al tipo de dispositivo (`backend/app/api/device/device_type/`) y al nombre de proyecto ESP-IDF de
+  `esp32/CMakeLists.txt` (`project(iot_device)`), así que el mapa queda, por ejemplo, `{"iot_device": "<familia>"}` y `family_of(device)` se decide por el tipo.
+- ⚠ Almacenamiento: DVEM usa `app.services.object_storage.ObjectStore`/`get_object_store`; aquí está `backend/app/core/storage.py` (`ObjectStorage`,
+  `S3Storage`, `get_storage`, con `put`/`exists`/`stream`/`delete`, sin URLs prefirmadas). La descarga del cambio 44 encaja con `stream()`. `get_storage()`
+  responde 503 cuando no hay almacenamiento configurado: respetarlo en el alta y en la descarga.
+- `MAX_IMAGE_BYTES = 0x400000` coincide con `esp32/partitions.csv` de este proyecto (`ota_0`/`ota_1` de `0x400000`): mantenerlo atado a esa tabla.
+- ⚠ **Tópicos MQTT:** DVEM usa `dvem/devices/{serial}/ota/command|status|check|available|request`. Aquí la ACL de EMQX (`mqtt/acl.conf`) solo deja a cada
+  equipo su árbol `iot/devices/${username}/#`: usar `iot/devices/{serial}/ota/...` (no hace falta tocar la ACL) y adaptar el parseo del serial en
+  `mqtt_handlers.py`.
+- **Quién se suscribe:** en DVEM las suscripciones están en `backend/app/core/mqtt/subscriptions.py` (`admin_backend_subscriptions()`), un solo proceso.
+  Aquí las suscripciones de dispositivos se hacen en `backend/app/main_runtime.py` (`iot/devices/+/status`, `telemetry`, `events`, `time/request`):
+  suscribir `ota/status`, `ota/check` y `ota/request` en ese mismo proceso y en ningún otro, para que cada mensaje se procese una sola vez.
+- Registrar los modelos en `backend/app/core/model_registry.py` y el router en `backend/app/api/router.py`.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/api/device/firmware/models.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/models.py` | ⚠ familias propias de este proyecto |
+| `backend/app/api/device/firmware/schemas.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/schemas.py` | |
+| `backend/app/api/device/firmware/status.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/status.py` | |
+| `backend/app/api/device/firmware/rules.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/rules.py` | ⚠ `FAMILY_BY_PROJECT` con `iot_device`; `MAX_IMAGE_BYTES` según `esp32/partitions.csv` |
+| `backend/app/api/device/firmware/service.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/service.py` | ⚠ sin `g1r1p_product_name`/`is_g1r1p_family`; almacenamiento de `app/core/storage.py`; tópicos `iot/devices/...` |
+| `backend/app/api/device/firmware/router.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/router.py` | ⚠ `get_object_store` → `get_storage` |
+| `backend/app/api/device/firmware/mqtt_handlers.py` | nuevo | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/mqtt_handlers.py` | ⚠ prefijo de tópico `iot/devices/` |
+| `backend/app/main_runtime.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/core/mqtt/subscriptions.py` | suscribir los tres tópicos OTA (en DVEM, dentro de `admin_backend_subscriptions()`) |
+| `backend/app/api/device/operations/models.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/api/device/operations/models.py` | `DeviceOperationType.FIRMWARE_UPDATE` |
+| `backend/app/core/model_registry.py` | modificado (propio de este proyecto) | — | registrar `FirmwareRelease` y `FirmwareUpdate` |
+| `backend/app/api/router.py` | modificado (propio de este proyecto) | — | incluir el router de firmware |
+| `backend/alembic/versions/0019_add_firmware_release_and_update.py` | nuevo (numeración propia) | `/home/martin/Code/DVEM-App/backend/alembic/versions/x7y8z9a0b1c2_add_firmware_release_and_update.py`, `b1c2d3e4f5a6_widen_firmware_release_family.py` y `c2d3e4f5a6b7_add_firmware_update_download_token.py` | una sola migración; agrega también `FIRMWARE_UPDATE` al enum `deviceoperationtype` |
+| `backend/tests/api/device/firmware/` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/firmware/` | ⚠ quitar los escenarios de 1 Relé 1 Pulso; `test_migration.py`/`test_family_migration.py` se reemplazan por un test de la `0019` |
+
+**Cómo verificar:** `cd backend && pytest tests/api/device/firmware`; `alembic upgrade head`, `downgrade -1` y `upgrade head` contra la base local; subir un
+`.bin` real compilado desde `esp32/` y comprobar que la versión y la familia salen del archivo.
+
+## 44. URL corta con token para descargar la imagen
+
+**Problema.** En DVEM el equipo descargaba la imagen con una URL prefirmada de S3. En producción el backend firma con credenciales temporales del rol IAM
+de la instancia, y la URL prefirmada lleva el token de sesión: supera el límite de 1024 caracteres de URL del cliente HTTP del equipo, y la descarga
+falla antes de empezar.
+
+**Solución.** El `ota/command` lleva una URL corta propia: `{base}/api/firmware/download/{token}`. El token es aleatorio, se guarda en el intento
+(`download_token`, `download_expires_at`) y vence a los 10 minutos (`DOWNLOAD_TOKEN_TTL`). El endpoint `GET /api/firmware/download/{token}` **no pide
+usuario** (el equipo no tiene sesión): busca el intento por token vigente y devuelve la imagen desde el almacenamiento. La base es
+`FIRMWARE_DOWNLOAD_BASE_URL` y, si no está, `BACKEND_PUBLIC_BASE_URL` (después `BACKEND_HOST_URL`). `MAX_URL_LENGTH = 1024` protege que la URL
+generada entre en el cliente del equipo.
+
+**Para este proyecto:** este proyecto ya tiene `BACKEND_PUBLIC_BASE_URL` en `backend/app/core/config.py`; agregar `FIRMWARE_DOWNLOAD_BASE_URL` opcional. La
+URL tiene que ser HTTPS y servirse sin redirecciones (el cliente del equipo las rechaza, cambio 49). **Ojo:** el token aparece en los logs de acceso del
+proxy/servidor web; es de vida corta, pero conviene enmascararlo o excluir esa ruta de los logs si se puede. Se porta junto con el cambio 43.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/core/config.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/core/config.py` | agregar `FIRMWARE_DOWNLOAD_BASE_URL` |
+| `backend/app/api/device/firmware/service.py` | nuevo (cambio 43) | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/service.py` | `download_url`, `DOWNLOAD_TOKEN_TTL`, `read_download` |
+| `backend/app/api/device/firmware/router.py` | nuevo (cambio 43) | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/router.py` | `download_image` sin autenticación de usuario |
+| `backend/tests/api/device/firmware/test_download_api.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/firmware/test_download_api.py` | |
+
+**Cómo verificar:** `pytest tests/api/device/firmware/test_download_api.py` (token vigente, vencido y desconocido) y, en el entorno real, que la URL del
+`ota/command` mida menos de 1024 caracteres.
+
+## 45. Estados del intento serializados e "interrumpido" al quedar sin conexión
+
+**Problema.** Dos problemas encontrados en el banco de DVEM:
+1. **Carrera.** El equipo publica `accepted` y 20 ms después `failed`; el broker entrega ambos a manejadores concurrentes, los dos leen el estado viejo,
+   `failed` se guarda y después el `accepted` atrasado lo pisa. El intento queda en `accepted` con un error y bloquea nuevas actualizaciones 30 minutos.
+2. **Corte de luz o de conexión a mitad de la descarga.** El equipo arranca en la versión anterior, nunca manda un estado final y el intento queda
+   "en curso" hasta la regla de 30 minutos.
+
+**Solución.**
+- `apply_status` lee el intento con `SELECT ... FOR UPDATE` y `populate_existing=True` (el segundo manejador espera el `commit` del primero y relee la fila
+  que este escribió, en vez de decidir con una copia vieja) y decide con la función pura `may_transition(current, new)`: un estado final nunca se
+  abandona, un estado final gana sobre cualquiera no final y uno no final nunca retrocede. Si ignora el estado, libera el bloqueo con `rollback()`.
+- `interrupt_updates(serial)`: cuando el broker informa al equipo sin conexión (mensaje `status` offline / LWT), todo intento en `requested`, `accepted`,
+  `downloading`, `verifying` o `installing` pasa a `failed` con `error_code = "interrupted"` y el mensaje "El dispositivo se desconectó durante la
+  actualización. No se cambió nada.", y queda en el historial. `rebooting` y los estados finales no se tocan. Se llama desde
+  `process_device_status_message` en `backend/app/core/mqtt/handlers.py`.
+- `_supersedes_interruption`: si después el equipo informa `succeeded` o `rolled_back`, ese estado reemplaza la interrupción (se limpia el error y
+  `_record_operation`, ante el registro duplicado, actualiza el estado de la operación del historial). Un estado no final que llegue tarde no la revive.
+- Tiempos medidos en DVEM: la interrupción se detecta unos 8 s después de que el equipo reconecta (el broker reemplaza la sesión anterior) o unos 3 minutos
+  si no vuelve (keepalive por defecto de esp-mqtt de 120 s × 1,5 de EMQX). La regla de 30 minutos queda como red de seguridad.
+
+**Para este proyecto:** `process_device_status_message` existe aquí (`backend/app/core/mqtt/handlers.py`, tópico `iot/devices/{serial}/status`,
+suscripto en `backend/app/main_runtime.py`): agregar la llamada a `interrupt_updates` cuando el equipo queda desconectado. Sin migración propia (todo está
+en la `0019` del cambio 43). Se porta junto con el cambio 43.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `backend/app/api/device/firmware/service.py` | nuevo (cambio 43) | `/home/martin/Code/DVEM-App/backend/app/api/device/firmware/service.py` | `apply_status`, `may_transition`, `interrupt_updates`, `_supersedes_interruption`, `_record_operation` |
+| `backend/app/core/mqtt/handlers.py` | modificado | `/home/martin/Code/DVEM-App/backend/app/core/mqtt/handlers.py` | en `process_device_status_message`, llamar a `FirmwareService(session).interrupt_updates(...)` si el equipo quedó desconectado |
+| `backend/tests/api/device/firmware/test_interrupted_update.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/firmware/test_interrupted_update.py` | |
+| `backend/tests/api/device/firmware/test_status_handler.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/api/device/firmware/test_status_handler.py` | incluye `may_transition` y la lectura atrasada |
+| `backend/tests/postgres/test_firmware_status_race_postgres.py` | nuevo | `/home/martin/Code/DVEM-App/backend/tests/postgres/test_firmware_status_race_postgres.py` | dos sesiones concurrentes contra PostgreSQL real (infraestructura del cambio 13, que este proyecto ya tiene); en DVEM todavía no se corrió |
+
+**Cómo verificar:** `pytest tests/api/device/firmware/test_interrupted_update.py tests/api/device/firmware/test_status_handler.py` y, con
+`TEST_POSTGRES_URL`, `pytest tests/postgres/test_firmware_status_race_postgres.py`.
+
+## 46. Pantallas de administración de firmware
+
+**Problema.** Sin pantallas, subir una versión o lanzar una actualización requiere llamar a la API a mano.
+
+**Solución.** Dos pantallas de administrador con el estándar de listados (cambio 17):
+- `FirmwareReleasesPage` (`/admin/firmware`): buscador, Filtros (familia, estado), orden desde el servidor, paginación, acciones por fila
+  (activar/desactivar), insignia "OTA / Sin OTA" y tarjetas en móvil.
+- `CreateFirmwarePage` (`/admin/firmware/create`, "Nuevo firmware"): al elegir el `.bin` lee en el navegador los primeros 256 bytes
+  (`appDescriptor.ts`: `parseAppDescriptor`, `readFileHead`, `familyForProject`, `describeBuild`), muestra la versión como solo lectura con un resumen de
+  la compilación, preselecciona la familia y **precarga las notas** con ese resumen. Casilla "Desactivar las versiones anteriores de esta familia"
+  (marcada por defecto) y aviso "Firmware X subido · N versión(es) anterior(es) desactivada(s)".
+- `firmware.service.ts`: llamadas a la API y `getFirmwareErrorMessage`.
+
+**Para este proyecto:** ⚠ no portar el panel de actualización del equipo 1 Relé 1 Pulso (`frontend/src/app/devices/guition-1r1p/G1r1pFirmwarePanel.tsx`)
+ni las familias de DVEM (`FIRMWARE_FAMILY_G1R1P`, `FIRMWARE_FAMILY_RELAY_1`, `FIRMWARE_FAMILY_EXPENDEDORA`, y el mapa de `familyForProject`). El botón
+"Actualizar firmware" para un equipo hay que armarlo en el detalle de dispositivo de este proyecto con el mismo servicio. Los servicios de este proyecto
+viven en `frontend/src/app/services/` (la carpeta `frontend/src/admin/services/` existe pero está vacía): elegir una de las dos y mantenerla. Se porta junto
+con el cambio 43; depende de los cambios 47 y 48.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/admin/pages/firmware/FirmwareReleasesPage.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/FirmwareReleasesPage.tsx` | ⚠ familias propias |
+| `frontend/src/admin/pages/firmware/FirmwareReleasesPage.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/FirmwareReleasesPage.test.tsx` | |
+| `frontend/src/admin/pages/firmware/CreateFirmwarePage.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/CreateFirmwarePage.tsx` | |
+| `frontend/src/admin/pages/firmware/CreateFirmwarePage.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/CreateFirmwarePage.test.tsx` | ⚠ cambiar las versiones `1r1p-…` de los datos de prueba |
+| `frontend/src/admin/pages/firmware/appDescriptor.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/appDescriptor.ts` | ⚠ `familyForProject` con `iot_device` |
+| `frontend/src/admin/pages/firmware/appDescriptor.test.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/pages/firmware/appDescriptor.test.ts` | |
+| `frontend/src/admin/services/firmware.service.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/admin/services/firmware.service.ts` | ⚠ familias propias |
+| `frontend/src/router/app.router.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/router/app.router.tsx` | rutas `firmware` y `firmware/create` bajo `/admin` |
+| `frontend/src/app/components/Sidebar.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/app/components/Sidebar.tsx` | entrada "Firmware" (`/admin/firmware`) |
+
+**Cómo verificar:** `cd frontend && npx vitest run src/admin/pages/firmware`, `npm run lint` y `npm run build` (cambio 33); subir un `.bin` real y
+comprobar versión, familia y notas precargadas.
+
+## 47. Componente `FileInput`
+
+**Problema.** El `<input type="file">` nativo no sigue el estilo de los formularios y no muestra el nombre y el tamaño del archivo elegido.
+
+**Solución.** `FileInput` (botón con ícono, nombre y tamaño del archivo, botón para quitarlo, validación de extensión del lado del cliente) y
+`fileSize.ts` (`formatFileSize`). Es genérico: no tiene nada de firmware. Este proyecto no lo tiene (se verificó en `frontend/src/components/custom/`).
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/components/custom/FileInput.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/components/custom/FileInput.tsx` | |
+| `frontend/src/components/custom/FileInput.test.tsx` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/components/custom/FileInput.test.tsx` | |
+| `frontend/src/components/custom/fileSize.ts` | nuevo | `/home/martin/Code/DVEM-App/frontend/src/components/custom/fileSize.ts` | |
+
+**Cómo verificar:** `npx vitest run src/components/custom/FileInput.test.tsx`. También sirve para la carga de documentos del administrador de este
+proyecto (`frontend/src/admin/pages/documents/`), si se quiere unificar.
+
+## 48. `entityNameSingular` en `DataTablePagination`
+
+**Problema.** El pie de las tablas dice "1 registros en total" (o "1 firmware**s**"): `entityName` solo tiene forma plural.
+
+**Solución.** Prop opcional `entityNameSingular` que se usa cuando el total es 1 ("1 firmware en total"); sin la prop, nada cambia. Este proyecto tiene
+`DataTablePagination` con `entityName = "registros"` y sin forma singular.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `frontend/src/components/custom/DataTablePagination.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/custom/DataTablePagination.tsx` | compatible hacia atrás |
+| `frontend/src/components/custom/DataTablePagination.test.tsx` | modificado | `/home/martin/Code/DVEM-App/frontend/src/components/custom/DataTablePagination.test.tsx` | |
+
+**Cómo verificar:** `npx vitest run src/components/custom/DataTablePagination.test.tsx`; opcionalmente pasar la forma singular en las listas existentes.
+
+## 49. Cliente OTA en el firmware ESP-IDF
+
+**Problema.** El firmware de este proyecto (`esp32/`) no tiene cliente OTA (no hay ningún uso de `esp_ota_*` en `esp32/main`), aunque la tabla de
+particiones ya tiene `factory`, `ota_0`, `ota_1` y `otadata` y `esp32/sdkconfig.defaults` ya activa `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.
+
+**Solución en DVEM** (`devices/esp-idf-guition-1r1p/main/ota/`):
+- `ota_logic.{c,h}`: lógica pura y testeable en el host: parseo del `ota/command`, decisión (ocupado, misma versión, comando inválido), progreso
+  (publicar cada 10 % o cada 5 s), armado del `ota/status`, verificación de tamaño y SHA-256, marcador persistido, decisión al arrancar
+  (`ota_boot_decide`), paso de validación (`ota_validation_step`) y el texto de pantalla de cada estado (`ota_screen_text`).
+- `ota_manager.{c,h}`: la parte ESP-IDF: tarea de descarga, escritura en la partición inactiva, cambio de partición, reinicio, validación posterior y
+  reporte final.
+- `ota_flow.{c,h}` y `ota_remote.{c,h}`: búsqueda y pedido de actualización desde la pantalla del equipo y vuelta a la imagen de la otra partición.
+- Tests de host en `devices/esp-idf-guition-1r1p/tests/` (`test_ota_logic.c`, `test_ota_flow.c`, `test_ota_remote.c`, con su `CMakeLists.txt`).
+
+**Lecciones que conviene conservar:**
+- Descargar con `esp_http_client` + `esp_ota_begin/write/end` (no `esp_https_ota`): así se verifican el tamaño y el SHA-256 calculado al vuelo **antes**
+  de `esp_ota_set_boot_partition`; si no coinciden, la partición de arranque no cambia.
+- Redirecciones rechazadas (`disable_auto_redirect = true`): la URL tiene que ser la final (cambio 44).
+- Antes de reiniciar se persiste en NVS un marcador `{request_id, target_version, previous_version}`; después del reinicio se publica el estado final
+  (`succeeded` o `rolled_back`) y recién ahí se borra el marcador (se reintenta en la próxima conexión si la publicación falla).
+- La imagen nueva arranca en `PENDING_VERIFY` y se marca válida solo cuando hay Wi-Fi, MQTT y configuración aplicada dentro de 180 s; si no, vuelve sola a
+  la anterior. Mientras valida, conviene dejar el logo de arranque en pantalla (no "Actualizando…").
+- **La pila de la tarea de descarga tiene que estar en RAM interna**: escribir la flash deshabilita la caché y la PSRAM queda inaccesible, así que una pila
+  en PSRAM falla. Necesita unos 10 KB contiguos (`OTA_TASK_STACK 10240`). Si una interfaz (en DVEM, la pantalla de configuración con LVGL) deja la RAM
+  interna fragmentada, guardar el pedido en NVS, reiniciar y pedir la actualización al arrancar (una sola vez: leer y borrar el pedido antes de actuar).
+
+**Para este proyecto:** ⚠ no portar los chequeos de "ocupado" por venta, sesión o pulsos (este proyecto no vende), las pantallas LVGL de actualización ni la
+interfaz de configuración del 1 Relé 1 Pulso: aquí la pantalla usa `esp_lcd_axs15231b` directamente (`esp32/main/display/display_manager.c`), sin LVGL.
+Los tópicos van bajo `iot/devices/{serial}/ota/...` (cambio 43). El tamaño de partición que se pasa al parseo es el de `ota_0` (`0x400000`). El firmware
+de este proyecto no define `PROJECT_VER` en `esp32/CMakeLists.txt`: hay que agregarlo para que cada imagen tenga una versión única (cambio 51).
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `esp32/main/ota/ota_logic.c` y `ota_logic.h` | nuevo | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_logic.c` y `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_logic.h` | ⚠ quitar las razones de "ocupado" propias de ventas |
+| `esp32/main/ota/ota_manager.c` y `ota_manager.h` | nuevo | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_manager.c` y `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_manager.h` | ⚠ sin pantallas LVGL ni gestor de ventas; tópicos `iot/devices/` |
+| `esp32/main/ota/ota_flow.c`/`.h` y `ota_remote.c`/`.h` | nuevo (opcional) | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_flow.c` y `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/ota/ota_remote.c` | solo si este equipo va a tener búsqueda o vuelta atrás desde su propia pantalla |
+| `esp32/tests/` | nuevo | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/tests/` | solo `test_ota_logic.c` (y `test_ota_flow.c`/`test_ota_remote.c` si se portan esos módulos) y el `CMakeLists.txt` de host |
+| `esp32/main/CMakeLists.txt` | modificado | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/main/CMakeLists.txt` | agregar las fuentes de `ota/` y los componentes que usa en DVEM (`app_update`, `esp_app_format`, `esp_http_client`, `mbedtls`, `esp_partition`) |
+| `esp32/CMakeLists.txt` | modificado | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/CMakeLists.txt` | `set(PROJECT_VER "...")` |
+
+**Cómo verificar:** tests de host (`cmake` + `ctest` en `esp32/tests/`), `idf.py build`, y en banco: actualización desde la app, corte de luz durante la
+descarga (sigue en la versión anterior y el intento queda `interrupted`) y corte después del reinicio, antes de validar (el bootloader vuelve a la
+anterior y se reporta `rolled_back`). En DVEM las dos pruebas de corte pasaron en banco.
+
+## 50. mbedTLS en PSRAM y AES por software
+
+**Problema.** Con poca RAM interna libre, dos fallas de TLS en DVEM: el handshake fallaba con `-0x2700` y la descarga HTTPS de la imagen fallaba con
+"esp-aes: Failed to allocate memory" (el AES por hardware usa un buffer DMA intermedio de hasta 16 KB en RAM interna).
+
+**Solución.** En `sdkconfig.defaults`: `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y` (mbedTLS reserva en PSRAM) y `CONFIG_MBEDTLS_HARDWARE_AES=n` (AES por
+software, sin el buffer DMA).
+
+**Para este proyecto:** `esp32/sdkconfig.defaults` ya tiene `CONFIG_SPIRAM=y` y no define ninguna de las dos claves. Aplicarlas cuando aparezca el síntoma,
+o junto con el cambio 49 (la descarga OTA es justamente el caso que lo dispara). Después de cambiar `sdkconfig.defaults`, regenerar `sdkconfig`
+(`idf.py fullclean` o borrar `sdkconfig`).
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `esp32/sdkconfig.defaults` | modificado | `/home/martin/Code/DVEM-App/devices/esp-idf-guition-1r1p/sdkconfig.defaults` | solo las dos claves de mbedTLS |
+
+**Cómo verificar:** `idf.py build` y una conexión MQTT/TLS más una descarga HTTPS en la placa sin errores de memoria en el monitor.
+
+## 51. `tools/archive_firmware.sh` y procedimiento de versionado
+
+**Problema.** Cada compilación pisa el `.bin` de `build/`: sin un procedimiento, no queda copia de la versión que se publicó ni forma de saber si dos
+archivos son la misma versión.
+
+**Solución.** `tools/archive_firmware.sh [ruta/al/app.bin]` lee la versión y el nombre de proyecto del descriptor del propio `.bin` y lo copia como
+`firmwares/<proyecto>/<versión>.bin` más su `.sha256`; si la versión ya está archivada con otro contenido, se frena (hay que subir `PROJECT_VER`). El
+procedimiento completo (subir la versión, compilar, archivar, probar en banco, publicar en la plataforma, actualizar equipos, commitear los `.bin`
+archivados) está en `build/firmware-versionado.md`. Además conviene guardar el `.elf` de cada versión archivada, fuera del repositorio y con el nombre
+de la versión: sin él no se pueden leer los core dumps de esa versión.
+
+**Para este proyecto:** cambiar el valor por defecto del script a la salida de este proyecto: `esp32/build/iot_device.bin` (el binario toma el nombre de
+`project(iot_device)` de `esp32/CMakeLists.txt`). Aquí `tools/` existe (`emulador-dispositivo.py`). La partición `coredump` ya está en
+`esp32/partitions.csv`, así que el `.elf` hace falta.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `tools/archive_firmware.sh` | nuevo | `/home/martin/Code/DVEM-App/tools/archive_firmware.sh` | ⚠ ruta por defecto `esp32/build/iot_device.bin` |
+| `docs/firmware-versionado.md` | nuevo | `/home/martin/Code/DVEM-App/build/firmware-versionado.md` | ⚠ rutas de `esp32/`, sin las pantallas del 1 Relé 1 Pulso |
+
+**Cómo verificar:** compilar, correr el script dos veces (la segunda informa "Ya archivado (idéntico)") y comprobar el `.sha256`.
+
+## 52. Runbook de deploy: limpieza de Docker y swap
+
+**Problema.** En DVEM, cada deploy dejaba caché de builds e imágenes viejas que llenaban el disco, y un build del frontend dejó al servidor (4 GB de RAM, sin
+swap) sin memoria y colgado unos 20 minutos.
+
+**Solución.** Después de cada deploy, ya verificado: `docker builder prune -af && docker image prune -af && df -h /`. **Nunca** `docker volume prune` ni
+`docker system prune --volumes` (borran la base). Y un swap de 2 GB en el servidor (`/swapfile` en `/etc/fstab`, `vm.swappiness=10`), con
+`watch -n 2 free -m` en otra sesión durante los builds.
+
+**Para este proyecto:** este proyecto no tiene un runbook de deploy en `docs/`. Copiar solo esos dos bloques (paso 5 de limpieza y "MEMORIA DEL SERVIDOR");
+el resto del archivo de DVEM es propio de su servidor y de su runtime de pagos.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `docs/deploy-produccion.md` (o el runbook que use este proyecto) | nuevo | `/home/martin/Code/DVEM-App/docs/copiar_archivos_local_to_aws.txt` | solo la limpieza de Docker y el bloque de memoria/swap |
+
+**Cómo verificar:** en el servidor, `free -m` muestra la línea Swap y `df -h /` baja después de la limpieza.
+
+## 53. Inventario de claves y secretos a respaldar
+
+**Problema.** Desde que las claves privadas dejaron de versionarse en git, nadie tenía una lista de qué hay que respaldar fuera del repositorio ni cómo
+restaurarlo en una máquina nueva.
+
+**Solución.** Un documento con: qué respaldar (imprescindible, importante, copias repetidas y legado, con la huella de cada clave para reconocer copias),
+cómo armar el backup, cómo restaurarlo, atención con otras copias del repositorio, y los secretos que viven solo en el servidor de producción.
+
+**Para este proyecto:** armar el inventario propio (CA y certificados de EMQX, `esp32/cert/`, `.env` de cada servicio, clave SSH del servidor) con la
+misma estructura. ⚠ Quitar todo lo de Mercado Pago y del runtime de pagos.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `docs/backup-claves-y-secretos.md` | nuevo | `/home/martin/Code/DVEM-App/docs/backup-claves-y-secretos.md` | ⚠ solo la estructura; inventario propio, sin secretos de pagos |
+
+**Cómo verificar:** restaurar desde el backup en un clon nuevo y compilar/levantar sin buscar archivos en otro lado.
+
+## 54. Placeholders `.example` de certificados del firmware y `*.p12`/`*.pfx` en `.gitignore`
+
+**Problema.** Si la carpeta de certificados del firmware está ignorada entera, un clon nuevo no sabe qué archivos tiene que poner ni con qué formato.
+
+**Solución.** En DVEM se versionan solo los `*.example` de la carpeta de certificados (`client.crt.example`, `client.key.example`, `root.crt.example`,
+`serial.txt.example`, `provisioning.json.example`) con un par `carpeta/*` + `!carpeta/*.example` en `.gitignore`, y se ignoran también `*.p12` y `*.pfx`.
+
+**Para este proyecto:** `.gitignore` ignora `esp32/cert/` completa y `*.key`, pero no `*.p12` ni `*.pfx`, y no hay ningún archivo versionado en
+`esp32/cert/` (se verificó con `git ls-files esp32/cert`). Cambiar `esp32/cert/` por `esp32/cert/*` + `!esp32/cert/*.example`, agregar los `.example` que
+correspondan a los archivos que usa este firmware (`client.crt`, `client.key`, `root.crt`) y agregar `*.p12` y `*.pfx`.
+
+| Archivo (en este proyecto) | Estado | Leer en DVEM-App (origen) | Nota |
+| --- | --- | --- | --- |
+| `.gitignore` | modificado | `/home/martin/Code/DVEM-App/.gitignore` | `esp32/cert/*`, `!esp32/cert/*.example`, `*.p12`, `*.pfx` |
+| `esp32/cert/*.example` | nuevo | `/home/martin/Code/DVEM-App/devices/esp-idf-guition/cert/` (`*.example`) | ⚠ solo los archivos que usa este firmware |
+
+**Cómo verificar:** `git status` muestra los `.example` como nuevos y ningún certificado real; `git check-ignore -v esp32/cert/client.key` lo confirma.
+
+**Excluido de esta ampliación.** No se portan: los reembolsos y todo lo de Mercado Pago; el tipo de dispositivo **1 Relé 1 Pulso** completo (flujo de venta,
+pulsos, sesiones, renovaciones, reanudar después de un corte de luz, activar/cancelar remoto, tarjetas de operador, aprovisionamiento, emulador y las
+pantallas de actualización del propio equipo); la familia HMPACKING/Expendedora; los documentos de evidencia de `odd/`; y el arreglo de la carrera de
+`esp_lvgl_port` al cerrar la configuración (`1r1p-0.2.10`), que no aplica porque el firmware de este proyecto no usa LVGL ni `esp_lvgl_port`.
 
 ---
 
