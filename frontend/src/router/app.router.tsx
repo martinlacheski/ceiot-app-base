@@ -59,6 +59,8 @@ import { CatalogListPage } from "@/admin/pages/sensorCatalog/CatalogListPage";
 import { CatalogFormPage } from "@/admin/pages/sensorCatalog/CatalogFormPage";
 import { DeviceTypeListPage } from "@/admin/pages/deviceTypes/DeviceTypeListPage";
 import { DeviceTypeFormPage } from "@/admin/pages/deviceTypes/DeviceTypeFormPage";
+import { FirmwareReleasesPage } from "@/admin/pages/firmware/FirmwareReleasesPage";
+import { CreateFirmwarePage } from "@/admin/pages/firmware/CreateFirmwarePage";
 import { DocumentsPage } from "@/admin/pages/documents/DocumentsPage";
 import { CatalogPermissionRoute } from "./routes/CatalogPermissionRoute";
 import EmulatorPage from "@/admin/pages/emulator/EmulatorPage";
@@ -210,6 +212,8 @@ export const appRouter = createBrowserRouter([
       { path: "device-types", element: <DeviceTypeListPage /> },
       { path: "device-types/create", element: <DeviceTypeFormPage /> },
       { path: "device-types/edit/:id", element: <DeviceTypeFormPage /> },
+      { path: "firmware", element: <FirmwareReleasesPage /> },
+      { path: "firmware/create", element: <CreateFirmwarePage /> },
       { path: "documents", element: <DocumentsPage /> },
       { path: "variables", element: <CatalogPermissionRoute permission="sensor_catalog:read"><CatalogListPage kind="variables" /></CatalogPermissionRoute> },
       { path: "variables/create", element: <CatalogPermissionRoute permission="sensor_catalog:write"><CatalogFormPage kind="variables" /></CatalogPermissionRoute> },

@@ -23,6 +23,7 @@ import {
   Cpu,
   Gauge,
   CircuitBoard,
+  HardDriveDownload,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
@@ -103,6 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 { icon: Gauge, label: "Variables", to: "/admin/variables" },
               ]
             : []),
+          { icon: HardDriveDownload, label: "Firmware", to: "/admin/firmware" },
           { icon: FileText, label: "Documentos", to: "/admin/documents" },
           { icon: Users, label: "Usuarios", to: "/admin/users" },
         ]

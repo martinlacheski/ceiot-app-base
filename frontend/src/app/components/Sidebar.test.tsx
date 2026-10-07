@@ -21,6 +21,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Sensores" })).toHaveAttribute("href", "/admin/sensors");
     expect(screen.getByRole("link", { name: "Variables" })).toHaveAttribute("href", "/admin/variables");
     expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toHaveAttribute("href", "/admin/device-types");
+    expect(screen.getByRole("link", { name: "Firmware" })).toHaveAttribute("href", "/admin/firmware");
   });
 
   it("pone Mapa inmediatamente después de Inicio para un usuario común", () => {
@@ -153,7 +154,7 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 11)).toEqual([
+    expect(links.slice(0, 12)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
@@ -163,6 +164,7 @@ describe("Sidebar", () => {
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
       expect.stringContaining("Tipos de dispositivo"),
+      expect.stringContaining("Firmware"),
       expect.stringContaining("Documentos"),
       expect.stringContaining("Usuarios"),
     ]);
@@ -280,7 +282,7 @@ describe("Sidebar", () => {
     );
   });
 
-  it("hides the Emulador entry for a non-admin user", () => {
+  it("hides the Emulador and Firmware entries for a non-admin user", () => {
     vi.mocked(useAuthStore).mockImplementation((selector) => {
       const state = {
         user: { id: "u1", fullName: "Usuario Demo" },
@@ -301,6 +303,7 @@ describe("Sidebar", () => {
     expect(
       screen.queryByRole("link", { name: "Emulador" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Firmware" })).not.toBeInTheDocument();
   });
 
   it("omits Mercado Pago navigation for administrators", async () => {
