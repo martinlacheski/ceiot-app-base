@@ -4,10 +4,12 @@ services:
     restart: always
     ports:
       - 127.0.0.1:${MQTT_LISTENER_TCP:?MQTT_LISTENER_TCP is required}:1883
-      # mTLS device listener: LAN_BIND_IP (default loopback) exposes it to real
-      # devices on the LAN. Only this port: the plaintext 1883, WS and the
-      # dashboard stay on loopback.
-      - ${LAN_BIND_IP:-127.0.0.1}:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
+      # mTLS device listener: always on loopback (emulator, local tools) and,
+      # with LAN_BIND_IP, also on the LAN IP for real devices (unset, that
+      # second binding falls back to the unused loopback 127.0.0.2). Only this
+      # port: the plaintext 1883, WS and the dashboard stay on loopback.
+      - 127.0.0.1:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
+      - ${LAN_BIND_IP:-127.0.0.2}:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
       - 127.0.0.1:${MQTT_LISTENER_WS:?MQTT_LISTENER_WS is required}:8083
       # Dashboard/management API, loopback only; 18083 on the host is often taken by other stacks.
       - 127.0.0.1:${EMQX_DASHBOARD_PORT:-28183}:18083

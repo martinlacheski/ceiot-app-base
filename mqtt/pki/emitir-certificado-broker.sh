@@ -10,6 +10,7 @@ set -euo pipefail
 # Cada argumento que sea una IPv4 se agrega como IP; el resto, como DNS.
 #
 # Uso: ./emitir-certificado-broker.sh [host-o-ip ...]
+#   Sin argumentos usa LAN_BIND_IP de mqtt/.env (si está definida).
 #   Ej.: ./emitir-certificado-broker.sh 192.168.1.50
 #        ./emitir-certificado-broker.sh mqtt.ejemplo.com 192.168.1.50
 
@@ -31,7 +32,20 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 SAN="DNS:emqx,DNS:localhost,IP:127.0.0.1"
 IPV4_RE='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
-for EXTRA_HOST in "$@"; do
+
+EXTRA_HOSTS=("$@")
+# Sin argumentos, toma la IP de red local de mqtt/.env (LAN_BIND_IP), si está
+# definida y no es la de loopback. Solo se lee esa variable.
+ENV_FILE="$SCRIPT_DIR/../.env"
+if [[ ${#EXTRA_HOSTS[@]} -eq 0 && -f "$ENV_FILE" ]]; then
+  LAN_IP="$(grep -E '^[[:space:]]*LAN_BIND_IP=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")"
+  if [[ -n "$LAN_IP" && "$LAN_IP" != "127.0.0.1" && "$LAN_IP" != "0.0.0.0" ]]; then
+    echo "Usando LAN_BIND_IP de mqtt/.env: $LAN_IP"
+    EXTRA_HOSTS=("$LAN_IP")
+  fi
+fi
+
+for EXTRA_HOST in "${EXTRA_HOSTS[@]}"; do
   [[ -z "$EXTRA_HOST" ]] && continue
   if [[ "$EXTRA_HOST" =~ $IPV4_RE ]]; then
     SAN="${SAN},IP:${EXTRA_HOST}"
@@ -54,4 +68,4 @@ install -m 644 "$CA_CERT" "$OUT_DIR/ca.crt"
 
 echo "Certificado del broker emitido en $OUT_DIR"
 echo "  SAN: $SAN"
-echo "Recree el contenedor emqx para que tome el certificado nuevo: docker compose up -d emqx"
+echo "Recree el contenedor emqx para que tome el certificado nuevo (desde la raíz del proyecto): docker compose up -d --force-recreate emqx"

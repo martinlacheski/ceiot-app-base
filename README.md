@@ -100,8 +100,11 @@ Pasos:
    conectan) y recree `emqx`:
 
    ```bash
-   cd mqtt/pki && ./emitir-certificado-broker.sh 192.168.1.50
+   cd mqtt/pki && ./emitir-certificado-broker.sh
    ```
+
+   Sin argumentos toma `LAN_BIND_IP` de `mqtt/.env`. El paso a paso completo
+   está en [`mqtt/README.md`](mqtt/README.md) (sección "Con la IP de la red local").
 
 4. Recree los servicios para aplicar los cambios:
 
