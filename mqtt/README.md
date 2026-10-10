@@ -94,8 +94,8 @@ volver a emitirlo cada vez que cambia esa IP.
    firmware:
 
    ```dotenv
-   LAN_BIND_IP=192.168.1.33
-   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.33:18000
+   LAN_BIND_IP=192.168.1.100
+   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.100:18000
    ```
 
 3. Emita el certificado del broker. Sin argumentos, el script toma
@@ -107,7 +107,7 @@ volver a emitirlo cada vez que cambia esa IP.
    ```
 
    La salida muestra los nombres incluidos, por ejemplo
-   `SAN: DNS:emqx,DNS:localhost,IP:127.0.0.1,IP:192.168.1.33`.
+   `SAN: DNS:emqx,DNS:localhost,IP:127.0.0.1,IP:192.168.1.100`.
 
 4. Desde la raíz del proyecto, recree el broker y vuelva a levantar el stack:
 
