@@ -58,7 +58,8 @@ See `mqtt/README.md` for how to issue them with the project PKI scripts.
 - Identity check: the client certificate CN must equal the serial (the broker
   maps the CN to the MQTT username). On a mismatch, or an unreadable CN, the
   firmware logs an error, does not start MQTT over TLS, starts the
-  configuration AP and the status page shows it (`Identidad`).
+  configuration AP; the status page raises an alert and the MQTT page shows
+  it (`Identidad`).
 - Without them (fresh clone) the build still succeeds and prints a CMake
   warning; the certificates can then be uploaded from the web UI.
 - On the first boot with certificates, a copy is kept in the NVS `factory`
@@ -205,7 +206,8 @@ make step 3 impossible without NTP or HTTP, and an expired certificate would
 then also stop the device. Telemetry carries no timestamp (the backend stamps
 reception time), so a device without time still reports. The status page
 shows the time source (`ntp`, `http`, `mqtt`, or `rtc` when a valid clock
-survived a software restart).
+survived a software restart), shown in upper case (`NTP`, `HTTP`, `MQTT`,
+`RTC`) next to the local time.
 
 ## OTA updates
 
@@ -315,15 +317,23 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
   <http://192.168.4.1>. It runs as AP+STA, so the device keeps its Wi-Fi
   connection (and telemetry) while the AP is up. It also starts by itself
   when no Wi-Fi network is saved. It stays up until restart, another
-  3 s hold of BOOT, or "Desactivar punto de acceso" on the status page.
+  3 s hold of BOOT, or "Desactivar punto de acceso" on the Wi-Fi page.
 - Web login: `admin` / `admin` by default (change it under "Seguridad").
-  Pages: status (serial, firmware, sensor setting and sensor in use
-  —autodetected or manual—, the BMP280/BME280 chip found on I2C with a
-  warning when it differs from the model in use, last reading, Wi-Fi, AP,
-  MQTT, certificates, time), Wi-Fi scan/connect/forget, MQTT broker +
-  certificate upload, device serial and sensor model ("Detectar de nuevo"),
-  firmware (running version and slot, the other slot, check / update /
-  switch, progress), password, restart and factory reset.
+  Six equal tabs (3x2 on phones); "Cerrar sesión" sits at the right of
+  each page title. "Estado" is one summary card: serial, firmware, uptime,
+  local time and its source; one alert only when something needs attention
+  (in priority order: certificate CN vs serial, MQTT disconnected with its
+  last error, I2C chip different from the sensor in use, no sensor found,
+  update in progress); and one row each for the sensor (model, automatic or
+  manual, age and values of the last reading), Wi-Fi (network, signal, IP,
+  AP on/off), MQTT (connected, mTLS or TCP, identity) and free memory, with
+  a green / red / grey dot. Details live in the other tabs: Wi-Fi (state,
+  IP, signal, AP with "Desactivar punto de acceso", scan/connect/forget),
+  MQTT (connection, broker, last event and error, identity, broker
+  settings, certificate upload), Dispositivo (serial, sensor in use, I2C
+  chip with the mismatch warning, sensor model, "Detectar de nuevo"),
+  Firmware (running version and slot, the other slot, check / update /
+  switch, progress) and Seguridad (password, restart, factory reset).
 - Factory reset (button or web) erases the Wi-Fi network, the MQTT broker
   settings, the sensor setting and the web password, and restores the
   serial, the certificates, the TLS flag and the provisioned broker and
