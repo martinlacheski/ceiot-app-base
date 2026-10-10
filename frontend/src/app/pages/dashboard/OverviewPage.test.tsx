@@ -9,17 +9,24 @@ const {
   deviceRefetch,
   environmentRefetch,
   telemetry,
+  useQueriesMock,
   useQueryMock,
 } = vi.hoisted(() => ({
   auth: { user: { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] } as unknown },
   deviceRefetch: vi.fn(),
   environmentRefetch: vi.fn(),
-  telemetry: { latest: undefined as unknown, history: undefined as unknown },
+  telemetry: {
+    latest: undefined as unknown,
+    history: undefined as unknown,
+    historyByDevice: {} as Record<string, unknown>,
+  },
+  useQueriesMock: vi.fn(),
   useQueryMock: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
   keepPreviousData: Symbol("keepPreviousData"),
+  useQueries: useQueriesMock,
   useQuery: useQueryMock,
 }));
 
@@ -30,6 +37,14 @@ vi.mock("@/auth/store/auth.store", () => ({
 vi.mock("@/components/dashboard/charts/EnvironmentalReadingsChart", () => ({
   EnvironmentalReadingsChart: ({ variableCode, sensors }: { variableCode: string; sensors: unknown[] }) => (
     <div data-testid={`chart-${variableCode}`}>{sensors.length} series</div>
+  ),
+}));
+
+vi.mock("./overview/EnvironmentReadingsChart", () => ({
+  EnvironmentReadingsChart: ({ variable, series }: { variable: { code: string }; series: Array<{ key: string; label: string }> }) => (
+    <ul data-testid="environment-chart" data-variable={variable.code}>
+      {series.map((entry) => <li key={entry.key}>{entry.label}</li>)}
+    </ul>
   ),
 }));
 
@@ -148,6 +163,32 @@ const renderPage = () => render(
 const queryConfigs = () => useQueryMock.mock.calls.map(([config]) => config as QueryConfig);
 const lastTelemetryQuery = (kind: "latest" | "history") =>
   queryConfigs().filter((config) => config.queryKey[0] === "telemetry" && config.queryKey[1] === kind).at(-1)!;
+const lastEnvironmentQueries = () =>
+  (useQueriesMock.mock.calls.at(-1)![0] as { queries: Array<QueryConfig & { refetchInterval?: number }> }).queries;
+
+/** Two devices in "Establecimiento Norte", one in "Establecimiento Sur", one unassigned. */
+const establishmentDevices = {
+  ...devices,
+  items: [
+    { ...devices.items[0], environment: { id: "environment-1", name: "Establecimiento Norte" } },
+    devices.items[1],
+    { ...devices.items[2], environment: { id: "environment-2", name: "Establecimiento Sur" } },
+    { ...devices.items[2], id: "device-unassigned", serial: "SENSOR-004", name: "Sensor Libre" },
+  ],
+  total: 4,
+};
+
+const useEstablishmentDevices = () => {
+  useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
+    if (queryKey[0] === "environments") return state(environments, { refetch: environmentRefetch });
+    if (queryKey[0] === "devices") return state(establishmentDevices, { refetch: deviceRefetch });
+    return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+  });
+};
+
+const openEstablishmentView = () => {
+  fireEvent.click(screen.getByRole("button", { name: "Por establecimiento" }));
+};
 
 describe("OverviewPage operational dashboard", () => {
   beforeEach(() => {
@@ -173,6 +214,9 @@ describe("OverviewPage operational dashboard", () => {
       }
       return state(undefined);
     });
+    telemetry.historyByDevice = {};
+    useQueriesMock.mockImplementation(({ queries }: { queries: QueryConfig[] }) =>
+      queries.map(({ queryKey }) => telemetry.historyByDevice[String(queryKey[2])] ?? telemetry.history));
   });
 
   it("keeps inventory queries and adds live-refreshable telemetry queries", () => {
@@ -372,5 +416,119 @@ describe("OverviewPage operational dashboard", () => {
     expect(environmentRefetch).toHaveBeenCalledOnce();
     expect(deviceRefetch).not.toHaveBeenCalled();
     expect(screen.getByTestId("kpi-devices")).toHaveTextContent("3");
+  });
+  it("keeps the per-device view by default without establishment queries enabled", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Por dispositivo" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Por establecimiento" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByLabelText("Dispositivo")).toBeInTheDocument();
+    expect(lastEnvironmentQueries().every((config) => config.enabled === false)).toBe(true);
+  });
+
+  it("switches to the establishment view and loads every device of the establishment", () => {
+    useEstablishmentDevices();
+    renderPage();
+
+    openEstablishmentView();
+
+    expect(screen.getByRole("button", { name: "Por establecimiento" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByLabelText("Dispositivo")).not.toBeInTheDocument();
+    const select = screen.getByLabelText("Establecimiento") as HTMLSelectElement;
+    expect(select.value).toBe("environment-1");
+    expect(Array.from(select.options).map((option) => option.text)).toEqual([
+      "Establecimiento Norte",
+      "Establecimiento Sur",
+    ]);
+    const queries = lastEnvironmentQueries();
+    expect(queries.map((config) => config.queryKey)).toEqual([
+      ["telemetry", "history", "device-offline-enabled", "24h"],
+      ["telemetry", "history", "device-online", "24h"],
+    ]);
+    expect(queries.every((config) => config.enabled === true && config.refetchInterval === 30_000)).toBe(true);
+    expect(typeof queries[0].queryFn).toBe("function");
+
+    const chart = screen.getByTestId("environment-chart");
+    expect(chart).toHaveAttribute("data-variable", "temperature");
+    expect(within(chart).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Sensor Sur · DHT22",
+      "Sensor Norte · DHT22",
+    ]);
+    expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 10 minutos")).toBeInTheDocument();
+  });
+
+  it("loads the devices of the chosen establishment and shares the range presets", () => {
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    fireEvent.change(screen.getByLabelText("Establecimiento"), { target: { value: "environment-2" } });
+    expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
+      ["telemetry", "history", "device-presence-unavailable", "24h"],
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
+    expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
+      ["telemetry", "history", "device-presence-unavailable", "1h"],
+    ]);
+    expect(screen.getByText("1 dispositivo · 1 sensor · promedio cada 1 minuto")).toBeInTheDocument();
+  });
+
+  it("plots the variable picked in the variable chips", () => {
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    const temperature = screen.getByRole("button", { name: "Temperatura (°C)" });
+    const humidity = screen.getByRole("button", { name: "Humedad (%)" });
+    expect(temperature).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(humidity);
+
+    expect(humidity).toHaveAttribute("aria-pressed", "true");
+    expect(temperature).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-variable", "relative_humidity");
+  });
+
+  it("draws the devices that loaded and reports the ones that failed", () => {
+    useEstablishmentDevices();
+    telemetry.historyByDevice["device-online"] = state(undefined, { isError: true });
+    renderPage();
+    openEstablishmentView();
+
+    expect(screen.getByRole("alert")).toHaveTextContent("No pudimos cargar las lecturas de 1 dispositivo(s)");
+    const chart = screen.getByTestId("environment-chart");
+    expect(within(chart).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["Sensor Sur · DHT22"]);
+  });
+
+  it("shows loading and empty states for the establishment chart", () => {
+    useEstablishmentDevices();
+    telemetry.history = state(undefined, { isLoading: true, isPending: true });
+    const { rerender } = renderPage();
+    openEstablishmentView();
+
+    expect(screen.getByRole("status", { name: "Cargando lecturas del establecimiento" })).toBeInTheDocument();
+
+    telemetry.history = state({ items: [], total: 0, sensors });
+    rerender(
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+    expect(screen.getByText("No hay lecturas de este establecimiento en el período elegido.")).toBeInTheDocument();
+  });
+
+  it("does not request establishment telemetry without the telemetry permission", () => {
+    auth.user = { id: "user-1", isAdmin: false, permissions: [] };
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    expect(screen.getByText("Tu usuario no tiene permiso para ver lecturas.")).toBeInTheDocument();
+    expect(lastEnvironmentQueries()).toHaveLength(2);
+    expect(lastEnvironmentQueries().every((config) => config.enabled === false)).toBe(true);
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
   });
 });

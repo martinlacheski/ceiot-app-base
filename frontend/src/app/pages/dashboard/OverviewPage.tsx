@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/app/components/PageHeader";
 import { deviceService } from "@/app/services/device.service";
@@ -8,6 +8,15 @@ import { environmentalSensorService } from "@/app/services/environmentalSensor.s
 import { DEVICE_SORT_BY } from "@/app/types/device.types";
 import { ENVIRONMENT_SORT_BY } from "@/app/types/environment.types";
 import { useAuthStore } from "@/auth/store/auth.store";
+import { EnvironmentReadingsView } from "./overview/EnvironmentReadingsView";
+import {
+  BUCKET_LABEL,
+  BUCKET_MS,
+  buildEnvironmentSeries,
+  collectVariables,
+  defaultVariableCode,
+  listDeviceEnvironments,
+} from "./overview/environmentSeries";
 import { EnvironmentsCard } from "./overview/EnvironmentsCard";
 import { FleetStatusCard } from "./overview/FleetStatusCard";
 import { OverviewKpis } from "./overview/OverviewKpis";
@@ -16,21 +25,23 @@ import {
   deviceLabel,
   pickSelectedDevice,
   RECENT_READINGS_LIMIT,
-  resolveReadingsPeriod,
   type ReadingsRange,
 } from "./overview/overviewModel";
+import type { ReadingsView } from "./overview/ReadingsControls";
 import { ReadingsPanel } from "./overview/ReadingsPanel";
 import { RecentRecordsCard } from "./overview/RecentRecordsCard";
+import { historyQueryOptions, TELEMETRY_REFETCH_MS } from "./overview/telemetryQueries";
 
 const INVENTORY_PAGE_SIZE = 100;
-/** Fallback refresh; the live pulse invalidates these keys as soon as the device reports. */
-const TELEMETRY_REFETCH_MS = 30_000;
 
 export default function OverviewPage() {
   const { user } = useAuthStore();
   const canReadTelemetry = Boolean(user?.isAdmin || user?.permissions?.includes("telemetry:read"));
   const [requestedDeviceId, setRequestedDeviceId] = useState<string | null>(null);
   const [range, setRange] = useState<ReadingsRange>("24h");
+  const [view, setView] = useState<ReadingsView>("device");
+  const [requestedEnvironmentId, setRequestedEnvironmentId] = useState<string | null>(null);
+  const [requestedVariableCode, setRequestedVariableCode] = useState<string | null>(null);
 
   const environmentsQuery = useQuery({
     queryKey: ["environments", "operational-overview"],
@@ -70,15 +81,31 @@ export default function OverviewPage() {
     enabled: telemetryEnabled,
     refetchInterval: TELEMETRY_REFETCH_MS,
   });
-  const historyQuery = useQuery({
-    queryKey: ["telemetry", "history", deviceId, range],
-    queryFn: () => {
-      const { start, end } = resolveReadingsPeriod(range, Date.now());
-      return environmentalSensorService.getHistory(deviceId!, start, end);
-    },
-    enabled: telemetryEnabled,
-    refetchInterval: TELEMETRY_REFETCH_MS,
+  const historyQuery = useQuery(historyQueryOptions(deviceId, range, canReadTelemetry));
+
+  // Establishment view: one history query per device, with the per-device keys so the cache is shared.
+  const environmentOptions = listDeviceEnvironments(devices);
+  const selectedEnvironment = environmentOptions.find((environment) => environment.id === requestedEnvironmentId)
+    ?? environmentOptions.find((environment) => environment.id === selectedDevice?.environment?.id)
+    ?? environmentOptions[0];
+  const environmentDevices = selectedEnvironment
+    ? devices.filter((device) => device.environment?.id === selectedEnvironment.id)
+    : [];
+  const environmentEnabled = view === "environment" && canReadTelemetry;
+  const environmentHistory = useQueries({
+    queries: environmentDevices.map((device) => historyQueryOptions(device.id, range, environmentEnabled)),
   });
+  const histories = environmentDevices.map((device, index) => ({
+    deviceId: device.id,
+    deviceName: deviceLabel(device),
+    page: environmentHistory[index]?.data,
+  }));
+  const variables = collectVariables(histories);
+  const variable = variables.find((entry) => entry.code === requestedVariableCode)
+    ?? variables.find((entry) => entry.code === defaultVariableCode(variables));
+  const environmentSeries = variable
+    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[range])
+    : { series: [], points: [] };
 
   const devicesStatus = devicesQuery.isPending
     ? "loading"
@@ -114,6 +141,28 @@ export default function OverviewPage() {
                 latestError: latestQuery.isError,
                 historyError: historyQuery.isError,
               }}
+              view={view}
+              onViewChange={setView}
+              environmentView={(
+                <EnvironmentReadingsView
+                  environments={environmentOptions}
+                  selectedEnvironmentId={selectedEnvironment?.id}
+                  onSelectEnvironment={setRequestedEnvironmentId}
+                  range={range}
+                  onRangeChange={setRange}
+                  onSelectVariable={setRequestedVariableCode}
+                  canReadTelemetry={canReadTelemetry}
+                  readings={{
+                    loading: environmentHistory.some((query) => query.isLoading),
+                    failedDevices: environmentHistory.filter((query) => query.isError && !query.data).length,
+                    deviceCount: environmentDevices.length,
+                    variables,
+                    variable,
+                    ...environmentSeries,
+                    bucketLabel: BUCKET_LABEL[range],
+                  }}
+                />
+              )}
             />
             {selectedDevice && canReadTelemetry && (
               <RecentRecordsCard

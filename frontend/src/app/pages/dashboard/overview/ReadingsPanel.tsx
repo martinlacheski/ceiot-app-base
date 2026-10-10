@@ -1,4 +1,4 @@
-import { ArrowUpRight, Cpu, Link as LinkIcon, Lock } from "lucide-react";
+import { ArrowUpRight, Cpu, Link as LinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 
@@ -6,9 +6,9 @@ import type { Device } from "@/app/types/device.types";
 import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
 import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { deviceLabel, READINGS_RANGES, type ReadingsRange } from "./overviewModel";
+import { deviceLabel, type ReadingsRange } from "./overviewModel";
+import { Notice, RangePresets, ReadingsViewToggle, TelemetryPermissionNotice, type ReadingsView } from "./ReadingsControls";
 
 export interface TelemetryState {
   latest?: TelemetryPage;
@@ -28,20 +28,10 @@ interface ReadingsPanelProps {
   onRangeChange: (range: ReadingsRange) => void;
   canReadTelemetry: boolean;
   telemetry: TelemetryState;
-}
-
-function Notice({ icon: Icon, title, children }: { icon: typeof Cpu; title: string; children?: ReactNode }) {
-  return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-8 text-center">
-        <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
-        <p className="font-medium">{title}</p>
-        {children}
-      </CardContent>
-    </Card>
-  );
+  view: ReadingsView;
+  onViewChange: (view: ReadingsView) => void;
+  /** Rendered instead of the per-device readings when the establishment view is active. */
+  environmentView: ReactNode;
 }
 
 function ReadingsToolbar({
@@ -69,23 +59,7 @@ function ReadingsToolbar({
         </select>
       </div>
       <div className="flex items-end justify-between gap-2 sm:justify-start">
-        <div role="group" aria-label="Período de lecturas" className="inline-flex rounded-md border p-0.5">
-          {READINGS_RANGES.map((option) => (
-            <Button
-              key={option.id}
-              type="button"
-              size="sm"
-              variant={range === option.id ? "secondary" : "ghost"}
-              aria-pressed={range === option.id}
-              aria-label={option.description}
-              title={option.description}
-              className="h-8 px-3 tabular-nums"
-              onClick={() => onRangeChange(option.id)}
-            >
-              {option.label}
-            </Button>
-          ))}
-        </div>
+        <RangePresets range={range} onRangeChange={onRangeChange} />
         <Button asChild variant="outline" size="sm" className="h-9">
           <Link to={`/app/devices/${selectedDevice.id}`}>
             Ver detalle
@@ -98,7 +72,7 @@ function ReadingsToolbar({
 }
 
 export function ReadingsPanel(props: ReadingsPanelProps) {
-  const { devicesStatus, devices, selectedDevice, canReadTelemetry, telemetry } = props;
+  const { devicesStatus, devices, selectedDevice, canReadTelemetry, telemetry, view, onViewChange, environmentView } = props;
 
   if (devicesStatus === "loading") {
     return (
@@ -131,13 +105,12 @@ export function ReadingsPanel(props: ReadingsPanelProps) {
 
   return (
     <section aria-label="Lecturas" className="space-y-3">
-      <ReadingsToolbar {...props} selectedDevice={selectedDevice} />
-      {canReadTelemetry ? (
-        <EnvironmentalReadingsSection {...telemetry} />
-      ) : (
-        <Notice icon={Lock} title="Tu usuario no tiene permiso para ver lecturas.">
-          <p className="text-sm text-muted-foreground">Pedile a un administrador el permiso de telemetría.</p>
-        </Notice>
+      <ReadingsViewToggle view={view} onViewChange={onViewChange} />
+      {view === "environment" ? environmentView : (
+        <>
+          <ReadingsToolbar {...props} selectedDevice={selectedDevice} />
+          {canReadTelemetry ? <EnvironmentalReadingsSection {...telemetry} /> : <TelemetryPermissionNotice />}
+        </>
       )}
     </section>
   );
