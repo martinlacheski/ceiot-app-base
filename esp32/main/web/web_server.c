@@ -3,6 +3,7 @@
  */
 
 #include "cJSON.h"
+#include "esp_app_desc.h"
 #include "esp_http_server.h"
 #include "esp_littlefs.h"
 #include "esp_log.h"
@@ -10,9 +11,11 @@
 #include "esp_vfs.h"
 #include "mqtt_manager.h"
 #include "nvs_manager.h"
+#include "sensor.h"
 #include "network_manager.h"
 #include "wifi_manager.h"
 #include <ctype.h>
+#include <math.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -57,7 +60,7 @@ static void read_nvs_str(const char *key, char *out_val, size_t max_len,
   if (err != ESP_OK) {
     ESP_LOGW(TAG, "NVS read open fallo key=%s err=%s", key,
              esp_err_to_name(err));
-    strncpy(out_val, default_val, max_len);
+    strlcpy(out_val, default_val, max_len);
     return;
   }
   size_t required_size = 0;
@@ -65,7 +68,7 @@ static void read_nvs_str(const char *key, char *out_val, size_t max_len,
   if (err == ESP_OK && required_size <= max_len) {
     nvs_get_str(my_handle, key, out_val, &required_size);
   } else {
-    strncpy(out_val, default_val, max_len);
+    strlcpy(out_val, default_val, max_len);
   }
   nvs_close(my_handle);
 }
@@ -86,12 +89,6 @@ static esp_err_t save_nvs_str(const char *key, const char *val) {
   }
   nvs_close(my_handle);
   return err;
-}
-
-static bool is_cert_filepath(const char *filepath) {
-  return strstr(filepath, "/client.crt") != NULL ||
-         strstr(filepath, "/client.key") != NULL ||
-         strstr(filepath, "/root.crt") != NULL;
 }
 
 static bool is_authenticated(httpd_req_t *req) {
@@ -129,7 +126,7 @@ static esp_err_t send_page(httpd_req_t *req, const char *view) {
   httpd_resp_send_chunk(req, HTML_HEAD, HTTPD_RESP_USE_STRLEN);
   httpd_resp_send_chunk(req, HTML_NAV, HTTPD_RESP_USE_STRLEN);
   httpd_resp_send_chunk(req, view, HTTPD_RESP_USE_STRLEN);
-  httpd_resp_send_chunk(req, HTML_FOOTER_START, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_send_chunk(req, HTML_FOOTER, HTTPD_RESP_USE_STRLEN);
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
 }
@@ -164,7 +161,7 @@ static esp_err_t login_page_handler(httpd_req_t *req) {
   httpd_resp_set_type(req, "text/html");
   httpd_resp_send_chunk(req, HTML_HEAD, HTTPD_RESP_USE_STRLEN);
   httpd_resp_send_chunk(req, HTML_LOGIN, HTTPD_RESP_USE_STRLEN);
-  httpd_resp_send_chunk(req, HTML_FOOTER_START, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_send_chunk(req, HTML_FOOTER, HTTPD_RESP_USE_STRLEN);
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
 }
@@ -261,151 +258,124 @@ static const httpd_uri_t favicon = {.uri = "/favicon.ico",
                                     .handler = favicon_get_handler,
                                     .user_ctx = NULL};
 
+static bool file_exists(const char *path) {
+  struct stat st;
+  return stat(path, &st) == 0 && st.st_size > 0;
+}
+
+static void add_sensor_status(cJSON *root) {
+  cJSON *sensor = cJSON_AddObjectToObject(root, "sensor");
+  cJSON_AddStringToObject(sensor, "model", sensor_name());
+  cJSON_AddStringToObject(sensor, "key", sensor_key());
+  sensor_reading_t last;
+  int64_t age_s = 0;
+  if (!sensor_get_last(&last, &age_s)) {
+    cJSON_AddNullToObject(sensor, "last");
+    return;
+  }
+  cJSON *values = cJSON_AddObjectToObject(sensor, "last");
+  if (last.has_temperature) {
+    cJSON_AddNumberToObject(values, "temperature",
+                            round(last.temperature * 10.0) / 10.0);
+  }
+  if (last.has_relative_humidity) {
+    cJSON_AddNumberToObject(values, "relative_humidity",
+                            round(last.relative_humidity * 10.0) / 10.0);
+  }
+  if (last.has_pressure) {
+    cJSON_AddNumberToObject(values, "pressure",
+                            round(last.pressure * 10.0) / 10.0);
+  }
+  cJSON_AddNumberToObject(sensor, "age_s", (double)age_s);
+}
+
+static void add_time_status(cJSON *root) {
+  time_t now;
+  struct tm utc;
+  char iso[32] = "";
+  time(&now);
+  gmtime_r(&now, &utc);
+  strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%S", &utc);
+  bool synced = network_manager_is_time_synced();
+  cJSON *time_obj = cJSON_AddObjectToObject(root, "time");
+  cJSON_AddBoolToObject(time_obj, "synced", synced);
+  cJSON_AddStringToObject(time_obj, "iso", iso);
+  cJSON_AddStringToObject(time_obj, "source", synced ? "ntp" : "none");
+}
+
 // GET /api/status (JSON)
 static esp_err_t api_status_get_handler(httpd_req_t *req) {
   if (!is_authenticated(req)) {
     httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
     return ESP_OK;
   }
-  httpd_resp_set_type(req, "application/json");
 
-  // Load Configs
   char serial[32];
   read_nvs_str("serial", serial, sizeof(serial), "");
 
-  char mqtt_uri[128];
-  read_nvs_str("mqtt_uri", mqtt_uri, sizeof(mqtt_uri), "192.168.1.100");
-  char mqtt_port[8];
-  read_nvs_str("mqtt_port", mqtt_port, sizeof(mqtt_port), "1883");
-  char mqtt_use_tls[2];
-  read_nvs_str("mqtt_use_tls", mqtt_use_tls, sizeof(mqtt_use_tls), "1");
-
-  // Load QoS values
-  char mqtt_qos_pub_telemetry[2], mqtt_qos_sub[2];
-  read_nvs_str("mqtt_qos_pub_telemetry", mqtt_qos_pub_telemetry,
-               sizeof(mqtt_qos_pub_telemetry), "0");
-  read_nvs_str("mqtt_qos_sub", mqtt_qos_sub, sizeof(mqtt_qos_sub), "1");
-
   cJSON *root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "status", "ok");
-  cJSON_AddStringToObject(root, "device", "IOT-ESP32");
-  cJSON_AddNumberToObject(root, "uptime",
-                          (double)esp_timer_get_time() / 1000000.0);
-  cJSON_AddNumberToObject(root, "heap_free", esp_get_free_heap_size());
-
-  time_t now;
-  struct tm timeinfo;
-  char iso_time[32] = "";
-  time(&now);
-  localtime_r(&now, &timeinfo);
-  if (strftime(iso_time, sizeof(iso_time), "%Y-%m-%dT%H:%M:%S", &timeinfo) == 0) {
-    iso_time[0] = '\0';
-  }
-  cJSON *time_obj = cJSON_CreateObject();
-  cJSON_AddBoolToObject(time_obj, "synced", network_manager_is_time_synced());
-  cJSON_AddNumberToObject(time_obj, "epoch", (double)now);
-  cJSON_AddStringToObject(time_obj, "iso_local", iso_time);
-  cJSON_AddItemToObject(root, "time", time_obj);
-
-  // WiFi Info
-  char *wifi_json = wifi_manager_get_status_json();
-  if (wifi_json) {
-    cJSON *wifi_obj = cJSON_Parse(wifi_json);
-    if (wifi_obj) {
-      // Add saved config info if not connected (or even if connected for
-      // reference)
-      char saved_ssid[32];
-      if (wifi_manager_get_saved_config(saved_ssid, sizeof(saved_ssid)) ==
-          ESP_OK) {
-        cJSON_AddStringToObject(wifi_obj, "saved_ssid", saved_ssid);
-      }
-      cJSON_AddStringToObject(wifi_obj, "last_error",
-                              wifi_manager_get_last_error());
-      cJSON_AddItemToObject(root, "wifi", wifi_obj);
-    }
-    free(wifi_json);
-  }
-
-  // MQTT Status
-  cJSON *mqtt = cJSON_CreateObject();
-  mqtt_status_snapshot_t mqtt_snapshot;
-  if (mqtt_manager_get_status_snapshot(&mqtt_snapshot) == ESP_OK) {
-    cJSON_AddBoolToObject(mqtt, "connected", mqtt_snapshot.connected);
-    cJSON_AddBoolToObject(mqtt, "client_initialized",
-                          mqtt_snapshot.client_initialized);
-    cJSON_AddBoolToObject(mqtt, "start_task_running",
-                          mqtt_snapshot.start_task_running);
-    cJSON_AddBoolToObject(mqtt, "network_ready", mqtt_snapshot.network_ready);
-    cJSON_AddBoolToObject(mqtt, "time_ready", mqtt_snapshot.time_ready);
-    cJSON_AddStringToObject(mqtt, "last_event", mqtt_snapshot.last_event);
-    cJSON_AddStringToObject(mqtt, "last_error", mqtt_snapshot.last_error);
-    cJSON_AddNumberToObject(mqtt, "last_error_type",
-                            mqtt_snapshot.last_error_type);
-    cJSON_AddNumberToObject(mqtt, "transport_sock_errno",
-                            mqtt_snapshot.transport_sock_errno);
-    cJSON_AddNumberToObject(mqtt, "tls_stack_err",
-                            mqtt_snapshot.tls_stack_err);
-    cJSON_AddNumberToObject(mqtt, "esp_tls_last_err",
-                            mqtt_snapshot.esp_tls_last_err);
-  } else {
-    cJSON_AddBoolToObject(mqtt, "connected", mqtt_manager_is_connected());
-  }
-  cJSON_AddStringToObject(mqtt, "broker", mqtt_uri);
-  cJSON_AddBoolToObject(mqtt, "use_tls", mqtt_use_tls[0] == '1');
-  cJSON_AddItemToObject(root, "mqtt", mqtt);
-
-  bool mqtt_test_pending = false;
-  bool mqtt_test_success = false;
-  int mqtt_test_elapsed_ms = 0;
-  mqtt_manager_get_test_status(&mqtt_test_pending, &mqtt_test_success,
-                               &mqtt_test_elapsed_ms);
-  cJSON *mqtt_test = cJSON_CreateObject();
-  cJSON_AddBoolToObject(mqtt_test, "pending", mqtt_test_pending);
-  cJSON_AddBoolToObject(mqtt_test, "success", mqtt_test_success);
-  cJSON_AddNumberToObject(mqtt_test, "elapsed_ms", mqtt_test_elapsed_ms);
-  cJSON_AddItemToObject(root, "mqtt_test", mqtt_test);
-
-  // Config (Flat for backward compatibility with existing JS, or properly
-  // nested?) Existing JS uses data.serial, etc. so keep flat if
-  // possible, OR update JS. User requested "Resto de informacion relevante...
-  // modo resumen". I will keep the flat keys for config to avoid breaking
-  // existing JS populators excessively, but the new dashboard in JS can look
-  // at 'wifi' object.
   cJSON_AddStringToObject(root, "serial", serial);
-  cJSON_AddStringToObject(root, "mqtt_uri", mqtt_uri);
-  cJSON_AddStringToObject(root, "mqtt_port", mqtt_port);
-  cJSON_AddBoolToObject(root, "mqtt_use_tls", mqtt_use_tls[0] == '1');
 
-  cJSON *diagnostics = cJSON_CreateObject();
-  cJSON_AddBoolToObject(diagnostics, "time_synced",
-                        network_manager_is_time_synced());
-  cJSON_AddStringToObject(diagnostics, "wifi_last_error",
-                          wifi_manager_get_last_error());
-  cJSON_AddNumberToObject(diagnostics, "wifi_reason_code",
-                          wifi_manager_get_last_disconnect_reason());
-  cJSON_AddStringToObject(diagnostics, "wifi_reason_name",
-                          wifi_manager_disconnect_reason_to_str(
-                              wifi_manager_get_last_disconnect_reason()));
-  cJSON_AddBoolToObject(diagnostics, "mqtt_connected",
-                        mqtt_manager_is_connected());
-  if (mqtt_manager_get_status_snapshot(&mqtt_snapshot) == ESP_OK) {
-    cJSON_AddStringToObject(diagnostics, "mqtt_last_error",
-                            mqtt_snapshot.last_error);
-    cJSON_AddStringToObject(diagnostics, "mqtt_last_event",
-                            mqtt_snapshot.last_event);
-  }
-  cJSON_AddItemToObject(root, "diagnostics", diagnostics);
+  cJSON *device = cJSON_AddObjectToObject(root, "device");
+  cJSON_AddStringToObject(device, "firmware_version",
+                          esp_app_get_description()->version);
+  cJSON_AddStringToObject(device, "idf_version", esp_get_idf_version());
+  cJSON_AddNumberToObject(device, "uptime",
+                          (double)(esp_timer_get_time() / 1000000LL));
+  cJSON_AddNumberToObject(device, "heap_free", esp_get_free_heap_size());
+  cJSON_AddNumberToObject(device, "heap_min",
+                          esp_get_minimum_free_heap_size());
 
-  // Add QoS values
-  cJSON_AddNumberToObject(root, "mqtt_qos_pub",
-                          atoi(mqtt_qos_pub_telemetry));
-  cJSON_AddNumberToObject(root, "mqtt_qos_sub", atoi(mqtt_qos_sub));
+  add_sensor_status(root);
+  add_time_status(root);
 
-  const char *resp_str = cJSON_PrintUnformatted(root);
-  httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+  wifi_status_snapshot_t wifi;
+  wifi_manager_get_status_snapshot(&wifi);
+  cJSON *wifi_obj = cJSON_AddObjectToObject(root, "wifi");
+  cJSON_AddBoolToObject(wifi_obj, "connected", wifi.connected);
+  cJSON_AddStringToObject(wifi_obj, "ssid", wifi.ssid);
+  cJSON_AddStringToObject(wifi_obj, "saved_ssid", wifi.saved_ssid);
+  cJSON_AddStringToObject(wifi_obj, "ip", wifi.ip);
+  cJSON_AddNumberToObject(wifi_obj, "rssi", wifi.rssi_dbm);
+  cJSON_AddStringToObject(wifi_obj, "last_error", wifi.last_error);
+  cJSON_AddStringToObject(
+      wifi_obj, "last_disconnect_reason",
+      wifi_manager_disconnect_reason_to_str(wifi.last_disconnect_reason));
 
+  cJSON *ap = cJSON_AddObjectToObject(root, "ap");
+  cJSON_AddBoolToObject(ap, "active", wifi.ap_active);
+  cJSON_AddStringToObject(ap, "ssid", wifi_manager_get_ap_ssid());
+
+  mqtt_status_snapshot_t mqtt_snapshot;
+  mqtt_manager_get_status_snapshot(&mqtt_snapshot);
+  cJSON *mqtt = cJSON_AddObjectToObject(root, "mqtt");
+  cJSON_AddBoolToObject(mqtt, "connected", mqtt_snapshot.connected);
+  cJSON_AddStringToObject(mqtt, "host", mqtt_snapshot.host);
+  cJSON_AddNumberToObject(mqtt, "port", mqtt_snapshot.port);
+  cJSON_AddBoolToObject(mqtt, "use_tls", mqtt_snapshot.use_tls);
+  cJSON_AddBoolToObject(mqtt, "network_ready", mqtt_snapshot.network_ready);
+  cJSON_AddStringToObject(mqtt, "last_event", mqtt_snapshot.last_event);
+  cJSON_AddStringToObject(mqtt, "last_error", mqtt_snapshot.last_error);
+  cJSON_AddNumberToObject(mqtt, "tls_stack_err", mqtt_snapshot.tls_stack_err);
+  cJSON_AddNumberToObject(mqtt, "esp_tls_last_err",
+                          mqtt_snapshot.esp_tls_last_err);
+
+  cJSON *certs = cJSON_AddObjectToObject(root, "certs");
+  cJSON_AddBoolToObject(certs, "root_crt", file_exists("/littlefs/root.crt"));
+  cJSON_AddBoolToObject(certs, "client_crt",
+                        file_exists("/littlefs/client.crt"));
+  cJSON_AddBoolToObject(certs, "client_key",
+                        file_exists("/littlefs/client.key"));
+
+  char *resp_str = cJSON_PrintUnformatted(root);
   cJSON_Delete(root);
-  free((void *)resp_str);
+  if (resp_str == NULL) {
+    httpd_resp_send_500(req);
+    return ESP_OK;
+  }
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+  free(resp_str);
   return ESP_OK;
 }
 
@@ -610,7 +580,7 @@ static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
   if (valid_serial) {
     if (factory_has_serial()) {
       httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                          "Serial already registered");
+                          "El serial ya está registrado");
     } else {
       save_nvs_str("serial", serial);
       factory_store_serial_if_missing(serial);
@@ -618,7 +588,7 @@ static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
     }
   } else {
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
-                        "Serial must match IOT-XXXX-XXXX");
+                        "El serial debe tener el formato IOT-XXXX-XXXX");
   }
   cJSON_Delete(root);
   return ESP_OK;
@@ -650,10 +620,11 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
   cJSON *uri = cJSON_GetObjectItem(root, "uri");
   cJSON *port = cJSON_GetObjectItem(root, "port");
   cJSON *use_tls = cJSON_GetObjectItem(root, "use_tls");
-  cJSON *qos_pub = cJSON_GetObjectItem(root, "qos_pub");
-  cJSON *qos_sub = cJSON_GetObjectItem(root, "qos_sub");
 
-  if (!cJSON_IsString(uri) || !cJSON_IsString(port)) {
+  int port_number = cJSON_IsString(port) ? atoi(port->valuestring) : 0;
+  if (!cJSON_IsString(uri) || uri->valuestring[0] == '\0' ||
+      strlen(uri->valuestring) >= 128 || port_number < 1 ||
+      port_number > 65535) {
     cJSON_Delete(root);
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Host and port required");
     return ESP_OK;
@@ -664,47 +635,9 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
   save_nvs_str("mqtt_use_tls",
                cJSON_IsBool(use_tls) && cJSON_IsTrue(use_tls) ? "1" : "0");
 
-  char qos[2];
-  snprintf(qos, sizeof(qos), "%d",
-           cJSON_IsNumber(qos_pub) ? qos_pub->valueint : 0);
-  save_nvs_str("mqtt_qos_pub_telemetry", qos);
-  snprintf(qos, sizeof(qos), "%d",
-           cJSON_IsNumber(qos_sub) ? qos_sub->valueint : 1);
-  save_nvs_str("mqtt_qos_sub", qos);
-
   cJSON_Delete(root);
   httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
-}
-
-// Helper for URL decoding
-static void url_decode(char *dst, const char *src) {
-  char a, b;
-  while (*src) {
-    if ((*src == '%') && ((a = src[1]) && (b = src[2])) &&
-        (isxdigit((int)a) && isxdigit((int)b))) {
-      if (a >= 'a')
-        a -= 'a' - 'A';
-      if (a >= 'A')
-        a -= ('A' - 10);
-      else
-        a -= '0';
-      if (b >= 'a')
-        b -= 'a' - 'A';
-      if (b >= 'A')
-        b -= ('A' - 10);
-      else
-        b -= '0';
-      *dst++ = 16 * a + b;
-      src += 3;
-    } else if (*src == '+') {
-      *dst++ = ' ';
-      src++;
-    } else {
-      *dst++ = *src++;
-    }
-  }
-  *dst++ = '\0';
 }
 
 // POST /api/config/wifi/forget
@@ -834,62 +767,80 @@ static esp_err_t api_mqtt_test_post_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// POST /api/files?path=/path/to/file
+#define CERT_MAX_BYTES 8192
+
+// POST /api/files?path=<root.crt|client.crt|client.key> (raw file body).
+// Only the three mTLS files can be written, always into /littlefs/.
 static esp_err_t api_files_post_handler(httpd_req_t *req) {
   if (!is_authenticated(req)) {
     httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
     return ESP_OK;
   }
 
-  // Parse query string for path
-  char filepath[256] = "/littlefs/";
-  char query[256];
+  char query[64];
+  char name[32] = "";
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
-    char param[128];
-    if (httpd_query_key_value(query, "path", param, sizeof(param)) == ESP_OK) {
-      // Decode URL (converts %2F to /)
-      char decoded_path[128];
-      url_decode(decoded_path, param);
-
-      // Construct full path
-      if (decoded_path[0] == '/') {
-        snprintf(filepath, sizeof(filepath), "/littlefs%s", decoded_path);
-      } else {
-        snprintf(filepath, sizeof(filepath), "/littlefs/%s", decoded_path);
-      }
-    }
+    httpd_query_key_value(query, "path", name, sizeof(name));
+  }
+  const char *file = name[0] == '/' ? name + 1 : name;
+  if (strcmp(file, "root.crt") != 0 && strcmp(file, "client.crt") != 0 &&
+      strcmp(file, "client.key") != 0) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                        "path must be root.crt, client.crt or client.key");
+    return ESP_OK;
+  }
+  if (req->content_len <= 0 || req->content_len > CERT_MAX_BYTES) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid file size");
+    return ESP_OK;
   }
 
-  ESP_LOGI(TAG, "Uploading file to: %s", filepath);
+  char filepath[48];
+  char tmppath[52];
+  snprintf(filepath, sizeof(filepath), "/littlefs/%s", file);
+  snprintf(tmppath, sizeof(tmppath), "%s.tmp", filepath);
+  ESP_LOGI(TAG, "Uploading %s (%d bytes)", filepath, (int)req->content_len);
 
-  int fd = open(filepath, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  int fd = open(tmppath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
   if (fd < 0) {
-    ESP_LOGE(TAG, "Failed to open file : %s", filepath);
     httpd_resp_send_500(req);
-    return ESP_FAIL;
+    return ESP_OK;
   }
 
   char buf[1024];
   int remaining = req->content_len;
-  int received;
-
+  bool ok = true;
   while (remaining > 0) {
-    if ((received = httpd_req_recv(req, buf, MIN(remaining, sizeof(buf)))) <=
-        0) {
-      if (received == HTTPD_SOCK_ERR_TIMEOUT) {
-        continue;
-      }
-      close(fd);
-      return ESP_FAIL;
+    int received = httpd_req_recv(req, buf, MIN(remaining, (int)sizeof(buf)));
+    if (received == HTTPD_SOCK_ERR_TIMEOUT) continue;
+    if (received <= 0 || write(fd, buf, received) != received) {
+      ok = false;
+      break;
     }
-    write(fd, buf, received);
     remaining -= received;
   }
-
   close(fd);
-  if (is_cert_filepath(filepath)) {
-    factory_store_certs_if_missing();
+
+  // Replace the old file only once the new one is complete.
+  if (!ok || (unlink(filepath) != 0 && errno != ENOENT) ||
+      rename(tmppath, filepath) != 0) {
+    unlink(tmppath);
+    httpd_resp_send_500(req);
+    return ESP_OK;
   }
+  factory_store_certs_if_missing();
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, "{\"status\": \"ok\"}", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+// POST /api/ap/stop
+static esp_err_t api_ap_stop_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  wifi_manager_stop_ap();
+  httpd_resp_set_type(req, "application/json");
   httpd_resp_send(req, "{\"status\": \"ok\"}", HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
@@ -927,7 +878,8 @@ static esp_err_t api_auth_password_post_handler(httpd_req_t *req) {
         s_session_expiry = 0; // Force relogin
         httpd_resp_send(req, "{\"status\": \"ok\"}", HTTPD_RESP_USE_STRLEN);
       } else {
-        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED,
+        // 403, not 401: the session is still valid (401 sends the UI to login).
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN,
                             "Invalid current password");
       }
     }
@@ -1035,6 +987,12 @@ esp_err_t web_server_start(void) {
 
     httpd_register_uri_handler(server, &api_certs_status);
     httpd_register_uri_handler(server, &api_files_post);
+
+    static const httpd_uri_t api_ap_stop = {.uri = "/api/ap/stop",
+                                            .method = HTTP_POST,
+                                            .handler = api_ap_stop_post_handler,
+                                            .user_ctx = NULL};
+    httpd_register_uri_handler(server, &api_ap_stop);
 
     // Factory Reset & Cert Reset
     static const httpd_uri_t api_reset_factory = {

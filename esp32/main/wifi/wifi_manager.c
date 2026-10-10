@@ -29,8 +29,9 @@ static const char *TAG = "WIFI_MGR";
 #define DEFAULT_WIFI_SSID CONFIG_ESP_WIFI_SSID
 #define DEFAULT_WIFI_PASS CONFIG_ESP_WIFI_PASSWORD
 
-// Configuración AP
-#define DEFAULT_AP_SSID_PREFIX "IOT_"
+// Configuration access point (fixed credentials, WPA2)
+#define AP_SSID "WiFi_CEIoT_APP"
+#define AP_PASSWORD "ceiotapp"
 #define DEFAULT_AP_CHANNEL 1
 #define DEFAULT_AP_MAX_CONN 4
 
@@ -428,6 +429,8 @@ bool wifi_manager_is_connected(void) { return s_is_connected; }
 
 bool wifi_manager_is_ap_active(void) { return s_ap_active; }
 
+const char *wifi_manager_get_ap_ssid(void) { return AP_SSID; }
+
 const char *wifi_manager_get_last_error(void) { return s_last_error; }
 
 int wifi_manager_get_last_disconnect_reason(void) {
@@ -442,47 +445,33 @@ void wifi_manager_start_ap(void) {
 
 static void process_start_ap(void) {
   if (s_ap_active) {
-    ESP_LOGI(TAG, "AP ya está activo");
+    ESP_LOGI(TAG, "AP already active");
     return;
   }
-
-  ESP_LOGI(TAG, "Activando Modo AP Manual...");
-
-  uint8_t mac_addr[6] = {0};
-  esp_base_mac_addr_get(mac_addr);
-
-  char ap_ssid[32];
-  char ap_pass[16];
-
-  snprintf(ap_ssid, sizeof(ap_ssid), "%s%02X%02X%02X%02X",
-           DEFAULT_AP_SSID_PREFIX, mac_addr[2], mac_addr[3], mac_addr[4],
-           mac_addr[5]);
-
-  snprintf(ap_pass, sizeof(ap_pass), "%02X%02X%02X%02X", mac_addr[2],
-           mac_addr[3], mac_addr[4], mac_addr[5]);
 
   wifi_config_t wifi_config_ap = {
       .ap =
           {
               .channel = DEFAULT_AP_CHANNEL,
               .max_connection = DEFAULT_AP_MAX_CONN,
-              .authmode = WIFI_AUTH_WPA_WPA2_PSK,
+              .authmode = WIFI_AUTH_WPA2_PSK,
               .pmf_cfg = {.required = false},
           },
   };
 
-  strlcpy((char *)wifi_config_ap.ap.ssid, ap_ssid,
+  strlcpy((char *)wifi_config_ap.ap.ssid, AP_SSID,
           sizeof(wifi_config_ap.ap.ssid));
-  strlcpy((char *)wifi_config_ap.ap.password, ap_pass,
+  strlcpy((char *)wifi_config_ap.ap.password, AP_PASSWORD,
           sizeof(wifi_config_ap.ap.password));
-  wifi_config_ap.ap.ssid_len = strlen(ap_ssid);
+  wifi_config_ap.ap.ssid_len = strlen(AP_SSID);
 
+  // AP + STA: the station keeps (re)connecting to the saved network while the
+  // configuration AP is up.
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
 
-  ESP_LOGI(TAG, "Modo AP Activado");
-  ESP_LOGI(TAG, "SSID: %s", ap_ssid);
-  ESP_LOGI(TAG, "PASS: %s", ap_pass);
+  ESP_LOGI(TAG, "Configuration AP up: SSID %s (WPA2), http://192.168.4.1",
+           AP_SSID);
 
   s_ap_active = true;
   led_set_ap_active(true);

@@ -42,3 +42,10 @@ target_link_libraries(telemetry_payload PUBLIC sensor_logic cjson m)
 add_executable(test_telemetry_payload test_telemetry_payload.c)
 target_link_libraries(test_telemetry_payload telemetry_payload)
 add_test(NAME telemetry_payload COMMAND test_telemetry_payload)
+
+add_library(button_logic STATIC ${FW}/button/button_logic.c)
+target_include_directories(button_logic PUBLIC ${FW}/button)
+
+add_executable(test_button_logic test_button_logic.c)
+target_link_libraries(test_button_logic button_logic)
+add_test(NAME button_logic COMMAND test_button_logic)

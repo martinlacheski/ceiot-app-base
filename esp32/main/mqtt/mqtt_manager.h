@@ -18,6 +18,9 @@ typedef struct {
   int esp_tls_last_err;
   char last_event[32];
   char last_error[96];
+  char host[128]; // broker host as configured (normalized)
+  int port;
+  bool use_tls;
 } mqtt_status_snapshot_t;
 
 esp_err_t mqtt_manager_init(void);

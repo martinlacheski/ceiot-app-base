@@ -1,88 +1,182 @@
+/*
+ * web_pages.h
+ *
+ * Configuration web UI (Spanish UI text). Every view is wrapped by
+ * HTML_HEAD + HTML_NAV + <view> + HTML_FOOTER, served by web_server.c.
+ * Values coming from the device or the network are inserted with
+ * textContent, never as HTML.
+ */
+
 #ifndef WEB_PAGES_H
 #define WEB_PAGES_H
 
 static const char *HTML_HEAD =
-    "<!doctype html>\n"
-    "<html lang=\"es\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n"
-    "<title>IOT Config</title>\n"
-    "<style>\n"
-    ":root{font-family:system-ui,sans-serif;color:#172033;background:#f5f7fb}body{margin:0}.container,.login{max-width:860px;margin:32px auto;padding:0 16px}.card{background:white;border:1px solid #dbe1ea;border-radius:12px;padding:24px;margin-bottom:18px}.nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}.nav a,button{background:#1956d1;color:white;border:0;border-radius:8px;padding:10px 14px;text-decoration:none;cursor:pointer}.nav a{background:#e8eefc;color:#173b82}label{display:block;font-weight:600;margin:12px 0 5px}input,select{box-sizing:border-box;width:100%;padding:10px;border:1px solid #c5cedb;border-radius:8px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.muted{color:#687386}.danger{background:#b42318}.ok{color:#067647}.bad{color:#b42318}pre{white-space:pre-wrap;word-break:break-word;background:#f7f8fa;padding:12px;border-radius:8px}\n"
-    "</style></head><body>\n"
-;
+    "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+    "<title>CEIoT - Dispositivo</title><style>"
+    ":root{font-family:system-ui,sans-serif;color:#172033;background:#f5f7fb}"
+    "body{margin:0}.container,.login{max-width:860px;margin:24px auto;padding:0 16px}"
+    ".card{background:#fff;border:1px solid #dbe1ea;border-radius:12px;padding:20px;margin-bottom:16px}"
+    ".nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}"
+    ".nav a,button{background:#1956d1;color:#fff;border:0;border-radius:8px;padding:10px 14px;text-decoration:none;cursor:pointer;margin:4px 4px 0 0}"
+    ".nav a{background:#e8eefc;color:#173b82;margin:0}"
+    "label{display:block;font-weight:600;margin:12px 0 5px}"
+    "input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #c5cedb;border-radius:8px}"
+    ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}"
+    ".muted{color:#687386}.danger{background:#b42318}.ok{color:#067647}.bad{color:#b42318}"
+    "dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0}dt{color:#687386}dd{margin:0;font-weight:600;word-break:break-word}"
+    "ul.nets{list-style:none;padding:0}ul.nets li{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #eef1f5;padding:6px 0}"
+    "</style></head><body>";
 
 static const char *HTML_NAV =
-    "<div class=\"container\"><div class=\"nav\">\n"
-    "<a href=\"/status\">Estado</a><a href=\"/wifi\">Conectividad</a><a href=\"/mqtt\">MQTT</a><a href=\"/device\">Dispositivo</a><a href=\"/password\">Seguridad</a>\n"
-    "<button onclick=\"logout()\">Cerrar sesi\u00f3n</button></div>\n"
-;
+    "<div class='container'><div class='nav'>"
+    "<a href='/status'>Estado</a><a href='/wifi'>Wi-Fi</a><a href='/mqtt'>MQTT</a>"
+    "<a href='/device'>Dispositivo</a><a href='/password'>Seguridad</a>"
+    "<button onclick='logout()'>Cerrar sesión</button></div>";
 
 static const char *HTML_LOGIN =
-    "<div class=\"login\"><div class=\"card\"><h1>IOT</h1><p class=\"muted\">Administraci\u00f3n del dispositivo</p>\n"
-    "<form id=\"login-form\"><label>Usuario</label><input id=\"user\" value=\"admin\" required>\n"
-    "<label>Contrase\u00f1a</label><input id=\"pass\" type=\"password\" required><button>Ingresar</button></form></div></div>\n"
-;
+    "<div class='login'><div class='card'><h1>CEIoT</h1>"
+    "<p class='muted'>Administración del dispositivo</p>"
+    "<form id='login-form'><label>Usuario</label><input id='user' value='admin' required>"
+    "<label>Contraseña</label><input id='pass' type='password' required>"
+    "<button>Ingresar</button></form></div></div>";
 
 static const char *VIEW_STATUS =
-    "<div class=\"card\"><h1>Estado del dispositivo</h1><div class=\"grid\">\n"
-    "<div><h3>Sistema</h3><p>ID: <strong id=\"st-device\">-</strong></p><p>Serial: <strong id=\"st-serial\">-</strong></p><p>Uptime: <strong id=\"st-uptime\">-</strong></p><p>Heap: <strong id=\"st-heap\">-</strong></p></div>\n"
-    "<div><h3>Conectividad</h3><p>Wi-Fi: <strong id=\"st-wifi\">-</strong></p><p>IP: <strong id=\"st-ip\">-</strong></p><p>MQTT: <strong id=\"st-mqtt\">-</strong></p><p>Enlace: <strong id=\"st-link\">-</strong></p></div>\n"
-    "</div><h3>Diagn\u00f3stico</h3><pre id=\"diagnostics\">Cargando...</pre></div>\n"
-;
+    "<div class='grid'>"
+    "<div class='card'><h2>Dispositivo</h2><dl>"
+    "<dt>Serial</dt><dd id='st-serial'>-</dd>"
+    "<dt>Firmware</dt><dd id='st-fw'>-</dd>"
+    "<dt>Sensor</dt><dd id='st-sensor'>-</dd>"
+    "<dt>Encendido</dt><dd id='st-uptime'>-</dd>"
+    "<dt>Memoria libre</dt><dd id='st-heap'>-</dd>"
+    "<dt>Hora</dt><dd id='st-time'>-</dd></dl></div>"
+    "<div class='card'><h2>Última lectura</h2><dl id='st-reading'><dt>Estado</dt><dd>Sin lecturas</dd></dl></div>"
+    "<div class='card'><h2>Wi-Fi</h2><dl>"
+    "<dt>Estado</dt><dd id='st-wifi'>-</dd>"
+    "<dt>Red</dt><dd id='st-ssid'>-</dd>"
+    "<dt>IP</dt><dd id='st-ip'>-</dd>"
+    "<dt>Señal</dt><dd id='st-rssi'>-</dd>"
+    "<dt>Punto de acceso</dt><dd id='st-ap'>-</dd></dl>"
+    "<button id='ap-stop' style='display:none' onclick='stopAp()'>Desactivar punto de acceso</button></div>"
+    "<div class='card'><h2>MQTT</h2><dl>"
+    "<dt>Estado</dt><dd id='st-mqtt'>-</dd>"
+    "<dt>Broker</dt><dd id='st-broker'>-</dd>"
+    "<dt>Último evento</dt><dd id='st-mqtt-event'>-</dd>"
+    "<dt>Último error</dt><dd id='st-mqtt-error'>-</dd>"
+    "<dt>Certificados</dt><dd id='st-certs'>-</dd></dl></div>"
+    "</div>";
 
 static const char *VIEW_WIFI =
-    "<div class=\"card\"><h1>Conectividad</h1>\n"
-    "<label>Modo de red</label><select id=\"network-mode\"><option value=\"wifi_first\">Wi-Fi preferido</option><option value=\"cellular_first\">4G preferido</option><option value=\"wifi_only\">Solo Wi-Fi</option><option value=\"cellular_only\">Solo 4G</option></select>\n"
-    "<button onclick=\"saveNetwork()\">Guardar modo</button><hr>\n"
-    "<label>SSID</label><input id=\"wifi-ssid\"><label>Contrase\u00f1a</label><input id=\"wifi-pass\" type=\"password\">\n"
-    "<button onclick=\"saveWifi()\">Guardar Wi-Fi</button><button onclick=\"scanWifi()\">Escanear</button><button class=\"danger\" onclick=\"forgetWifi()\">Olvidar red</button>\n"
-    "<pre id=\"wifi-results\"></pre></div>\n"
-;
+    "<div class='card'><h1>Wi-Fi</h1>"
+    "<p class='muted'>Red guardada: <strong id='wifi-saved'>-</strong> &middot; Estado: <strong id='wifi-state'>-</strong></p>"
+    "<label>Red (SSID)</label><input id='wifi-ssid' maxlength='32'>"
+    "<label>Contraseña</label><input id='wifi-pass' type='password' maxlength='64'>"
+    "<button onclick='saveWifi()'>Conectar</button><button onclick='scanWifi()'>Buscar redes</button>"
+    "<button class='danger' onclick='forgetWifi()'>Olvidar red</button>"
+    "<ul class='nets' id='wifi-results'></ul></div>";
 
 static const char *VIEW_MQTT =
-    "<div class=\"card\"><h1>Broker MQTT</h1><form id=\"mqtt-form\">\n"
-    "<div class=\"grid\"><div><label>Host</label><input id=\"mqtt-uri\" required></div><div><label>Puerto</label><input id=\"mqtt-port\" type=\"number\" required></div></div>\n"
-    "<label><input id=\"mqtt-tls\" type=\"checkbox\" style=\"width:auto\"> Usar TLS</label>\n"
-    "<p class=\"muted\">Telemetr\u00eda: <code>iot/devices/&lt;serial&gt;/telemetry</code><br>OTA: <code>iot/devices/&lt;serial&gt;/ota</code><br>Estado: <code>iot/devices/&lt;serial&gt;/status</code></p>\n"
-    "<button>Guardar MQTT</button><button type=\"button\" onclick=\"testMqtt()\">Probar publicaci\u00f3n</button></form></div>\n"
-;
+    "<div class='card'><h1>Broker MQTT</h1><form id='mqtt-form'>"
+    "<div class='grid'><div><label>Host</label><input id='mqtt-uri' required></div>"
+    "<div><label>Puerto</label><input id='mqtt-port' type='number' min='1' max='65535' required></div></div>"
+    "<label><input id='mqtt-tls' type='checkbox' style='width:auto'> Usar TLS (mTLS, puerto 8883)</label>"
+    "<p class='muted'>Los cambios se aplican al reiniciar el dispositivo.</p>"
+    "<button>Guardar</button><button type='button' onclick='testMqtt()'>Probar publicación</button></form></div>"
+    "<div class='card'><h2>Certificados</h2><dl>"
+    "<dt>CA (root.crt)</dt><dd id='cert-root'>-</dd>"
+    "<dt>Certificado (client.crt)</dt><dd id='cert-crt'>-</dd>"
+    "<dt>Clave (client.key)</dt><dd id='cert-key'>-</dd></dl>"
+    "<label>Subir root.crt</label><input id='up-root' type='file'>"
+    "<label>Subir client.crt</label><input id='up-crt' type='file'>"
+    "<label>Subir client.key</label><input id='up-key' type='file'>"
+    "<button onclick='uploadCerts()'>Subir certificados</button>"
+    "<button class='danger' onclick='resetCerts()'>Borrar certificados</button></div>";
 
 static const char *VIEW_DEVICE =
-    "<div class=\"card\"><h1>Dispositivo IOT</h1><p>Formato de serial: <strong>IOT-XXXX-XXXX</strong></p>\n"
-    "<form id=\"serial-form\"><label>N\u00famero de serie</label><input id=\"serial\" placeholder=\"IOT-XXXX-XXXX\" pattern=\"IOT-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}\" required><button id=\"save-serial\">Guardar serial</button></form>\n"
-    "<p class=\"muted\">Las lecturas reales se publican sin reinterpretarlas; la temperatura existente conserva la clave <code>temp_water</code>.</p></div>\n"
-;
+    "<div class='card'><h1>Dispositivo</h1>"
+    "<p>Formato del serial: <strong>IOT-XXXX-XXXX</strong>. Debe coincidir con el CN del certificado del dispositivo y con el alta en la plataforma.</p>"
+    "<form id='serial-form'><label>Número de serie</label>"
+    "<input id='serial' placeholder='IOT-XXXX-XXXX' pattern='IOT-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}' required>"
+    "<button id='save-serial'>Guardar serial</button></form>"
+    "<p class='muted'>El serial se guarda una sola vez y se conserva al restaurar los valores de fábrica.</p></div>";
 
 static const char *VIEW_PASSWORD =
-    "<div class=\"card\"><h1>Seguridad</h1>\n"
-    "<form id=\"password-form\"><label>Contrase\u00f1a actual</label><input id=\"current-pass\" type=\"password\" required><label>Nueva contrase\u00f1a</label><input id=\"new-pass\" type=\"password\" minlength=\"6\" required><button>Cambiar contrase\u00f1a</button></form>\n"
-    "<hr><button onclick=\"restartDevice()\">Reiniciar</button><button class=\"danger\" onclick=\"resetDevice()\">Restaurar f\u00e1brica</button></div>\n"
-;
+    "<div class='card'><h1>Seguridad</h1><form id='password-form'>"
+    "<label>Contraseña actual</label><input id='current-pass' type='password' required>"
+    "<label>Nueva contraseña</label><input id='new-pass' type='password' minlength='6' required>"
+    "<button>Cambiar contraseña</button></form></div>"
+    "<div class='card'><h2>Sistema</h2>"
+    "<p class='muted'>Restaurar valores de fábrica borra la red Wi-Fi, la configuración MQTT y la contraseña; conserva el serial y los certificados.</p>"
+    "<button onclick='restartDevice()'>Reiniciar</button>"
+    "<button class='danger' onclick='resetDevice()'>Restaurar valores de fábrica</button></div>";
 
-static const char *HTML_FOOTER_START =
-    "</div><script>\n"
-    "const API=\"/api\"; const el=id=>document.getElementById(id);\n"
-    "async function request(path,options={}){const r=await fetch(API+path,{headers:{\"Content-Type\":\"application/json\"},...options});if(r.status===401){location.href=\"/login\";throw new Error(\"unauthorized\")}return r}\n"
-    "function toast(message){alert(message)}\n"
-    "async function loadStatus(){if(!el(\"st-device\")&&!el(\"mqtt-uri\")&&!el(\"serial\")&&!el(\"network-mode\"))return;const r=await request(\"/status\");const d=await r.json();\n"
-    "if(el(\"st-device\")){el(\"st-device\").textContent=d.device||\"IOT-ESP32S3\";el(\"st-serial\").textContent=d.serial||\"Sin asignar\";el(\"st-uptime\").textContent=Math.round(d.uptime||0)+\" s\";el(\"st-heap\").textContent=Math.round((d.heap_free||0)/1024)+\" KB\";el(\"st-wifi\").textContent=d.wifi&&d.wifi.connected?\"Conectado\":\"Desconectado\";el(\"st-ip\").textContent=d.wifi&&d.wifi.ip||\"-\";el(\"st-mqtt\").textContent=d.mqtt&&d.mqtt.connected?\"Conectado\":\"Desconectado\";el(\"st-link\").textContent=d.network_active||\"-\";el(\"diagnostics\").textContent=JSON.stringify(d.diagnostics||{},null,2)}\n"
-    "if(el(\"network-mode\"))el(\"network-mode\").value=d.network_mode||\"wifi_first\";\n"
-    "if(el(\"mqtt-uri\")){el(\"mqtt-uri\").value=d.mqtt_uri||\"\";el(\"mqtt-port\").value=d.mqtt_port||\"1883\";el(\"mqtt-tls\").checked=!!d.mqtt_use_tls}\n"
-    "if(el(\"serial\")){el(\"serial\").value=d.serial||\"\";if(d.serial){el(\"serial\").disabled=true;el(\"save-serial\").disabled=true}}\n"
-    "}\n"
-    "async function logout(){document.cookie=\"iot_session=; Max-Age=0; path=/\";location.href=\"/login\"}\n"
-    "if(el(\"login-form\"))el(\"login-form\").onsubmit=async e=>{e.preventDefault();const r=await fetch(API+\"/login\",{method:\"POST\",body:JSON.stringify({username:el(\"user\").value,password:el(\"pass\").value})});if(r.ok)location.href=\"/status\";else toast(\"Credenciales inv\u00e1lidas\")};\n"
-    "async function saveWifi(){const r=await request(\"/config\",{method:\"POST\",body:JSON.stringify({ssid:el(\"wifi-ssid\").value,password:el(\"wifi-pass\").value})});toast(r.ok?\"Wi-Fi guardado\":\"No se pudo guardar\")}\n"
-    "async function scanWifi(){await request(\"/scan\",{method:\"POST\"});setTimeout(async()=>{const r=await request(\"/scan\");el(\"wifi-results\").textContent=JSON.stringify(await r.json(),null,2)},1200)}\n"
-    "async function forgetWifi(){await request(\"/config/wifi/forget\",{method:\"POST\"});toast(\"Red eliminada\")}\n"
-    "async function saveNetwork(){await request(\"/config/network\",{method:\"POST\",body:JSON.stringify({mode:el(\"network-mode\").value})});toast(\"Modo guardado\")}\n"
-    "if(el(\"mqtt-form\"))el(\"mqtt-form\").onsubmit=async e=>{e.preventDefault();const r=await request(\"/config/mqtt\",{method:\"POST\",body:JSON.stringify({uri:el(\"mqtt-uri\").value,port:el(\"mqtt-port\").value,use_tls:el(\"mqtt-tls\").checked,qos_pub:0,qos_sub:1})});toast(r.ok?\"MQTT guardado\":\"No se pudo guardar\")};\n"
-    "async function testMqtt(){const r=await request(\"/mqtt/test\",{method:\"POST\"});toast(r.ok?\"Publicaci\u00f3n enviada\":\"MQTT no conectado\")}\n"
-    "if(el(\"serial-form\"))el(\"serial-form\").onsubmit=async e=>{e.preventDefault();const serial=el(\"serial\").value.trim().toUpperCase();if(!/^IOT-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(serial)){toast(\"Us\u00e1 el formato IOT-XXXX-XXXX\");return}const r=await request(\"/config/sensor\",{method:\"POST\",body:JSON.stringify({serial})});toast(r.ok?\"Serial guardado\":await r.text());if(r.ok)loadStatus()};\n"
-    "if(el(\"password-form\"))el(\"password-form\").onsubmit=async e=>{e.preventDefault();const r=await request(\"/auth/password\",{method:\"POST\",body:JSON.stringify({current:el(\"current-pass\").value,new:el(\"new-pass\").value})});toast(r.ok?\"Contrase\u00f1a actualizada\":\"No se pudo actualizar\")};\n"
-    "async function restartDevice(){await request(\"/restart\",{method:\"POST\"});toast(\"Reinicio solicitado\")}\n"
-    "async function resetDevice(){if(confirm(\"\u00bfRestaurar configuraci\u00f3n de f\u00e1brica?\"))await request(\"/reset-factory\",{method:\"POST\"})}\n"
-    "loadStatus();setInterval(loadStatus,5000);\n"
-    "</script></body></html>\n"
-;
+static const char *HTML_FOOTER =
+    "</div><script>"
+    "const API='/api';const el=id=>document.getElementById(id);"
+    "const set=(id,v)=>{const e=el(id);if(e)e.textContent=(v===undefined||v===null||v==='')?'-':v};"
+    "async function request(path,options={}){const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...options});"
+    "if(r.status===401){location.href='/login';throw new Error('unauthorized')}return r}"
+    "function toast(m){alert(m)}"
+    "function dur(s){s=Math.floor(s||0);const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return (d?d+' d ':'')+h+' h '+m+' min'}"
+    "const LABELS={temperature:['Temperatura','°C'],relative_humidity:['Humedad relativa','%'],pressure:['Presión','hPa']};"
+    "function renderReading(s){const dl=el('st-reading');if(!dl)return;dl.textContent='';"
+    "const add=(k,v)=>{const dt=document.createElement('dt');dt.textContent=k;const dd=document.createElement('dd');dd.textContent=v;dl.append(dt,dd)};"
+    "if(!s||!s.last){add('Estado','Sin lecturas válidas todavía');return}"
+    "for(const k in s.last){const l=LABELS[k]||[k,''];add(l[0],s.last[k]+' '+l[1])}add('Antigüedad',dur(s.age_s))}"
+    "async function loadStatus(){if(!el('st-serial')&&!el('mqtt-uri')&&!el('serial')&&!el('wifi-saved'))return;"
+    "const d=await (await request('/status')).json();"
+    "if(el('st-serial')){set('st-serial',d.serial||'Sin asignar');set('st-fw',d.device.firmware_version);"
+    "set('st-sensor',d.sensor.model+' ('+d.sensor.key+')');set('st-uptime',dur(d.device.uptime));"
+    "set('st-heap',Math.round(d.device.heap_free/1024)+' KB');"
+    "set('st-time',d.time.synced?d.time.iso+' UTC ('+d.time.source+')':'Sin sincronizar');renderReading(d.sensor);"
+    "set('st-wifi',d.wifi.connected?'Conectado':(d.wifi.saved_ssid?'Desconectado'+(d.wifi.last_error?' ('+d.wifi.last_error+')':''):'Sin red configurada'));"
+    "set('st-ssid',d.wifi.ssid||d.wifi.saved_ssid);set('st-ip',d.wifi.ip);set('st-rssi',d.wifi.connected?d.wifi.rssi+' dBm':'');"
+    "set('st-ap',d.ap.active?'Activo ('+d.ap.ssid+')':'Inactivo');el('ap-stop').style.display=d.ap.active?'':'none';"
+    "set('st-mqtt',d.mqtt.connected?'Conectado':'Desconectado');"
+    "set('st-broker',(d.mqtt.use_tls?'mqtts://':'mqtt://')+d.mqtt.host+':'+d.mqtt.port);"
+    "set('st-mqtt-event',d.mqtt.last_event);set('st-mqtt-error',d.mqtt.last_error);"
+    "const c=d.certs;set('st-certs',c.root_crt&&c.client_crt&&c.client_key?'Completos':'Faltan archivos')}"
+    "if(el('wifi-saved')){set('wifi-saved',d.wifi.saved_ssid||'ninguna');set('wifi-state',d.wifi.connected?'Conectado a '+d.wifi.ssid:'Desconectado')}"
+    "if(el('mqtt-uri')&&!el('mqtt-uri').dataset.loaded){el('mqtt-uri').value=d.mqtt.host||'';el('mqtt-port').value=d.mqtt.port||'8883';"
+    "el('mqtt-tls').checked=!!d.mqtt.use_tls;el('mqtt-uri').dataset.loaded='1'}"
+    "if(el('cert-root')){const c=d.certs,y=v=>v?'Presente':'Falta';set('cert-root',y(c.root_crt));set('cert-crt',y(c.client_crt));set('cert-key',y(c.client_key))}"
+    "if(el('serial')&&!el('serial').dataset.loaded){el('serial').value=d.serial||'';el('serial').dataset.loaded='1';"
+    "if(d.serial){el('serial').disabled=true;el('save-serial').disabled=true}}}"
+    "function logout(){document.cookie='iot_session=; Max-Age=0; path=/';location.href='/login'}"
+    "if(el('login-form'))el('login-form').onsubmit=async e=>{e.preventDefault();"
+    "const r=await fetch(API+'/login',{method:'POST',body:JSON.stringify({username:el('user').value,password:el('pass').value})});"
+    "if(r.ok)location.href='/status';else toast('Credenciales inválidas')};"
+    "async function stopAp(){await request('/ap/stop',{method:'POST'});toast('Punto de acceso desactivado');loadStatus()}"
+    "async function saveWifi(){const ssid=el('wifi-ssid').value.trim();if(!ssid){toast('Ingrese el nombre de la red');return}"
+    "const r=await request('/config',{method:'POST',body:JSON.stringify({ssid,password:el('wifi-pass').value})});"
+    "toast(r.ok?'Conectando a '+ssid+'. Verifique el estado en unos segundos.':'No se pudo guardar')}"
+    "async function scanWifi(){const ul=el('wifi-results');ul.textContent='Buscando...';await request('/scan',{method:'POST'});"
+    "setTimeout(async()=>{const nets=await (await request('/scan')).json();ul.textContent='';"
+    "nets.sort((a,b)=>b.rssi-a.rssi).forEach(n=>{if(!n.ssid)return;const li=document.createElement('li');const s=document.createElement('span');"
+    "s.textContent=n.ssid+' ('+n.rssi+' dBm'+(n.auth?'':', abierta')+')';const b=document.createElement('button');b.textContent='Elegir';"
+    "b.onclick=()=>{el('wifi-ssid').value=n.ssid;el('wifi-pass').focus()};li.append(s,b);ul.append(li)});"
+    "if(!ul.children.length)ul.textContent='No se encontraron redes'},3000)}"
+    "async function forgetWifi(){if(!confirm('¿Olvidar la red guardada?'))return;await request('/config/wifi/forget',{method:'POST'});toast('Red eliminada');loadStatus()}"
+    "if(el('mqtt-form'))el('mqtt-form').onsubmit=async e=>{e.preventDefault();"
+    "const r=await request('/config/mqtt',{method:'POST',body:JSON.stringify({uri:el('mqtt-uri').value.trim(),port:el('mqtt-port').value,use_tls:el('mqtt-tls').checked})});"
+    "toast(r.ok?'MQTT guardado. Reinicie el dispositivo para aplicarlo.':'No se pudo guardar')};"
+    "async function testMqtt(){const r=await request('/mqtt/test',{method:'POST'});toast(r.ok?'Publicación enviada':'MQTT no conectado')}"
+    "async function uploadCerts(){const files=[['up-root','root.crt'],['up-crt','client.crt'],['up-key','client.key']];let n=0;"
+    "for(const [id,name] of files){const f=el(id).files[0];if(!f)continue;"
+    "const r=await fetch(API+'/files?path='+name,{method:'POST',body:f});if(!r.ok){toast('Error al subir '+name);return}n++}"
+    "toast(n?n+' archivo(s) subido(s). Reinicie el dispositivo para aplicarlos.':'Seleccione al menos un archivo');loadStatus()}"
+    "async function resetCerts(){if(!confirm('¿Borrar los certificados del dispositivo?'))return;await request('/mqtt/reset-certs',{method:'POST'});toast('Certificados borrados');loadStatus()}"
+    "if(el('serial-form'))el('serial-form').onsubmit=async e=>{e.preventDefault();const serial=el('serial').value.trim().toUpperCase();"
+    "if(!/^IOT-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(serial)){toast('Use el formato IOT-XXXX-XXXX');return}"
+    "const r=await request('/config/sensor',{method:'POST',body:JSON.stringify({serial})});"
+    "toast(r.ok?'Serial guardado. Reinicie el dispositivo para aplicarlo.':await r.text());if(r.ok){el('serial').dataset.loaded='';loadStatus()}};"
+    "if(el('password-form'))el('password-form').onsubmit=async e=>{e.preventDefault();"
+    "const r=await request('/auth/password',{method:'POST',body:JSON.stringify({current:el('current-pass').value,new:el('new-pass').value})});"
+    "toast(r.ok?'Contraseña actualizada':'No se pudo actualizar');if(r.ok)location.href='/login'};"
+    "async function restartDevice(){if(!confirm('¿Reiniciar el dispositivo?'))return;await request('/restart',{method:'POST'});toast('Reiniciando...')}"
+    "async function resetDevice(){if(confirm('¿Restaurar los valores de fábrica? Se borrará la red Wi-Fi y la configuración.'))"
+    "{await request('/reset-factory',{method:'POST'});toast('Restaurando y reiniciando...')}}"
+    "if(!el('login-form')){loadStatus();setInterval(loadStatus,5000)}"
+    "</script></body></html>";
 
-#endif
+#endif // WEB_PAGES_H

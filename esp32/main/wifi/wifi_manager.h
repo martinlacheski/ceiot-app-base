@@ -37,6 +37,9 @@ void wifi_manager_stop_ap(void);
 // Verifica si el modo AP está activo
 bool wifi_manager_is_ap_active(void);
 
+// SSID of the configuration access point
+const char *wifi_manager_get_ap_ssid(void);
+
 // Inicia un escaneo de redes WiFi (asíncrono, resultados por log por ahora)
 void wifi_manager_scan(void);
 

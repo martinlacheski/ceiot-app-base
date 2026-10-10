@@ -5,22 +5,23 @@
  * Entry point.
  */
 
+#include <stdio.h>
+
+#include "esp_app_desc.h"
+#include "esp_littlefs.h"
 #include "esp_log.h"
-#include "esp_heap_caps.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "nvs.h"
-#include "nvs_flash.h"
-#include <stdio.h>
 
-#include "esp_littlefs.h"
+#include "button_logic.h"
 #include "led_manager.h"
 #include "mqtt_manager.h"
 #include "network_manager.h"
 #include "nvs_manager.h"
 #include "pins_config.h"
+#include "sensor.h"
 #include "telemetry.h"
 #include "watchdog.h"
 #include "web_server.h"
@@ -28,60 +29,9 @@
 
 static const char *TAG = "MAIN";
 
-static esp_err_t probe_nvs_namespace(const char *ns) {
-  nvs_handle_t handle;
-  esp_err_t err = nvs_open(ns, NVS_READONLY, &handle);
-  if (err == ESP_OK) {
-    nvs_close(handle);
-  }
-  return err;
-}
+#define BUTTON_POLL_MS 50
 
-static void nvs_health_task(void *arg) {
-  (void)arg;
-
-  esp_err_t last_storage = ESP_OK;
-  esp_err_t last_factory = ESP_OK;
-  esp_err_t last_wifi = ESP_OK;
-  bool first = true;
-
-  while (1) {
-    esp_err_t cur_storage = probe_nvs_namespace("storage");
-    esp_err_t cur_factory = probe_nvs_namespace("factory");
-    esp_err_t cur_wifi = probe_nvs_namespace("wifi_prefs");
-
-    bool changed = first || cur_storage != last_storage ||
-                   cur_factory != last_factory || cur_wifi != last_wifi;
-    bool unhealthy = cur_storage != ESP_OK || cur_factory != ESP_OK;
-
-    if (changed || unhealthy) {
-      ESP_LOGW(TAG,
-               "NVS health storage=%s factory=%s wifi_prefs=%s heap_free=%u "
-               "heap_min=%u",
-               esp_err_to_name(cur_storage), esp_err_to_name(cur_factory),
-               esp_err_to_name(cur_wifi), (unsigned)esp_get_free_heap_size(),
-               (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_8BIT));
-    }
-
-    last_storage = cur_storage;
-    last_factory = cur_factory;
-    last_wifi = cur_wifi;
-    first = false;
-    vTaskDelay(pdMS_TO_TICKS(2000));
-  }
-}
-
-static void init_connectivity_managers(void) {
-  ESP_ERROR_CHECK(wifi_manager_init());
-  ESP_LOGI(TAG, "WiFi Manager inicializado");
-
-  ESP_ERROR_CHECK(network_manager_init());
-  ESP_LOGI(TAG, "Network Manager inicializado");
-}
-
-// Initialize LittleFS
 static void init_littlefs(void) {
-  ESP_LOGI(TAG, "Initializing LittleFS");
   esp_vfs_littlefs_conf_t conf = {.base_path = "/littlefs",
                                   .partition_label = "storage",
                                   .format_if_mount_failed = true,
@@ -89,123 +39,107 @@ static void init_littlefs(void) {
 
   esp_err_t ret = esp_vfs_littlefs_register(&conf);
   if (ret != ESP_OK) {
-    if (ret == ESP_FAIL) {
-      ESP_LOGE(TAG, "Failed to mount or format filesystem");
-    } else if (ret == ESP_ERR_NOT_FOUND) {
-      ESP_LOGE(TAG, "Failed to find LittleFS partition");
-    } else {
-      ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
-    }
+    ESP_LOGE(TAG, "LittleFS mount failed (%s)", esp_err_to_name(ret));
     return;
   }
 
   size_t total = 0, used = 0;
-  ret = esp_littlefs_info(conf.partition_label, &total, &used);
-  if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to get LittleFS partition information (%s)",
-             esp_err_to_name(ret));
-  } else {
-    ESP_LOGI(TAG, "Partition size: total: %d, used: %d", total, used);
+  if (esp_littlefs_info(conf.partition_label, &total, &used) == ESP_OK) {
+    ESP_LOGI(TAG, "LittleFS: %u of %u bytes used", (unsigned)used,
+             (unsigned)total);
   }
 }
 
-// Tarea para manejar entradas (botones)
-static void input_task(void *arg) {
-  const uint32_t poll_period_ms = 100;
+static led_override_t led_feedback(button_feedback_t feedback) {
+  switch (feedback) {
+  case BUTTON_FEEDBACK_AP_ARMED:
+    return LED_OVERRIDE_SOLID;
+  case BUTTON_FEEDBACK_RESET:
+    return LED_OVERRIDE_BLINK_FAST;
+  case BUTTON_FEEDBACK_NONE:
+  default:
+    return LED_OVERRIDE_NONE;
+  }
+}
+
+// BOOT button (GPIO0): hold >= 3 s and release to start the configuration AP,
+// hold >= 10 s for a factory reset. Short presses are ignored.
+static void button_task(void *arg) {
+  (void)arg;
+  button_state_t state;
+  button_logic_init(&state);
 
   while (1) {
-    // BOOT (GPIO0): plain reboot until the AP / factory-reset handling lands
-    if (gpio_get_level(BUTTON_BOOT_GPIO) == 0) {
-      ESP_LOGW(TAG, "Botón BOOT presionado -> Reiniciando...");
-      vTaskDelay(pdMS_TO_TICKS(500));
-      esp_restart();
+    bool pressed = gpio_get_level(BUTTON_BOOT_GPIO) == 0;
+    button_feedback_t feedback = BUTTON_FEEDBACK_NONE;
+    button_action_t action =
+        button_logic_update(&state, pressed, BUTTON_POLL_MS, &feedback);
+    led_set_override(led_feedback(feedback));
+
+    if (action == BUTTON_ACTION_START_AP) {
+      ESP_LOGI(TAG, "BOOT held >= 3 s: starting the configuration AP");
+      wifi_manager_start_ap();
+    } else if (action == BUTTON_ACTION_FACTORY_RESET) {
+      ESP_LOGW(TAG, "BOOT held >= 10 s: factory reset");
+      factory_reset_device(NULL); // restarts the device
     }
 
-    vTaskDelay(pdMS_TO_TICKS(poll_period_ms));
+    vTaskDelay(pdMS_TO_TICKS(BUTTON_POLL_MS));
   }
 }
 
 void app_main(void) {
-  ESP_LOGI(TAG, "========================================");
-  ESP_LOGI(TAG, "IOT - Environmental device");
-  ESP_LOGI(TAG, "ESP32-WROOM-32");
-  ESP_LOGI(TAG, "ESP-IDF Version: %s", esp_get_idf_version());
-  ESP_LOGI(TAG, "========================================");
+  const esp_app_desc_t *app = esp_app_get_description();
+  ESP_LOGI(TAG, "CEIoT environmental device %s (%s), ESP-IDF %s", app->version,
+           sensor_name(), esp_get_idf_version());
 
-  // 2. Inicializar NVS (incluye migración sensor_code -> serial)
+  // 1. Storage: NVS, LittleFS (certificates) and the factory snapshot
   ESP_ERROR_CHECK(nvs_manager_init());
-  ESP_LOGI(TAG, "NVS inicializado correctamente");
-
-  // 2b. Inicializar LittleFS
   init_littlefs();
+  restore_factory_defaults();       // serial / certs / TLS flag if missing
+  factory_store_certs_if_missing(); // keep flashed certs for a factory reset
 
-  // 2c. Restaurar valores base (sensor_code/certs) si faltan
-  restore_factory_defaults();
-
-  // 3. Inicializar Watchdog Timer
-  // Manejo robusto de inicialización previa
+  // 2. Watchdog
   esp_err_t wdt_ret = watchdog_init();
-  if (wdt_ret == ESP_ERR_INVALID_STATE) {
-    ESP_LOGW(TAG, "Watchdog ya estaba activo, continuando...");
-  } else {
+  if (wdt_ret != ESP_OK && wdt_ret != ESP_ERR_INVALID_STATE) {
     ESP_ERROR_CHECK(wdt_ret);
   }
-  ESP_LOGI(TAG, "Watchdog Timer verificado");
 
-  // 4. Configurar pines GPIO
+  // 3. Board I/O
   pins_config_init();
-  ESP_LOGI(TAG, "Configuración de pines completada");
-
-  // 4a. Status LED
   if (led_manager_init() != ESP_OK) {
     ESP_LOGE(TAG, "Status LED init failed");
   }
 
-  // 5. Inicializar managers de conectividad en orden determinístico
-  init_connectivity_managers();
+  // 4. Connectivity (starts the AP by itself when no Wi-Fi is saved)
+  ESP_ERROR_CHECK(wifi_manager_init());
+  ESP_ERROR_CHECK(network_manager_init());
 
-  // 6. Inicializar Web Server
-  // Se inicia inmediatamente para estar disponible en AP
+  // 5. Configuration web server (station IP and AP 192.168.4.1)
   ESP_ERROR_CHECK(web_server_start());
-  ESP_LOGI(TAG, "Web Server inicializado");
 
-  // 7. Inicializar MQTT Client
+  // 6. MQTT + telemetry
   if (mqtt_manager_init() == ESP_OK) {
     mqtt_manager_start();
-    ESP_LOGI(TAG, "MQTT Client inicializado");
   }
-
-  // 7b. Sensor readings + telemetry publication
   if (telemetry_start() != ESP_OK) {
     ESP_LOGE(TAG, "Telemetry task could not start");
   }
 
-  // 8. Iniciar tarea de entradas (Botones)
-  xTaskCreate(input_task, "input_task", 2048, NULL, 5, NULL);
-  ESP_LOGI(TAG, "Input Task iniciada");
+  // 7. BOOT button
+  xTaskCreate(button_task, "button_task", 4096, NULL, 5, NULL);
 
-  // 8b. Monitor de salud NVS para detectar quiebres en runtime
-  xTaskCreate(nvs_health_task, "nvs_health_task", 4096, NULL, 4, NULL);
-  ESP_LOGI(TAG, "NVS health task iniciada");
+  ESP_LOGI(TAG, "Ready");
 
-  ESP_LOGI(TAG, "========================================");
-  ESP_LOGI(TAG, "Sistema inicializado. Listo para operar.");
-  ESP_LOGI(TAG, "========================================");
-
-  // Loop principal - alimentar watchdog periódicamente
   uint32_t loop_count = 0;
   while (1) {
     vTaskDelay(pdMS_TO_TICKS(1000));
-
-    // Alimentar watchdog cada segundo
     watchdog_feed();
-
-    // Mostrar uptime cada 300 segundos
     if (loop_count % 300 == 0) {
-      int64_t uptime_sec = esp_timer_get_time() / 1000000;
-      ESP_LOGI(TAG, "Uptime: %lld segundos", uptime_sec);
+      ESP_LOGI(TAG, "Uptime %lld s, free heap %u",
+               (long long)(esp_timer_get_time() / 1000000),
+               (unsigned)esp_get_free_heap_size());
     }
-
     loop_count++;
   }
 }

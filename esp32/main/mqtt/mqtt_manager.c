@@ -53,6 +53,9 @@ static int s_last_transport_sock_errno = 0;
 static int s_last_tls_stack_err = 0;
 static int s_last_esp_tls_err = 0;
 static char s_cached_serial[32] = "";
+static char s_broker_host[128] = "";
+static int s_broker_port = 0;
+static bool s_use_tls = false;
 
 static esp_err_t open_nvs(const char *ns, nvs_open_mode_t mode,
                           nvs_handle_t *handle) {
@@ -304,6 +307,8 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   normalize_host(configured_host, host, sizeof(host));
   if (host[0] == '\0') strlcpy(host, MQTT_DEFAULT_HOST, sizeof(host));
   snprintf(uri, uri_size, "%s%s", use_tls ? "mqtts://" : "mqtt://", host);
+  strlcpy(s_broker_host, host, sizeof(s_broker_host));
+  s_use_tls = use_tls;
   config->broker.address.uri = uri;
 
   char port[8] = "";
@@ -314,6 +319,7 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
     config->broker.address.port =
         use_tls ? MQTT_DEFAULT_TLS_PORT : MQTT_DEFAULT_TCP_PORT;
   }
+  s_broker_port = (int)config->broker.address.port;
 
   build_topics(client_id);
   build_lwt();
@@ -389,6 +395,9 @@ esp_err_t mqtt_manager_get_status_snapshot(mqtt_status_snapshot_t *snapshot) {
   snapshot->time_ready = network_manager_is_time_synced();
   snapshot->test_pending = s_test_pending;
   snapshot->test_success = s_test_success;
+  strlcpy(snapshot->host, s_broker_host, sizeof(snapshot->host));
+  snapshot->port = s_broker_port;
+  snapshot->use_tls = s_use_tls;
 
   if (s_status_lock != NULL) {
     xSemaphoreTake(s_status_lock, portMAX_DELAY);

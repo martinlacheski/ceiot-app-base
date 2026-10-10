@@ -5,6 +5,7 @@
 idf_component_register(
     SRCS
         "main.c"
+        "button/button_logic.c"
         "config/pins_config.c"
         "led/led_manager.c"
         "utils/watchdog.c"
@@ -19,6 +20,7 @@ idf_component_register(
         "telemetry/telemetry_payload.c"
     INCLUDE_DIRS
         "."
+        "button"
         "config"
         "led"
         "utils"

@@ -94,6 +94,31 @@ Telemetry is published every `TELEMETRY_INTERVAL_SEC` (60 s by default) and
 right after each connection. `firmware_version` is `PROJECT_VER` from
 `esp32/CMakeLists.txt`.
 
+## Configuration AP, BOOT button and status LED
+
+| BOOT button (GPIO0) | Effect |
+| --- | --- |
+| short press (< 3 s) | nothing |
+| hold ≥ 3 s, then release | starts the configuration AP |
+| hold ≥ 10 s | factory reset (fires while still held), then reboot |
+
+- AP: SSID `WiFi_CEIoT_APP`, password `ceiotapp` (WPA2), web UI at
+  <http://192.168.4.1>. It runs as AP+STA, so the device keeps its Wi-Fi
+  connection (and telemetry) while the AP is up. It also starts by itself
+  when no Wi-Fi network is saved. It stays up until restart or until
+  "Desactivar punto de acceso" on the status page.
+- Web login: `admin` / `admin` by default (change it under "Seguridad").
+  Pages: status (serial, firmware, sensor and last reading, Wi-Fi, AP, MQTT,
+  certificates, time), Wi-Fi scan/connect/forget, MQTT broker + certificate
+  upload, device serial, password, restart and factory reset.
+- Factory reset (button or web) erases the Wi-Fi network, the MQTT broker
+  settings and the web password, and restores the serial, the certificates
+  and the TLS flag from the NVS `factory` snapshot.
+- Status LED (GPIO2): fast blink = AP active; solid = MQTT connected; slow
+  blink = Wi-Fi connected, MQTT not yet; short flash every 2 s = offline.
+  While BOOT is held: solid from 3 s (release to start the AP), very fast
+  blink once the factory reset fires.
+
 ## Host tests
 
 The pure logic (sensor rules, payloads, …) is tested on the PC, no board
