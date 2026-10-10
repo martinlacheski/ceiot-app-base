@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.api.auth.models import User
 from app.api.device.permissions import DevicePermissions
 from app.api.device.repository import DeviceRepository
 from app.api.provisioning.models import (
@@ -10,7 +11,8 @@ from app.api.provisioning.service import (
     ProvisioningSerialExhaustedError,
     ProvisioningService,
 )
-from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker
+from app.api.sensor_catalog.permissions import SensorCatalogPermissions
+from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
 
 router = APIRouter()
 
@@ -28,7 +30,18 @@ def get_provisioning_service(session: AuthedAsyncDBSession) -> ProvisioningServi
 async def prepare_device(
     payload: ProvisioningDevicePrepareRequest,
     session: AuthedAsyncDBSession,
+    current_user: User = Depends(get_current_user),
 ):
+    # Same rule as POST /api/devices: installing sensors needs sensor write access.
+    if payload.sensors and not (
+        current_user.is_admin
+        or SensorCatalogPermissions.DEVICE_WRITE in current_user.permissions
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tenés permiso para agregar sensores",
+        )
+
     service = get_provisioning_service(session)
 
     try:

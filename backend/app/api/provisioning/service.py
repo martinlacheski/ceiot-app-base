@@ -34,10 +34,11 @@ class ProvisioningService:
                 return await self.device_repository.create_with_data(
                     DeviceCreate(
                         serial=serial,
-                        name=serial,
+                        name=payload.name or serial,
                         model=payload.model,
                         batch=payload.batch,
                         manufacture_date=payload.manufacture_date,
+                        sensors=payload.sensors,
                     )
                 )
             except IntegrityError as exc:

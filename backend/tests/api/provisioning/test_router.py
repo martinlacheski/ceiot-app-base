@@ -119,3 +119,83 @@ def test_prepare_device_maps_serial_exhaustion_to_503(
     assert response.json() == {
         "detail": "Unable to generate a unique device serial"
     }
+
+
+
+def _ambient_sensor(session: Session, make_ambient, code: str):
+    from app.api.sensor_catalog.models import Sensor
+
+    model = Sensor(code=code, name=code.upper(), manufacturer="Test")
+    session.add(model)
+    session.commit()
+    make_ambient(model)
+    return model.id
+
+
+def test_prepare_device_accepts_name_and_sensors(
+    client: TestClient, session: Session, make_ambient
+):
+    from app.api.sensor_catalog.models import DeviceSensor
+    from app.api.sensor_catalog.permissions import SensorCatalogPermissions
+
+    user = create_provisioning_user(
+        session, [DevicePermissions.CREATE, SensorCatalogPermissions.DEVICE_WRITE]
+    )
+    dht22 = _ambient_sensor(session, make_ambient, "dht22")
+    response = client.post(
+        "/api/provisioning/devices/prepare",
+        headers={"Authorization": f"Bearer {make_token(user.id)}"},
+        json={"name": " Demo DHT22 ", "sensors": [{"sensorId": str(dht22), "key": "dht22"}]},
+    )
+
+    assert response.status_code == 201, response.text
+    payload = response.json()
+    assert payload["name"] == "Demo DHT22"
+    rows = session.exec(
+        select(DeviceSensor).where(DeviceSensor.device_id == UUID(payload["id"]))
+    ).all()
+    assert [(row.sensor_id, row.key, row.is_active) for row in rows] == [(dht22, "dht22", True)]
+    device = session.exec(select(Device).where(Device.id == UUID(payload["id"]))).first()
+    assert device.environment_id is None
+
+
+def test_prepare_device_sensors_require_sensor_write(
+    client: TestClient, session: Session, make_ambient
+):
+    user = create_provisioning_user(session, [DevicePermissions.CREATE])
+    dht11 = _ambient_sensor(session, make_ambient, "dht11")
+    devices_before = len(session.exec(select(Device)).all())
+    response = client.post(
+        "/api/provisioning/devices/prepare",
+        headers={"Authorization": f"Bearer {make_token(user.id)}"},
+        json={"sensors": [{"sensorId": str(dht11)}]},
+    )
+
+    assert response.status_code == 403
+    assert len(session.exec(select(Device)).all()) == devices_before
+
+
+def test_prepare_device_rejects_unknown_sensor(client: TestClient, session: Session):
+    from app.api.sensor_catalog.permissions import SensorCatalogPermissions
+
+    user = create_provisioning_user(
+        session, [DevicePermissions.CREATE, SensorCatalogPermissions.DEVICE_WRITE]
+    )
+    response = client.post(
+        "/api/provisioning/devices/prepare",
+        headers={"Authorization": f"Bearer {make_token(user.id)}"},
+        json={"sensors": [{"sensorId": str(uuid4())}]},
+    )
+
+    assert response.status_code == 422
+
+
+def test_prepare_device_rejects_blank_name(client: TestClient, session: Session):
+    user = create_provisioning_user(session, [DevicePermissions.CREATE])
+    response = client.post(
+        "/api/provisioning/devices/prepare",
+        headers={"Authorization": f"Bearer {make_token(user.id)}"},
+        json={"name": "   "},
+    )
+
+    assert response.status_code == 422
