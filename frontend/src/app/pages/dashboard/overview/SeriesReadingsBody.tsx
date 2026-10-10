@@ -6,7 +6,9 @@ import { EnvironmentReadingsChart } from "./EnvironmentReadingsChart";
 import type { EnvironmentPoint, EnvironmentSeries } from "./environmentSeries";
 import type { ReadingsRange } from "./overviewModel";
 import type { ReadingsDisplay, ReadingsView } from "./ReadingsControls";
+import { SeriesLegend } from "./SeriesLegend";
 import { SeriesTable } from "./SeriesTable";
+import type { HiddenSeries } from "./useHiddenSeries";
 
 /** Bucketed history of the active view (one device or every device of an establishment). */
 export interface SeriesReadingsState {
@@ -40,10 +42,12 @@ interface SeriesReadingsBodyProps {
   display: ReadingsDisplay;
   range: ReadingsRange;
   readings: SeriesReadingsState;
+  /** Series hidden from the legend; they leave the chart, its tooltip and the table. */
+  hidden: HiddenSeries;
 }
 
 /** Chart or merged-bucket table for the selected variable, with loading, failure and empty states. */
-export function SeriesReadingsBody({ scope, display, range, readings }: SeriesReadingsBodyProps) {
+export function SeriesReadingsBody({ scope, display, range, readings, hidden }: SeriesReadingsBodyProps) {
   const { loading, failedDevices, deviceCount, variable, series, points, bucketLabel } = readings;
   const copy = COPY[scope];
   const hasData = Boolean(variable) && series.length > 0 && points.length > 0;
@@ -88,16 +92,23 @@ export function SeriesReadingsBody({ scope, display, range, readings }: SeriesRe
     <div className="space-y-2">
       {failure}
       {display === "table" ? (
-        <SeriesTable variable={variable} series={series} points={points} range={range} />
+        <SeriesTable
+          variable={variable}
+          series={series.filter((entry) => !hidden.hiddenKeys.has(entry.key))}
+          points={points}
+          range={range}
+        />
       ) : (
         <EnvironmentReadingsChart
           variable={variable}
           series={series}
+          hiddenKeys={hidden.hiddenKeys}
           points={points}
           range={range}
           ariaLabel={`Historial de ${variable.name} por sensor ${copy.noun}`}
         />
       )}
+      {series.length > 1 && <SeriesLegend series={series} hidden={hidden} />}
       <p className="text-xs text-muted-foreground">{summary}</p>
     </div>
   );

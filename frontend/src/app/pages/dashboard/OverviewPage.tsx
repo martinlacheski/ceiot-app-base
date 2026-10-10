@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/app/components/PageHeader";
@@ -18,8 +18,6 @@ import {
   sensorLabel,
   type DeviceHistory,
 } from "./overview/environmentSeries";
-import { EnvironmentsCard } from "./overview/EnvironmentsCard";
-import { FleetStatusCard } from "./overview/FleetStatusCard";
 import { OverviewKpis } from "./overview/OverviewKpis";
 import {
   countPresence,
@@ -132,6 +130,20 @@ export default function OverviewPage() {
     bucketLabel: BUCKET_LABEL[range],
   };
 
+  const readingsRef = useRef<HTMLDivElement>(null);
+  // Picking a device or an establishment in a KPI card drives the readings card and brings it into view.
+  const revealReadings = () => readingsRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" });
+  const showDevice = (id: string) => {
+    setRequestedDeviceId(id);
+    setView("device");
+    revealReadings();
+  };
+  const showEnvironment = (id: string) => {
+    setRequestedEnvironmentId(id);
+    setView("environment");
+    revealReadings();
+  };
+
   const devicesStatus = devicesQuery.isPending
     ? "loading"
     : devicesQuery.isError && !devicesQuery.data ? "error" : "ready";
@@ -140,56 +152,48 @@ export default function OverviewPage() {
     <PageHeader title="Resumen operativo" subtitle="Estado de tu flota y últimas lecturas">
       <div className="space-y-4 pt-4">
         <OverviewKpis
+          environments={environments}
           environmentsTotal={environmentsQuery.data?.total}
-          environmentsLoading={environmentsQuery.isPending}
+          environmentsState={{
+            isPending: environmentsQuery.isPending,
+            isError: environmentsQuery.isError,
+            hasData: Boolean(environmentsQuery.data),
+            isFetching: environmentsQuery.isFetching,
+            onRetry: () => void environmentsQuery.refetch(),
+          }}
+          devices={devices}
           devicesTotal={devicesQuery.data?.total}
-          devicesShown={devices.length}
-          devicesLoading={devicesQuery.isPending}
-          devicesAvailable={Boolean(devicesQuery.data)}
+          devicesState={{
+            isPending: devicesQuery.isPending,
+            isError: devicesQuery.isError,
+            hasData: Boolean(devicesQuery.data),
+            isFetching: devicesQuery.isFetching,
+            onRetry: () => void devicesQuery.refetch(),
+          }}
           presence={presence}
+          onSelectDevice={showDevice}
+          onSelectEnvironment={showEnvironment}
         />
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="min-w-0 space-y-4 lg:col-span-2">
-            <ReadingsPanel
-              devicesStatus={devicesStatus}
-              devices={devices}
-              selectedDevice={selectedDevice}
-              onSelectDevice={setRequestedDeviceId}
-              environments={environmentOptions}
-              selectedEnvironmentId={selectedEnvironment?.id}
-              onSelectEnvironment={setRequestedEnvironmentId}
-              range={range}
-              onRangeChange={setRange}
-              view={view}
-              onViewChange={setView}
-              display={display}
-              onDisplayChange={setDisplay}
-              onSelectVariable={setRequestedVariableCode}
-              canReadTelemetry={canReadTelemetry}
-              readings={readings}
-              latest={{ page: latestQuery.data, isLoading: latestQuery.isLoading, isError: latestQuery.isError }}
-            />
-          </div>
-          <div className="min-w-0 space-y-4">
-            <FleetStatusCard
-              devices={devices}
-              total={devicesQuery.data?.total}
-              isPending={devicesQuery.isPending}
-              isError={devicesQuery.isError}
-              hasData={Boolean(devicesQuery.data)}
-              isFetching={devicesQuery.isFetching}
-              onRetry={() => void devicesQuery.refetch()}
-            />
-            <EnvironmentsCard
-              environments={environments}
-              total={environmentsQuery.data?.total}
-              isPending={environmentsQuery.isPending}
-              isError={environmentsQuery.isError}
-              hasData={Boolean(environmentsQuery.data)}
-              isFetching={environmentsQuery.isFetching}
-              onRetry={() => void environmentsQuery.refetch()}
-            />
-          </div>
+        <div ref={readingsRef} className="min-w-0 scroll-mt-4">
+          <ReadingsPanel
+            devicesStatus={devicesStatus}
+            devices={devices}
+            selectedDevice={selectedDevice}
+            onSelectDevice={setRequestedDeviceId}
+            environments={environmentOptions}
+            selectedEnvironmentId={selectedEnvironment?.id}
+            onSelectEnvironment={setRequestedEnvironmentId}
+            range={range}
+            onRangeChange={setRange}
+            view={view}
+            onViewChange={setView}
+            display={display}
+            onDisplayChange={setDisplay}
+            onSelectVariable={setRequestedVariableCode}
+            canReadTelemetry={canReadTelemetry}
+            readings={readings}
+            latest={{ page: latestQuery.data, isLoading: latestQuery.isLoading, isError: latestQuery.isError }}
+          />
         </div>
       </div>
     </PageHeader>

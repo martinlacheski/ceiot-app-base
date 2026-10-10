@@ -41,11 +41,11 @@ const series: EnvironmentSeries[] = Array.from({ length: 6 }, (_, index) => ({
 beforeEach(() => vi.clearAllMocks());
 
 describe("EnvironmentReadingsChart", () => {
-  it("draws one connected line per series with a legend and accessible name", () => {
+  it("draws one connected line per series with an accessible name and leaves the legend to the panel", () => {
     render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="24h" />);
 
     expect(screen.getByRole("img", { name: "Historial de Temperatura por sensor del establecimiento" })).toBeInTheDocument();
-    expect(screen.getByTestId("legend")).toBeInTheDocument();
+    expect(screen.queryByTestId("legend")).not.toBeInTheDocument();
     expect(mocks.config).toHaveBeenCalledWith(expect.objectContaining({
       s0: { label: "Sensor 0 · DHT22", color: "var(--chart-1)" },
       s5: { label: "Sensor 5 · DHT22", color: "var(--chart-1)" },
@@ -55,6 +55,19 @@ describe("EnvironmentReadingsChart", () => {
     expect(lines.every((line) => line.connectNulls)).toBe(true);
     expect(lines[0].strokeDasharray).toBeUndefined();
     expect(lines[5].strokeDasharray).toBeTruthy();
+  });
+
+  it("skips hidden series without repainting the visible ones", () => {
+    render(
+      <EnvironmentReadingsChart variable={variable} series={series} hiddenKeys={new Set(["s0", "s1"])} points={[]} range="24h" />,
+    );
+
+    const lines = mocks.line.mock.calls.map(([props]) => props as { dataKey: string; stroke: string });
+    expect(lines.map((line) => line.dataKey)).toEqual(["s2", "s3", "s4", "s5"]);
+    expect(mocks.config).toHaveBeenLastCalledWith(expect.objectContaining({
+      s2: { label: "Sensor 2 · DHT22", color: "var(--chart-3)" },
+    }));
+    expect(mocks.config.mock.lastCall?.[0]).not.toHaveProperty("s0");
   });
 
   it("accepts a custom accessible name", () => {

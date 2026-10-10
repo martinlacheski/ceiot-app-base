@@ -21,6 +21,7 @@ import {
   type ReadingsView,
 } from "./ReadingsControls";
 import { SeriesReadingsBody, type SeriesReadingsState } from "./SeriesReadingsBody";
+import { useHiddenSeries, type HiddenSeries } from "./useHiddenSeries";
 
 export interface LatestReadingsState {
   page?: TelemetryPage;
@@ -106,8 +107,8 @@ function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device })
   );
 }
 
-function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device }) {
-  const { selectedDevice, environments, view, display, range, onSelectVariable, canReadTelemetry, readings, latest } = props;
+function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidden: HiddenSeries }) {
+  const { selectedDevice, environments, view, display, range, onSelectVariable, canReadTelemetry, readings, latest, hidden } = props;
 
   if (!canReadTelemetry) return <TelemetryPermissionNotice />;
   if (view === "environment" && environments.length === 0) {
@@ -135,7 +136,7 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device }) {
           onSelectVariable={onSelectVariable}
         />
       )}
-      <SeriesReadingsBody scope={view} display={display} range={range} readings={readings} />
+      <SeriesReadingsBody scope={view} display={display} range={range} readings={readings} hidden={hidden} />
     </>
   );
 }
@@ -143,6 +144,8 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device }) {
 /** One card holding the whole readings area: toolbar, variable chips and the chart or table. */
 export function ReadingsPanel(props: ReadingsPanelProps) {
   const { devicesStatus, devices, selectedDevice } = props;
+  // Lives here so the hidden series survive the switch to the raw records table and back.
+  const hidden = useHiddenSeries(props.readings.series);
 
   if (devicesStatus === "loading") {
     return (
@@ -176,7 +179,7 @@ export function ReadingsPanel(props: ReadingsPanelProps) {
     <Card role="region" aria-label="Lecturas" className="gap-0 py-4">
       <CardContent className="space-y-3 px-4">
         <ReadingsToolbar {...props} selectedDevice={selectedDevice} />
-        <ReadingsBody {...props} selectedDevice={selectedDevice} />
+        <ReadingsBody {...props} selectedDevice={selectedDevice} hidden={hidden} />
       </CardContent>
     </Card>
   );

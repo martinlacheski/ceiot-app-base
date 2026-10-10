@@ -11,11 +11,12 @@ export function LoadingState({ label, rows = 2 }: { label: InventoryLabel; rows?
   );
 }
 
+/** Compact inline alert with a retry scoped to one inventory. */
 export function ErrorState({ label, onRetry }: { label: InventoryLabel; onRetry: () => void }) {
   return (
-    <div role="alert" className="flex min-h-32 flex-col items-center justify-center gap-3 text-center">
+    <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 px-4 py-2">
       <p className="text-sm text-destructive">No pudimos cargar los {label}.</p>
-      <Button variant="outline" onClick={onRetry} aria-label={`Reintentar ${label}`}>
+      <Button variant="outline" size="sm" onClick={onRetry} aria-label={`Reintentar ${label}`}>
         Reintentar
       </Button>
     </div>

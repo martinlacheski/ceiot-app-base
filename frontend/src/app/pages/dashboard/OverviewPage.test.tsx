@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -35,9 +36,13 @@ vi.mock("@/auth/store/auth.store", () => ({
 }));
 
 vi.mock("./overview/EnvironmentReadingsChart", () => ({
-  EnvironmentReadingsChart: ({ variable, series }: { variable: { code: string }; series: Array<{ key: string; label: string }> }) => (
+  EnvironmentReadingsChart: ({ variable, series, hiddenKeys }: {
+    variable: { code: string };
+    series: Array<{ key: string; label: string }>;
+    hiddenKeys?: ReadonlySet<string>;
+  }) => (
     <ul data-testid="environment-chart" data-variable={variable.code}>
-      {series.map((entry) => <li key={entry.key}>{entry.label}</li>)}
+      {series.filter((entry) => !hiddenKeys?.has(entry.key)).map((entry) => <li key={entry.key}>{entry.label}</li>)}
     </ul>
   ),
 }));
@@ -184,12 +189,24 @@ const openEstablishmentView = () => {
   fireEvent.click(screen.getByRole("button", { name: "Por establecimiento" }));
 };
 
+const kpiTrigger = (testId: string) => screen.getByTestId(testId).closest("button")!;
+/** Opens a KPI detail card the way a touch or keyboard user does (click/tap on the tile). */
+const openKpi = (testId: string, dialogName: string) => {
+  fireEvent.click(kpiTrigger(testId));
+  return screen.getByRole("dialog", { name: dialogName });
+};
+const legendButton = (name: string) =>
+  within(screen.getByRole("group", { name: "Series del gráfico" })).getByRole("button", { name });
+const chartSeries = () =>
+  within(screen.getByTestId("environment-chart")).queryAllByRole("listitem").map((item) => item.textContent);
+
 describe("OverviewPage operational dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     auth.user = { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] };
     telemetry.latest = state(readings);
     telemetry.history = state(readings);
+    Element.prototype.scrollIntoView = vi.fn();
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: false,
       media: query,
@@ -236,15 +253,26 @@ describe("OverviewPage operational dashboard", () => {
     expect(screen.getByTestId("kpi-offline")).toHaveTextContent("1");
     expect(screen.getByTestId("kpi-online-caption")).toHaveTextContent(/33\s*% de los mostrados/);
     expect(screen.getByTestId("kpi-offline-caption")).toHaveTextContent("1 sin dato");
-    expect(screen.getByTestId("kpi-environments").closest("a")).toHaveAttribute("href", "/app/environments");
-    expect(screen.getByTestId("kpi-devices").closest("a")).toHaveAttribute("href", "/app/devices");
-    expect(screen.getByTestId("kpi-online").closest("a")).toHaveAttribute("href", "/app/devices");
+    for (const testId of ["kpi-environments", "kpi-devices", "kpi-online", "kpi-offline"]) {
+      expect(screen.getByTestId(testId).closest("a")).toBeNull();
+      expect(kpiTrigger(testId)).toHaveAttribute("aria-expanded", "false");
+    }
   });
 
-  it("lists device presence online first with links to every list", () => {
+  it("drops the side column so the readings take the full width", () => {
     renderPage();
 
-    const fleet = screen.getByRole("region", { name: "Estado de dispositivos" });
+    expect(screen.queryByRole("region", { name: "Estado de dispositivos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Establecimientos" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver todos los dispositivos" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Lecturas" })).toBeInTheDocument();
+  });
+
+  it("lists device presence online first in the devices KPI card with links to every list", () => {
+    renderPage();
+
+    const fleet = openKpi("kpi-devices", "Dispositivos");
+    expect(kpiTrigger("kpi-devices")).toHaveAttribute("aria-expanded", "true");
     const rows = within(fleet).getAllByRole("listitem");
     expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
       "device-device-online",
@@ -255,11 +283,96 @@ describe("OverviewPage operational dashboard", () => {
     expect(within(rows[1]).getByText("Fuera de línea")).toBeInTheDocument();
     expect(within(rows[1]).getByText(/^hace /)).toBeInTheDocument();
     expect(within(rows[2]).getByText("No disponible")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Ver todos los dispositivos" })).toHaveAttribute("href", "/app/devices");
-    expect(screen.getByRole("link", { name: "Ver todos los establecimientos" })).toHaveAttribute(
+    expect(within(rows[0]).getByText("Establecimiento Norte")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Sin establecimiento")).toBeInTheDocument();
+    expect(within(fleet).getByRole("link", { name: "Ver todos los dispositivos" })).toHaveAttribute("href", "/app/devices");
+
+    fireEvent.keyDown(fleet, { key: "Escape" });
+    const places = openKpi("kpi-environments", "Establecimientos");
+    expect(within(places).getByRole("link", { name: "Ver todos los establecimientos" })).toHaveAttribute(
       "href",
       "/app/environments",
     );
+    expect(within(places).getByRole("button", { name: /Establecimiento Norte/ })).toHaveTextContent("1 dispositivo");
+  });
+
+  it("lists only the connected or disconnected devices in the presence KPI cards", () => {
+    renderPage();
+
+    const online = openKpi("kpi-online", "Dispositivos en línea");
+    expect(within(online).getAllByRole("listitem").map((row) => row.getAttribute("data-testid"))).toEqual([
+      "device-device-online",
+    ]);
+    fireEvent.keyDown(online, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    const offline = openKpi("kpi-offline", "Dispositivos sin conexión");
+    expect(within(offline).getAllByRole("listitem").map((row) => row.getAttribute("data-testid"))).toEqual([
+      "device-device-offline-enabled",
+    ]);
+    expect(within(offline).getByText(/^hace /)).toBeInTheDocument();
+  });
+
+  it("opens the KPI card on hover and closes it when the pointer leaves", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.hover(kpiTrigger("kpi-online"));
+    expect(await screen.findByRole("dialog", { name: "Dispositivos en línea" })).toBeInTheDocument();
+
+    await user.unhover(kpiTrigger("kpi-online"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps a KPI card open when a hover-opened card is clicked", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.hover(kpiTrigger("kpi-online"));
+    await screen.findByRole("dialog", { name: "Dispositivos en línea" });
+    await user.click(kpiTrigger("kpi-online"));
+
+    expect(screen.getByRole("dialog", { name: "Dispositivos en línea" })).toBeInTheDocument();
+  });
+
+  it("drives the readings to a device picked in a KPI card", () => {
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    const offline = openKpi("kpi-offline", "Dispositivos sin conexión");
+    fireEvent.click(within(offline).getByRole("button", { name: /^Sensor Sur/ }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Por dispositivo" })).toHaveAttribute("aria-pressed", "true");
+    expect((screen.getByLabelText("Dispositivo") as HTMLSelectElement).value).toBe("device-offline-enabled");
+    expect(lastTelemetryQuery("latest").queryKey.slice(0, 3)).toEqual(["telemetry", "latest", "device-offline-enabled"]);
+    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-offline-enabled", "24h"]);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it("drives the readings to an establishment picked in the establishments KPI card", () => {
+    useEstablishmentDevices();
+    const twoEnvironments = {
+      ...environments,
+      items: [...environments.items, { ...environments.items[0], id: "environment-2", name: "Establecimiento Sur" }],
+      total: 2,
+    };
+    const base = useQueryMock.getMockImplementation()!;
+    useQueryMock.mockImplementation((config: { queryKey: string[] }) =>
+      config.queryKey[0] === "environments" ? state(twoEnvironments, { refetch: environmentRefetch }) : base(config));
+    renderPage();
+
+    const places = openKpi("kpi-environments", "Establecimientos");
+    expect(within(places).getByRole("button", { name: /Establecimiento Norte/ })).toHaveTextContent("2 dispositivos");
+    fireEvent.click(within(places).getByRole("button", { name: /Establecimiento Sur/ }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Por establecimiento" })).toHaveAttribute("aria-pressed", "true");
+    expect((screen.getByLabelText("Establecimiento") as HTMLSelectElement).value).toBe("environment-2");
+    expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
+      ["telemetry", "history", "device-presence-unavailable", "24h"],
+    ]);
   });
 
   it("selects the first online device by default and lets the user switch device", () => {
@@ -411,7 +524,7 @@ describe("OverviewPage operational dashboard", () => {
 
     expect(screen.getByText("Todavía no hay dispositivos vinculados.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Asociar dispositivo" })).toHaveAttribute("href", "/app/devices/pair");
-    expect(screen.getByText("No hay dispositivos disponibles.")).toBeInTheDocument();
+    expect(within(openKpi("kpi-devices", "Dispositivos")).getByText("No hay dispositivos disponibles.")).toBeInTheDocument();
     expect(lastTelemetryQuery("latest").enabled).toBe(false);
     expect(screen.getByTestId("kpi-online-caption")).toHaveTextContent("Sin dispositivos");
   });
@@ -424,8 +537,10 @@ describe("OverviewPage operational dashboard", () => {
 
     renderPage();
 
-    expect(screen.getByRole("status", { name: "Cargando establecimientos" })).toBeInTheDocument();
+    expect(kpiTrigger("kpi-environments")).toHaveAttribute("aria-busy", "true");
     expect(screen.getByTestId("kpi-environments")).not.toHaveTextContent(/\d/);
+    expect(within(openKpi("kpi-environments", "Establecimientos")).getByRole("status", { name: "Cargando establecimientos" }))
+      .toBeInTheDocument();
     expect(screen.getByTestId("kpi-devices")).toHaveTextContent("0");
   });
 
@@ -593,5 +708,65 @@ describe("OverviewPage operational dashboard", () => {
     expect(lastEnvironmentQueries()).toHaveLength(2);
     expect(lastEnvironmentQueries().every((config) => config.enabled === false)).toBe(true);
     expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+  });
+  it("does not show a series legend for a single series", () => {
+    renderPage();
+
+    expect(screen.queryByRole("group", { name: "Series del gráfico" })).not.toBeInTheDocument();
+  });
+
+  it("hides and shows series from the legend and never hides the last one", () => {
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    const south = legendButton("Sensor Sur · DHT22");
+    const north = legendButton("Sensor Norte · DHT22");
+    expect(south).toHaveAttribute("aria-pressed", "true");
+    expect(north).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Mostrar todos" })).not.toBeInTheDocument();
+
+    fireEvent.click(south);
+
+    expect(legendButton("Sensor Sur · DHT22")).toHaveAttribute("aria-pressed", "false");
+    expect(chartSeries()).toEqual(["Sensor Norte · DHT22"]);
+    expect(legendButton("Sensor Norte · DHT22")).toBeDisabled();
+
+    fireEvent.click(legendButton("Sensor Norte · DHT22"));
+    expect(chartSeries()).toEqual(["Sensor Norte · DHT22"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Mostrar todos" }));
+
+    expect(chartSeries()).toEqual(["Sensor Sur · DHT22", "Sensor Norte · DHT22"]);
+    expect(legendButton("Sensor Norte · DHT22")).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Mostrar todos" })).not.toBeInTheDocument();
+  });
+
+  it("keeps hidden series hidden across data updates, variables and the table view", () => {
+    useEstablishmentDevices();
+    const { rerender } = renderPage();
+    openEstablishmentView();
+    fireEvent.click(legendButton("Sensor Sur · DHT22"));
+
+    telemetry.history = state({ ...readings, items: [...readings.items] });
+    rerender(
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>,
+    );
+    expect(chartSeries()).toEqual(["Sensor Norte · DHT22"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Humedad (%)" }));
+    expect(chartSeries()).toEqual(["Sensor Norte · DHT22"]);
+    expect(legendButton("Sensor Sur · DHT22")).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Tabla" }));
+
+    const table = within(screen.getByRole("region", { name: "Lecturas" })).getByRole("table");
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Hora",
+      "Sensor Norte · DHT22 (%)",
+    ]);
+    expect(legendButton("Sensor Sur · DHT22")).toHaveAttribute("aria-pressed", "false");
   });
 });

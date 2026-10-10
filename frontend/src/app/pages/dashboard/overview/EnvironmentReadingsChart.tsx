@@ -3,13 +3,16 @@ import { es } from "date-fns/locale";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
-import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { seriesStroke, type EnvironmentPoint, type EnvironmentSeries } from "./environmentSeries";
 import type { ReadingsRange } from "./overviewModel";
 
 interface EnvironmentReadingsChartProps {
   variable: TelemetryVariable;
+  /** Every series of the variable; the position fixes its color, so hiding one never repaints the rest. */
   series: EnvironmentSeries[];
+  /** Chart keys left out of the lines, the tooltip and the Y domain. */
+  hiddenKeys?: ReadonlySet<string>;
   points: EnvironmentPoint[];
   range: ReadingsRange;
   /** Accessible name; defaults to the establishment wording. */
@@ -20,10 +23,13 @@ const numberFormat = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }
 
 const formatReading = (value: number, unit: string) => `${numberFormat.format(value)}${unit ? ` ${unit}` : ""}`;
 
-export function EnvironmentReadingsChart({ variable, series, points, range, ariaLabel }: EnvironmentReadingsChartProps) {
-  const config: ChartConfig = Object.fromEntries(series.map((entry, index) => [entry.key, {
+export function EnvironmentReadingsChart({ variable, series, hiddenKeys, points, range, ariaLabel }: EnvironmentReadingsChartProps) {
+  const visible = series
+    .map((entry, index) => ({ entry, stroke: seriesStroke(index) }))
+    .filter(({ entry }) => !hiddenKeys?.has(entry.key));
+  const config: ChartConfig = Object.fromEntries(visible.map(({ entry, stroke }) => [entry.key, {
     label: entry.label,
-    color: seriesStroke(index).color,
+    color: stroke.color,
   }]));
   const tickPattern = range === "7d" ? "dd/MM HH:mm" : "HH:mm";
 
@@ -71,24 +77,20 @@ export function EnvironmentReadingsChart({ variable, series, points, range, aria
             />
           )}
         />
-        <ChartLegend content={<ChartLegendContent className="flex-wrap" />} />
-        {series.map((entry, index) => {
-          const stroke = seriesStroke(index);
-          return (
-            <Line
-              key={entry.key}
-              dataKey={entry.key}
-              name={entry.key}
-              type="monotone"
-              stroke={`var(--color-${entry.key})`}
-              strokeDasharray={stroke.dash}
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-              isAnimationActive={false}
-            />
-          );
-        })}
+        {visible.map(({ entry, stroke }) => (
+          <Line
+            key={entry.key}
+            dataKey={entry.key}
+            name={entry.key}
+            type="monotone"
+            stroke={`var(--color-${entry.key})`}
+            strokeDasharray={stroke.dash}
+            strokeWidth={2}
+            dot={false}
+            connectNulls
+            isAnimationActive={false}
+          />
+        ))}
       </LineChart>
     </ChartContainer>
   );
