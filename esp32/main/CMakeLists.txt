@@ -14,6 +14,7 @@ idf_component_register(
         "web/web_server.c"
         "web/nvs_manager.c"
         "mqtt/mqtt_manager.c"
+        "mqtt/mqtt_config_logic.c"
         "sensor/sensor.c"
         "sensor/sensor_logic.c"
         "telemetry/telemetry.c"

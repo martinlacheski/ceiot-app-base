@@ -94,6 +94,19 @@ Telemetry is published every `TELEMETRY_INTERVAL_SEC` (60 s by default) and
 right after each connection. `firmware_version` is `PROJECT_VER` from
 `esp32/CMakeLists.txt`.
 
+Broker settings (`main/mqtt/mqtt_config_logic.c`, host-tested): what the MQTT
+page saved in NVS `storage`, else the defaults: **mTLS on port 8883 to
+`192.168.1.100`**. A freshly flashed board (no `storage` namespace yet) uses
+those defaults, so with its certificates in `esp32/cert/` and a serial it
+connects without visiting the web UI. The serial comes from `storage`, else
+from the `factory` snapshot. Without a serial there is no client id nor topic
+identity: the log says so (`No device serial in NVS`), MQTT does not start and
+the configuration AP starts so the serial can be set.
+
+Note for the development stack: docker compose publishes the broker TLS
+listener on `MQTT_LISTENER_TLS` (`18883` in the documented setup, on `LAN_BIND_IP`), not on
+8883; set the port on the MQTT page (or publish 8883) for the board to reach it.
+
 ## Time synchronization
 
 Implemented in `main/timesync/` (rules in `time_sync_logic.c`, host-tested),

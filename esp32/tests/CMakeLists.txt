@@ -57,3 +57,10 @@ target_link_libraries(time_sync_logic PUBLIC cjson m)
 add_executable(test_time_sync_logic test_time_sync_logic.c)
 target_link_libraries(test_time_sync_logic time_sync_logic)
 add_test(NAME time_sync_logic COMMAND test_time_sync_logic)
+
+add_library(mqtt_config_logic STATIC ${FW}/mqtt/mqtt_config_logic.c)
+target_include_directories(mqtt_config_logic PUBLIC ${FW}/mqtt)
+
+add_executable(test_mqtt_config_logic test_mqtt_config_logic.c)
+target_link_libraries(test_mqtt_config_logic mqtt_config_logic)
+add_test(NAME mqtt_config_logic COMMAND test_mqtt_config_logic)

@@ -118,9 +118,18 @@ void app_main(void) {
   // 5. Configuration web server (station IP and AP 192.168.4.1)
   ESP_ERROR_CHECK(web_server_start());
 
-  // 6. MQTT + telemetry
-  if (mqtt_manager_init() == ESP_OK) {
+  // 6. MQTT + telemetry. A brand-new device (no "storage" namespace)
+  // uses the defaults: mTLS on 8883 to the default broker, serial from the
+  // factory snapshot. Without a serial there is no MQTT identity: stay in AP
+  // mode so it can be set from the web UI.
+  esp_err_t mqtt_ret = mqtt_manager_init();
+  if (mqtt_ret == ESP_OK) {
     mqtt_manager_start();
+  } else if (mqtt_ret == ESP_ERR_INVALID_STATE) {
+    ESP_LOGW(TAG, "No device serial: starting the configuration AP to set it");
+    wifi_manager_start_ap();
+  } else {
+    ESP_LOGE(TAG, "MQTT init failed (%s)", esp_err_to_name(mqtt_ret));
   }
   if (telemetry_start() != ESP_OK) {
     ESP_LOGE(TAG, "Telemetry task could not start");

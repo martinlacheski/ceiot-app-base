@@ -14,11 +14,11 @@
 #include "telemetry_payload.h"
 #include "time_sync.h"
 #include "mqtt_client.h"
+#include "mqtt_config_logic.h"
 #include "network_manager.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "wifi_manager.h"
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +29,6 @@ static const char *TAG = "MQTT_MGR";
 // Contract QoS (tools/emulador-dispositivo.py): telemetry, status and
 // subscriptions all use QoS 1.
 #define MQTT_QOS 1
-#define MQTT_DEFAULT_HOST "192.168.1.100"
-#define MQTT_DEFAULT_TLS_PORT 8883
-#define MQTT_DEFAULT_TCP_PORT 1883
 
 static esp_mqtt_client_handle_t s_client = NULL;
 static bool s_connected = false;
@@ -91,49 +88,6 @@ static void set_error(const char *error, int type, int socket_errno,
 }
 
 static void clear_error(void) { set_error("", 0, 0, 0, 0); }
-
-static bool is_digits_only(const char *value) {
-  if (value == NULL || value[0] == '\0') return false;
-  for (const char *p = value; *p; p++) {
-    if (!isdigit((unsigned char)*p)) return false;
-  }
-  return true;
-}
-
-static void trim(char *value) {
-  if (value == NULL) return;
-  size_t len = strlen(value);
-  while (len > 0 && isspace((unsigned char)value[len - 1])) value[--len] = '\0';
-  char *start = value;
-  while (*start && isspace((unsigned char)*start)) start++;
-  if (start != value) memmove(value, start, strlen(start) + 1);
-}
-
-static void normalize_host(const char *input, char *output, size_t size) {
-  if (output == NULL || size == 0) return;
-  output[0] = '\0';
-  if (input == NULL) return;
-
-  char buffer[128];
-  strlcpy(buffer, input, sizeof(buffer));
-  trim(buffer);
-  const char *start = strstr(buffer, "://");
-  start = start ? start + 3 : buffer;
-  const char *at = strrchr(start, '@');
-  if (at != NULL) start = at + 1;
-  const char *end = start + strcspn(start, "/?#");
-  size_t length = (size_t)(end - start);
-  if (length >= size) length = size - 1;
-  memcpy(output, start, length);
-  output[length] = '\0';
-
-  if (output[0] != '[') {
-    char *first = strchr(output, ':');
-    char *last = strrchr(output, ':');
-    if (first != NULL && first == last && is_digits_only(last + 1)) *last = '\0';
-  }
-  trim(output);
-}
 
 static char *read_file(const char *path) {
   FILE *file = fopen(path, "r");
@@ -293,70 +247,81 @@ static void start_task(void *arg) {
   vTaskDelete(NULL);
 }
 
+// Reads one string key; false when the key (or the namespace) is missing.
+static bool read_str(const char *ns, const char *key, char *out, size_t size) {
+  out[0] = '\0';
+  nvs_handle_t handle;
+  if (open_nvs(ns, NVS_READONLY, &handle) != ESP_OK) return false;
+  size_t length = size;
+  bool ok = nvs_get_str(handle, key, out, &length) == ESP_OK;
+  nvs_close(handle);
+  if (!ok) out[0] = '\0';
+  return ok;
+}
+
+// A brand-new device has no "storage" namespace (ESP_ERR_NVS_NOT_FOUND): the
+// defaults of mqtt_config_logic.h apply (mTLS on 8883 to MQTT_DEFAULT_HOST)
+// and the serial comes from "storage" or the "factory" snapshot. Without a
+// serial there is no client id nor topic identity: ESP_ERR_INVALID_STATE.
 static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
                              size_t uri_size) {
-  nvs_handle_t handle;
-  esp_err_t err = open_nvs("storage", NVS_READONLY, &handle);
-  if (err != ESP_OK) return err;
+  char serial[MQTT_SERIAL_MAX], factory_serial[MQTT_SERIAL_MAX];
+  char use_tls[4], host[MQTT_HOST_MAX], port[8];
+  mqtt_config_input_t in = {
+      .serial = read_str("storage", "serial", serial, sizeof(serial)) ? serial : NULL,
+      .factory_serial = read_str("factory", "serial", factory_serial,
+                                 sizeof(factory_serial))
+                            ? factory_serial
+                            : NULL,
+      .use_tls = read_str("storage", "mqtt_use_tls", use_tls, sizeof(use_tls))
+                     ? use_tls
+                     : NULL,
+      .host = read_str("storage", "mqtt_uri", host, sizeof(host)) ? host : NULL,
+      .port = read_str("storage", "mqtt_port", port, sizeof(port)) ? port : NULL,
+  };
+  static mqtt_config_t resolved;
+  mqtt_config_resolve(&in, &resolved);
 
-  static char client_id[32] = "";
-  size_t length = sizeof(client_id);
-  if (nvs_get_str(handle, "serial", client_id, &length) != ESP_OK) {
-    client_id[0] = '\0';
+  strlcpy(s_broker_host, resolved.host, sizeof(s_broker_host));
+  s_broker_port = resolved.port;
+  s_use_tls = resolved.use_tls;
+  if (!resolved.has_serial) {
+    ESP_LOGE(TAG, "No device serial in NVS (storage/factory): MQTT not "
+                  "started. Set it from the web UI (AP %s).",
+             wifi_manager_get_ap_ssid());
+    return ESP_ERR_INVALID_STATE;
   }
-  strlcpy(s_cached_serial, client_id, sizeof(s_cached_serial));
-  config->credentials.client_id = client_id;
-
-  // TLS (mTLS on 8883) unless explicitly disabled from the web UI.
-  char tls_value[2] = "1";
-  length = sizeof(tls_value);
-  if (nvs_get_str(handle, "mqtt_use_tls", tls_value, &length) != ESP_OK) {
-    tls_value[0] = '1';
-  }
-  bool use_tls = tls_value[0] == '1';
-
-  char configured_host[128] = "";
-  length = sizeof(configured_host);
-  if (nvs_get_str(handle, "mqtt_uri", configured_host, &length) != ESP_OK) {
-    strlcpy(configured_host, MQTT_DEFAULT_HOST, sizeof(configured_host));
-  }
-  char host[128];
-  normalize_host(configured_host, host, sizeof(host));
-  if (host[0] == '\0') strlcpy(host, MQTT_DEFAULT_HOST, sizeof(host));
-  snprintf(uri, uri_size, "%s%s", use_tls ? "mqtts://" : "mqtt://", host);
-  strlcpy(s_broker_host, host, sizeof(s_broker_host));
-  s_use_tls = use_tls;
+  strlcpy(s_cached_serial, resolved.client_id, sizeof(s_cached_serial));
+  config->credentials.client_id = resolved.client_id;
+  strlcpy(uri, resolved.uri, uri_size);
   config->broker.address.uri = uri;
+  config->broker.address.port = (uint32_t)resolved.port;
+  ESP_LOGI(TAG, "Broker %s:%d (%s), client id %s", resolved.host, resolved.port,
+           resolved.use_tls ? "mTLS" : "TCP", resolved.client_id);
 
-  char port[8] = "";
-  length = sizeof(port);
-  if (nvs_get_str(handle, "mqtt_port", port, &length) == ESP_OK && port[0]) {
-    config->broker.address.port = atoi(port);
-  } else {
-    config->broker.address.port =
-        use_tls ? MQTT_DEFAULT_TLS_PORT : MQTT_DEFAULT_TCP_PORT;
-  }
-  s_broker_port = (int)config->broker.address.port;
-
-  build_topics(client_id);
+  build_topics(resolved.client_id);
   build_lwt();
   config->session.last_will.topic = s_topic_status;
   config->session.last_will.msg = s_lwt_msg;
   config->session.last_will.qos = MQTT_QOS;
   config->session.last_will.retain = true;
 
-  if (use_tls) {
+  if (resolved.use_tls) {
     s_root_ca = read_file("/littlefs/root.crt");
     s_client_cert = read_file("/littlefs/client.crt");
     s_client_key = read_file("/littlefs/client.key");
+    if (s_root_ca == NULL || s_client_cert == NULL || s_client_key == NULL) {
+      ESP_LOGW(TAG, "mTLS material incomplete in /littlefs (root.crt %s, "
+                    "client.crt %s, client.key %s)",
+               s_root_ca ? "ok" : "missing", s_client_cert ? "ok" : "missing",
+               s_client_key ? "ok" : "missing");
+    }
     config->broker.verification.certificate = s_root_ca;
     if (s_client_cert && s_client_key) {
       config->credentials.authentication.certificate = s_client_cert;
       config->credentials.authentication.key = s_client_key;
     }
   }
-
-  nvs_close(handle);
   return ESP_OK;
 }
 
@@ -370,7 +335,9 @@ esp_err_t mqtt_manager_init(void) {
   config.task.stack_size = 8192;
   esp_err_t err = load_config(&config, uri, sizeof(uri));
   if (err != ESP_OK) {
-    set_error("MQTT configuration unavailable", err, 0, 0, 0);
+    set_error(err == ESP_ERR_INVALID_STATE ? "Device serial not set"
+                                           : "MQTT configuration unavailable",
+              err, 0, 0, 0);
     return err;
   }
 
