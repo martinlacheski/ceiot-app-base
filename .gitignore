@@ -46,3 +46,6 @@ backend/postgres_data/
 .venv/
 venv/
 backend/.venv/
+
+# Firmware archive: .elf files are kept locally only (core dump decoding)
+firmwares/**/*.elf
