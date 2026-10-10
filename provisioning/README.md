@@ -9,8 +9,8 @@ equipo.
 | --- | --- |
 | `login.py` | Inicia sesión en el backend y guarda el token en `provisioning/.env.local`. |
 | `provision.py` | Alta o conciliación del dispositivo, certificado, archivos para el firmware y comandos de grabación. |
-| `profiles/local.json` | Broker del stack de desarrollo: `192.168.1.100`, puerto `18883`, TLS activo. |
-| `profiles/production.example.json` | Plantilla para un broker de producción (copiar y ajustar). |
+| `profiles/local.json` | Broker del stack de desarrollo: `${LAN_BIND_IP}` y `${MQTT_LISTENER_TLS}` (de `mqtt/.env`), TLS activo. |
+| `profiles/production.example.json` | Plantilla para producción: `${MQTT_PUBLIC_HOST}` y `${MQTT_PUBLIC_PORT:-8883}`. |
 | `build/` | Carpeta de preparación por serial (se genera; no se versiona). |
 | `tests/` | Pruebas unitarias de los scripts (`python3 -m unittest discover -s provisioning/tests`). |
 
@@ -18,10 +18,24 @@ Nada de lo que contiene secretos se versiona: `provisioning/.env.local` (token),
 `provisioning/build/`, `esp32/cert/` y la CA (`mqtt/pki/ca/`) están en
 `.gitignore`. Los scripts nunca muestran el token ni la contraseña.
 
+### Variables de entorno
+
+Los perfiles no tienen direcciones fijas: sus valores usan `${VARIABLE}` o
+`${VARIABLE:-valor_por_defecto}`. Cada variable se busca, en este orden, en el
+entorno del proceso, en `provisioning/.env.local`, en `mqtt/.env` y en
+`backend/.env`; si no aparece y no tiene valor por defecto, el script se
+detiene con un error que la nombra. Así, al cambiar `LAN_BIND_IP` o
+`MQTT_LISTENER_TLS` en el stack, los equipos que se aprovisionen después
+toman los valores nuevos sin editar el perfil.
+
+La URL del backend es `CEIOT_API_BASE_URL` si está definida; si no,
+`http://localhost:${BACKEND_PORT}` con `BACKEND_PORT` de `backend/.env`
+(`18000` por defecto). `--api-base-url` tiene prioridad sobre ambas.
+
 ## Requisitos
 
-- Stack levantado (`docker compose up -d`) con el backend en
-  `http://localhost:18000` y la CA del proyecto creada
+- Stack levantado (`scripts/levantar.sh`) con el backend publicado en
+  `BACKEND_PORT` y la CA del proyecto creada
   (`mqtt/pki/crear-ca.sh`, ver `mqtt/README.md`).
 - Python 3.10 o superior y `openssl` en el sistema.
 - ESP-IDF 6.1 (`~/.espressif/tools/activate_idf_v6.1.sh`) para compilar y grabar.
@@ -54,8 +68,8 @@ python3 provisioning/login.py
 
 La contraseña se toma de `CEIOT_PROVISIONING_PASSWORD` si está definida; si no,
 se solicita de forma interactiva. El token queda en `provisioning/.env.local`
-(permisos `0600`) junto con `CEIOT_API_BASE_URL`. Si el backend no está en
-`http://localhost:18000`, agregue `--api-base-url <url>`. Cuando el token
+(permisos `0600`) junto con `CEIOT_API_BASE_URL`, derivada de `BACKEND_PORT`
+salvo que pase `--api-base-url <url>`. Cuando el token
 vence, `provision.py` lo indica (error 401): repita este paso.
 
 ### 2. Preparar el dispositivo

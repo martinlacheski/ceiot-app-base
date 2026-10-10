@@ -1,5 +1,5 @@
 {
-  "mqtt_uri": "mqtt.example.com",
-  "mqtt_port": "8883",
+  "mqtt_uri": "${MQTT_PUBLIC_HOST}",
+  "mqtt_port": "${MQTT_PUBLIC_PORT:-8883}",
   "mqtt_use_tls": "1"
 }

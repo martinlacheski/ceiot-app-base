@@ -47,7 +47,13 @@ DEFAULT_STAGING_ROOT = PROVISIONING_DIR / "build"
 DEFAULT_PKI_DIR = REPO_ROOT / "mqtt" / "pki"
 FIRMWARE_DIR = REPO_ROOT / "esp32"
 DEFAULT_FIRMWARE_CERT_DIR = FIRMWARE_DIR / "cert"
-DEFAULT_API_BASE_URL = "http://localhost:18000"
+# The backend is reached from this machine; its published port comes from
+# backend/.env (BACKEND_PORT) unless CEIOT_API_BASE_URL overrides it.
+DEFAULT_API_BASE_URL = "http://localhost:${BACKEND_PORT:-18000}"
+# Stack env files read (only the variables a profile or default references)
+# after the process environment and provisioning/.env.local.
+STACK_ENV_FILES = (REPO_ROOT / "mqtt" / ".env", REPO_ROOT / "backend" / ".env")
+VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 IDF_ACTIVATE = "~/.espressif/tools/activate_idf_v6.1.sh"
 
 ENVIRONMENTAL_TYPE_CODE = "environmental"
@@ -86,6 +92,37 @@ def resolve_setting(name: str, env_file_values: dict[str, str], default: str | N
     return os.environ.get(name) or env_file_values.get(name) or default
 
 
+def stack_lookup(env_file_values: dict[str, str]):
+    """Variable lookup: process env, provisioning/.env.local, mqtt/.env, backend/.env."""
+    sources = [env_file_values] + [parse_env_file(path) for path in STACK_ENV_FILES]
+
+    def lookup(name: str) -> str | None:
+        if os.environ.get(name):
+            return os.environ[name]
+        for values in sources:
+            if values.get(name):
+                return values[name]
+        return None
+
+    return lookup
+
+
+def expand_vars(value: str, lookup) -> str:
+    """Expands ${VAR} and ${VAR:-default}; an unset VAR without default is an error."""
+    def replace(match: re.Match) -> str:
+        name, default = match.group(1), match.group(2)
+        resolved = lookup(name)
+        if resolved:
+            return resolved
+        if default is not None:
+            return default
+        raise ProvisioningError(
+            f"Variable {name} is not set (environment, provisioning/.env.local, mqtt/.env or backend/.env)."
+        )
+
+    return VAR_RE.sub(replace, value)
+
+
 def normalize_serial(value: str) -> str:
     serial = value.strip().upper()
     if not SERIAL_RE.fullmatch(serial):
@@ -119,8 +156,13 @@ def normalize_tls(value: object) -> str:
     raise ProvisioningError("Invalid profile field 'mqtt_use_tls': expected true/false or 1/0.")
 
 
-def load_profile(path: Path) -> dict[str, str]:
-    """Broker profile -> the provisioning.json the firmware reads (string values)."""
+def load_profile(path: Path, lookup=None) -> dict[str, str]:
+    """Broker profile -> the provisioning.json the firmware reads (string values).
+
+    String values may reference ${VAR} / ${VAR:-default}, resolved with
+    `lookup` (default: stack_lookup over the process env and the stack .env files).
+    """
+    lookup = lookup or stack_lookup(parse_env_file(DEFAULT_ENV_FILE))
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -132,6 +174,8 @@ def load_profile(path: Path) -> dict[str, str]:
     missing = [field for field in PROFILE_FIELDS if field not in raw]
     if missing:
         raise ProvisioningError(f"Profile {path} is missing: {', '.join(missing)}")
+    raw = {key: expand_vars(value, lookup) if isinstance(value, str) else value
+           for key, value in raw.items()}
     host = raw["mqtt_uri"]
     if not isinstance(host, str) or not host.strip():
         raise ProvisioningError("Invalid profile field 'mqtt_uri': expected a non-empty host.")
@@ -440,11 +484,13 @@ def run_prepare(args: argparse.Namespace) -> int:
     if args.flash and args.skip_firmware_copy:
         raise ProvisioningError("--flash needs the staged files in esp32/cert (drop --skip-firmware-copy).")
     env_values = parse_env_file(args.env_file)
-    base_url = args.api_base_url or resolve_setting("CEIOT_API_BASE_URL", env_values, DEFAULT_API_BASE_URL)
+    lookup = stack_lookup(env_values)
+    base_url = args.api_base_url or expand_vars(
+        resolve_setting("CEIOT_API_BASE_URL", env_values, DEFAULT_API_BASE_URL), lookup)
     token = resolve_setting("CEIOT_API_TOKEN", env_values)
     if not token:
         raise ProvisioningError("Missing CEIOT_API_TOKEN: run provisioning/login.py first.")
-    profile = load_profile(args.profile)
+    profile = load_profile(args.profile, lookup)
     api = Api(base_url, token)
 
     catalog = sensor_catalog(api)

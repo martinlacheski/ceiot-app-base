@@ -18,9 +18,10 @@ import sys
 from pathlib import Path
 from urllib import error, parse, request
 
+from provision import DEFAULT_API_BASE_URL, expand_vars, stack_lookup
+
 PROVISIONING_DIR = Path(__file__).resolve().parent
 DEFAULT_ENV_FILE = PROVISIONING_DIR / ".env.local"
-DEFAULT_API_BASE_URL = "http://localhost:18000"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -86,7 +87,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     env_file = args.env_file.expanduser().resolve()
     lines = parse_env_file(env_file)
-    api_base_url = args.api_base_url or env_value(lines, "CEIOT_API_BASE_URL") or DEFAULT_API_BASE_URL
+    api_base_url = args.api_base_url or env_value(lines, "CEIOT_API_BASE_URL") or expand_vars(
+        DEFAULT_API_BASE_URL, stack_lookup({}))
     username = os.environ.get(args.username_env)
     if not username:
         raise RuntimeError(f"Set {args.username_env} to the account username.")

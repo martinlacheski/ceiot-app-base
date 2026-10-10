@@ -30,9 +30,21 @@ class ProfileTests(unittest.TestCase):
             path.write_text(json.dumps(data), encoding="utf-8")
             return provision.load_profile(path)
 
-    def test_local_profile_file(self):
-        self.assertEqual(provision.load_profile(provision.DEFAULT_PROFILE),
+    def test_local_profile_reads_the_stack_variables(self):
+        values = {"LAN_BIND_IP": "192.168.1.100", "MQTT_LISTENER_TLS": "18883"}
+        self.assertEqual(provision.load_profile(provision.DEFAULT_PROFILE, values.get),
                          {"mqtt_uri": "192.168.1.100", "mqtt_port": "18883", "mqtt_use_tls": "1"})
+
+    def test_missing_variable_is_an_error(self):
+        with self.assertRaises(provision.ProvisioningError):
+            provision.load_profile(provision.DEFAULT_PROFILE, {}.get)
+
+    def test_expand_vars_default(self):
+        lookup = {"A": "x"}.get
+        self.assertEqual(provision.expand_vars("${A}:${B:-8883}", lookup), "x:8883")
+        self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {"BACKEND_PORT": "19000"}.get),
+                         "http://localhost:19000")
+        self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {}.get), "http://localhost:18000")
 
     def test_native_types_are_normalized_to_strings(self):
         self.assertEqual(self.load({"mqtt_uri": " h ", "mqtt_port": 1883, "mqtt_use_tls": False}),
