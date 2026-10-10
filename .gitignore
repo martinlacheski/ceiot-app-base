@@ -23,6 +23,8 @@ mqtt/pki/devices/
 redis/data/
 seaweedfs/data/
 esp32/cert/
+provisioning/build/
+provisioning/.env.local
 backend/postgres_data/
 
 # Generated dependencies, caches, and build output

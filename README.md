@@ -112,6 +112,9 @@ Pasos:
    MAIL_TRANSPORT=mailpit docker compose up -d emqx backend mqtt-runtime
    ```
 
+Para dar de alta y grabar un ESP32 (serial, certificado, perfil del broker y
+variante de sensor) siga [`provisioning/README.md`](provisioning/README.md).
+
 La descarga por HTTP sin cifrar se acepta solo en desarrollo: la orden de
 actualización llega por MQTT con TLS mutuo e incluye el SHA-256 y el tamaño de
 la imagen, que el dispositivo verifica antes de instalarla. En producción, la

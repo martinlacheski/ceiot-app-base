@@ -1,0 +1,5 @@
+{
+  "mqtt_uri": "mqtt.example.com",
+  "mqtt_port": "8883",
+  "mqtt_use_tls": "1"
+}

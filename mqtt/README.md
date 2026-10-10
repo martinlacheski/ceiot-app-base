@@ -132,6 +132,11 @@ máquina en el router (DHCP estático) para no tener que repetir este proceso.
 ./emitir-certificado-dispositivo.sh IOT-DEM0-0001
 ```
 
+Para aprovisionar un ESP32 completo (alta en la plataforma, este certificado,
+serial y perfil del broker en LittleFS y comandos de grabación) use
+`provisioning/provision.py`, que invoca este script; la guía paso a paso está
+en `provisioning/README.md`.
+
 Crea `mqtt/pki/devices/IOT-DEM0-0001/{client.crt,client.key,root.crt}`. Copie
 esos tres archivos a `/littlefs` en el firmware (mismos nombres que ya usa
 `esp32/main/mqtt/mqtt_manager.c`: `client.crt`, `client.key` y el CA raíz
