@@ -162,6 +162,7 @@ export function DeviceMobileCard({
   const canManageActivation = mode === "admin";
   const hasSecondaryActions =
     canEdit || canViewOperations || canManageActivation;
+  const location = formatDeviceLocation(device);
 
   return (
     <Card className="gap-4 py-4">
@@ -199,6 +200,11 @@ export function DeviceMobileCard({
         {device.model ? (
           <p>
             <span className="font-medium">Modelo:</span> {device.model}
+          </p>
+        ) : null}
+        {mode === "admin" && location !== "-" ? (
+          <p className="break-words">
+            <span className="font-medium">Ubicación:</span> {location}
           </p>
         ) : null}
         {device.status !== "active" ? (
@@ -677,207 +683,55 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
     ];
 
-    const adminSpecificColumns: ColumnDef<Device>[] = [
-      {
-        id: "info",
-        enableSorting: false,
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Info"
-            className="w-full justify-center"
-          />
-        ),
-        cell: ({ row }) => {
-          const d = row.original;
-          const env = d.environment;
-          // Tooltip content: Name, Description, Environment, Owner
-          return (
-            <div className="flex justify-center">
-              <TooltipProvider>
-                <Tooltip delayDuration={300}>
-                  <TooltipTrigger asChild>
-                    <FileText className="size-5 text-muted-foreground cursor-help hover:text-foreground transition-colors" />
-                  </TooltipTrigger>
-                  <TooltipContent className="text-xs max-w-xs space-y-2 text-left p-3">
-                    <div className="space-y-1">
-                      <p>
-                        <span className="font-semibold">Propietario:</span>{" "}
-                        {env ? env.ownerName || "Desconocido" : "-"}
-                      </p>
-                      <p>
-                        <span className="font-semibold">Establecimiento:</span>{" "}
-                        {env ? env.name : "-"}
-                      </p>
-                      <p>
-                        <span className="font-semibold">Dispositivo:</span>{" "}
-                        {d.name}
-                      </p>
-                      <div>
-                        <span className="font-semibold">Descripción:</span>{" "}
-                        {d.description ? (
-                          <span className="text-muted-foreground">
-                            {d.description}
-                          </span>
-                        ) : (
-                          <span className="italic text-muted-foreground">
-                            Sin descripción
-                          </span>
-                        )}
-                      </div>
-                      <p>
-                        <span className="font-semibold">Última conexión:</span>{" "}
-                        {d.lastConnection
-                          ? formatDateTime(d.lastConnection)
-                          : "Nunca"}
-                      </p>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
-          );
-        },
-      },
-      {
-        id: DEVICE_SORT_BY.DEVICE_TYPE_NAME,
-        accessorFn: (device) => device.type?.name,
-        enableSorting: true,
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Tipo"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => (
-          <div className="text-center">{row.original.type?.name || "-"}</div>
-        ),
-      },
-      {
-        accessorKey: "model",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Modelo"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => (
-          <div className="text-center">{row.getValue("model") || "-"}</div>
-        ),
-      },
-      {
-        accessorKey: "batch",
-        enableSorting: false,
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Lote"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => (
-          <div className="text-center">{row.getValue("batch") || "-"}</div>
-        ),
-      },
-      {
-        accessorKey: "manufactureDate",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Fecha Fabr."
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => {
-          const dateStr = row.getValue("manufactureDate") as string;
-          return <div className="text-center">{formatDate(dateStr)}</div>;
-        },
-      },
-      {
-        accessorKey: "serial",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Número de Serie"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => (
-          <div className="text-center font-mono text-xs">
-            {row.getValue("serial")}
+    // Admin-only details that do not need a dedicated column.
+    const infoColumn: ColumnDef<Device> = {
+      id: "info",
+      enableSorting: false,
+      header: ({ column }) => (
+        <DataTableColumnHeader
+          column={column}
+          title="Info"
+          className="w-full justify-center"
+        />
+      ),
+      cell: ({ row }) => {
+        const d = row.original;
+        return (
+          <div className="flex justify-center">
+            <TooltipProvider>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`Información de ${d.name}`}
+                    className="flex cursor-help items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <FileText className="size-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="text-xs max-w-xs space-y-1 text-left p-3">
+                  <p>
+                    <span className="font-semibold">Modelo:</span>{" "}
+                    {d.model || "-"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Lote:</span>{" "}
+                    {d.batch || "-"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Fecha de fabricación:</span>{" "}
+                    {formatDate(d.manufactureDate)}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
-        ),
+        );
       },
-      locationColumn,
-      {
-        accessorKey: "status",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Situación"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => {
-          const status = (row.getValue("status") as string) || "new";
+    };
 
-          return (
-            <div className="flex justify-center">
-              <Badge
-                variant="outline"
-                className={getDeviceStatusClasses(status as Device["status"])}
-              >
-                {getDeviceStatusLabel(status)}
-              </Badge>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "enabled",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Habilitado"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => {
-          const isEnabled = row.getValue("enabled") as boolean;
-          return (
-            <div className="flex justify-center">
-              <Badge variant={isEnabled ? "default" : "secondary"}>
-                {isEnabled ? "Sí" : "No"}
-              </Badge>
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "isActive",
-        header: ({ column }) => (
-          <DataTableColumnHeader
-            column={column}
-            title="Estado"
-            className="justify-center"
-          />
-        ),
-        cell: ({ row }) => {
-          const active = row.getValue("isActive") as boolean;
-          return (
-            <div className="flex justify-center">
-              <Badge variant={active ? "default" : "secondary"}>
-                {active ? "Activo" : "Inactivo"}
-              </Badge>
-            </div>
-          );
-        },
-      },
-    ];
-
-    const userColumns: ColumnDef<Device>[] = [
+    // Same columns, order and server sort keys as the "Vista de dispositivos" screen.
+    const deviceViewColumns: ColumnDef<Device>[] = [
       {
         accessorKey: "serial",
         header: ({ column }) => (
@@ -998,9 +852,76 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       },
     ];
 
+    const adminStatusColumns: ColumnDef<Device>[] = [
+      {
+        accessorKey: "status",
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title="Situación"
+            className="justify-center"
+          />
+        ),
+        cell: ({ row }) => {
+          const status = (row.getValue("status") as string) || "new";
+
+          return (
+            <div className="flex justify-center">
+              <Badge
+                variant="outline"
+                className={getDeviceStatusClasses(status as Device["status"])}
+              >
+                {getDeviceStatusLabel(status)}
+              </Badge>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "enabled",
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title="Habilitado"
+            className="justify-center"
+          />
+        ),
+        cell: ({ row }) => {
+          const isEnabled = row.getValue("enabled") as boolean;
+          return (
+            <div className="flex justify-center">
+              <Badge variant={isEnabled ? "default" : "secondary"}>
+                {isEnabled ? "Sí" : "No"}
+              </Badge>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "isActive",
+        header: ({ column }) => (
+          <DataTableColumnHeader
+            column={column}
+            title="Activo"
+            className="justify-center"
+          />
+        ),
+        cell: ({ row }) => {
+          const active = row.getValue("isActive") as boolean;
+          return (
+            <div className="flex justify-center">
+              <Badge variant={active ? "default" : "secondary"}>
+                {active ? "Activo" : "Inactivo"}
+              </Badge>
+            </div>
+          );
+        },
+      },
+    ];
+
     return mode === "admin"
-      ? [...adminSpecificColumns, ...commonColumns]
-      : [...userColumns, ...commonColumns];
+      ? [infoColumn, ...deviceViewColumns, ...adminStatusColumns, ...commonColumns]
+      : [...deviceViewColumns, ...commonColumns];
   }, [
     mode,
     // isAdmin depends on mode, so it's covered
@@ -1134,8 +1055,8 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
                         <SelectItem value="isActive">Estado</SelectItem>
                         <SelectItem value="lastConnection">Última conexión</SelectItem>
                         <SelectItem value="brokerConnected">Estado</SelectItem>
-                        {mode === "user" && <SelectItem value="environmentName">Establecimiento</SelectItem>}
-                        {mode === "user" && <SelectItem value="owner">Propietario</SelectItem>}
+                        <SelectItem value="environmentName">Establecimiento</SelectItem>
+                        <SelectItem value="owner">Propietario</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

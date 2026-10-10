@@ -218,6 +218,25 @@ describe("DeviceMobileCard", () => {
     expect(screen.getByRole("menuitem", { name: "Operaciones" })).toBeInTheDocument();
   });
 
+  it("shows the device location on admin cards", () => {
+    const device: Device = {
+      ...baseDevice,
+      effectiveLocation: "Av. Siempre Viva 742",
+      effectiveLocationSource: "environment",
+    };
+    const { rerender } = render(
+      <DeviceMobileCard device={device} mode="admin" currentUserId="admin-1" {...handlers} />,
+    );
+    expect(screen.getByText("Ubicación:").parentElement).toHaveTextContent(
+      "Ubicación: Av. Siempre Viva 742",
+    );
+
+    rerender(
+      <DeviceMobileCard device={baseDevice} mode="admin" currentUserId="admin-1" {...handlers} />,
+    );
+    expect(screen.queryByText("Ubicación:")).not.toBeInTheDocument();
+  });
+
   it("offers Operations to admins on mobile", async () => {
     const user = userEvent.setup();
     render(<DeviceMobileCard device={baseDevice} mode="admin" currentUserId="admin-1" {...handlers} />);
@@ -380,6 +399,123 @@ describe("DevicesTable responsive contract", () => {
     expect(useDevicesMock).toHaveBeenLastCalledWith(expect.objectContaining({ sortBy }), expect.anything());
   });
 
+  it.each([
+    ["Número de Serie", "serial"],
+    ["Propietario", "owner"],
+    ["Establecimiento", "environmentName"],
+    ["Dispositivo", "name"],
+    ["Estado", "brokerConnected"],
+  ])("sorts %s from the admin list through the server", async (label, sortBy) => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={["/devices?page=3&sortBy=lastConnection"]}>
+        <DevicesTable mode="admin" />
+        <NavigationProbe />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("button", { name: label }));
+    await user.click(screen.getByRole("menuitem", { name: "Desc" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(`sortBy=${sortBy}`);
+    expect(screen.getByTestId("location")).toHaveTextContent("sortOrder=desc");
+    expect(screen.getByTestId("location")).toHaveTextContent("page=1");
+  });
+
+  it("mirrors the device view columns in the admin table", () => {
+    useDevicesMock.mockReturnValue({
+      data: {
+        items: [
+          {
+            ...baseDevice,
+            environment: { ...baseDevice.environment!, ownerId: "owner-2" },
+          },
+        ],
+        total: 1,
+        pages: 1,
+      },
+      isLoading: false,
+    });
+    render(<MemoryRouter><DevicesTable mode="admin" /></MemoryRouter>);
+
+    const table = screen.getByRole("table");
+    const headers = within(table)
+      .getAllByRole("columnheader")
+      .map((header) => header.textContent?.trim());
+    expect(headers).toEqual([
+      "Info",
+      "Número de Serie",
+      "Propietario",
+      "Establecimiento",
+      "Tipo",
+      "Dispositivo",
+      "Ubicación",
+      "Estado",
+      "Última Conexión",
+      "Situación",
+      "Habilitado",
+      "Activo",
+      "Acciones",
+    ]);
+    expect(within(table).queryByText("Modelo")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Lote")).not.toBeInTheDocument();
+    expect(within(table).queryByText("Fecha Fabr.")).not.toBeInTheDocument();
+
+    const [, row] = within(table).getAllByRole("row");
+    expect(within(row).getByText("IOT-001")).toBeInTheDocument();
+    expect(within(row).getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(within(row).getByText("Estación Centro")).toBeInTheDocument();
+    expect(within(row).getByText("Dos relés")).toBeInTheDocument();
+    expect(within(row).getByText("Surtidor Norte")).toBeInTheDocument();
+    expect(within(row).getByText("En línea")).toBeInTheDocument();
+    expect(within(row).queryByText("Nunca")).not.toBeInTheDocument();
+  });
+
+  it("limits the admin Info tooltip to model, batch and manufacture date", async () => {
+    const user = userEvent.setup();
+    useDevicesMock.mockReturnValue({
+      data: {
+        items: [
+          { ...baseDevice, batch: "L-07", manufactureDate: "2026-03-15" },
+        ],
+        total: 1,
+        pages: 1,
+      },
+      isLoading: false,
+    });
+    render(<MemoryRouter><DevicesTable mode="admin" /></MemoryRouter>);
+
+    await user.hover(
+      screen.getByRole("button", { name: "Información de Surtidor Norte" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Modelo: D-200");
+    expect(tooltip).toHaveTextContent("Lote: L-07");
+    expect(tooltip).toHaveTextContent("Fecha de fabricación: 15/03/2026");
+    expect(tooltip).not.toHaveTextContent("Propietario");
+    expect(tooltip).not.toHaveTextContent("Establecimiento");
+    expect(tooltip).not.toHaveTextContent("Dispositivo");
+  });
+
+  it("falls back to a dash for empty Info tooltip values", async () => {
+    const user = userEvent.setup();
+    useDevicesMock.mockReturnValue({
+      data: {
+        items: [{ ...baseDevice, model: undefined, batch: "", manufactureDate: undefined }],
+        total: 1,
+        pages: 1,
+      },
+      isLoading: false,
+    });
+    render(<MemoryRouter><DevicesTable mode="admin" /></MemoryRouter>);
+
+    await user.hover(
+      screen.getByRole("button", { name: "Información de Surtidor Norte" }),
+    );
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Modelo: -");
+    expect(tooltip).toHaveTextContent("Lote: -");
+    expect(tooltip).toHaveTextContent("Fecha de fabricación: -");
+  });
+
   it("routes admin desktop Operations to the admin page", async () => {
     useDevicesMock.mockReturnValue({ data: { items: [baseDevice], total: 1, pages: 1 }, isLoading: false });
     render(<MemoryRouter initialEntries={["/admin/devices"]}><DevicesTable mode="admin" /><NavigationProbe /></MemoryRouter>);
@@ -391,6 +527,8 @@ describe("DevicesTable responsive contract", () => {
     render(<MemoryRouter><DevicesTable /></MemoryRouter>);
 
     expect(screen.queryByRole("button", { name: "Lote" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ubicación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Info" })).not.toBeInTheDocument();
   });
 
   it("uses the shared search and export actions", async () => {
