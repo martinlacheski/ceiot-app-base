@@ -176,6 +176,11 @@ int sensor_logic_model_from_chip_id(uint8_t chip_id) {
   }
 }
 
+bool sensor_logic_chip_mismatch(int model, uint8_t chip_id) {
+  if (model != SENSOR_BMP280 && model != SENSOR_BME280) return false;
+  return sensor_logic_model_from_chip_id(chip_id) != model;
+}
+
 bool sensor_logic_dht22_plausible(float temperature, float relative_humidity) {
   if (!in_range(temperature, (range_t){-40.0f, 80.0f}) ||
       !in_range(relative_humidity, (range_t){0.0f, 100.0f})) {

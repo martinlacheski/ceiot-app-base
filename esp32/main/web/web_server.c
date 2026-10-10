@@ -294,6 +294,27 @@ static void add_sensor_status(cJSON *root) {
                           status.setting == SENSOR_SETTING_AUTO ? "auto"
                                                                 : "manual");
   cJSON_AddStringToObject(sensor, "state", sensor_state_name(status.state));
+  // BMP280/BME280 chip actually on the bus, and whether it differs from the
+  // model in use (e.g. bmp280 forced on a BME280: humidity ignored).
+  if (status.chip_seen) {
+    cJSON *chip = cJSON_AddObjectToObject(sensor, "chip");
+    int chip_model = sensor_logic_model_from_chip_id(status.chip_id);
+    if (chip_model != SENSOR_NONE) {
+      cJSON_AddStringToObject(chip, "model", sensor_logic_model_name(chip_model));
+    } else {
+      cJSON_AddNullToObject(chip, "model");
+    }
+    char hex[8];
+    snprintf(hex, sizeof(hex), "0x%02X", status.chip_id);
+    cJSON_AddStringToObject(chip, "id", hex);
+    snprintf(hex, sizeof(hex), "0x%02X", status.chip_address);
+    cJSON_AddStringToObject(chip, "address", hex);
+  } else {
+    cJSON_AddNullToObject(sensor, "chip");
+  }
+  cJSON_AddBoolToObject(sensor, "chip_mismatch",
+                        status.chip_seen &&
+                            sensor_logic_chip_mismatch(status.model, status.chip_id));
   sensor_reading_t last;
   int64_t age_s = 0;
   if (!sensor_get_last(&last, NULL, &age_s)) {

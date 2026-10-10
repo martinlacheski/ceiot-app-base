@@ -43,6 +43,11 @@ static sensor_reading_t s_last;
 static int s_last_model = SENSOR_NONE;
 static bool s_has_last = false;
 static int64_t s_last_us = 0;
+// BMP280/BME280 chip last seen on the bus this boot (web status), none when
+// the last probe found nothing.
+static bool s_chip_seen = false;
+static uint8_t s_chip_id = 0;
+static uint8_t s_chip_address = 0;
 
 // --- Telemetry task only (hardware) ------------------------------------------
 static int s_hw_model = SENSOR_NONE; // model the hardware layer is set up for
@@ -164,6 +169,15 @@ static bool s_desc_ready = false; // s_dev holds a descriptor
 static bool s_chip_ready = false; // bmp280_init() succeeded
 static uint8_t s_address = SENSOR_I2C_ADDRESS;
 
+static void chip_seen(bool seen, uint8_t chip_id, uint8_t address) {
+  if (s_lock == NULL) return;
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  s_chip_seen = seen;
+  s_chip_id = seen ? chip_id : 0;
+  s_chip_address = seen ? address : 0;
+  xSemaphoreGive(s_lock);
+}
+
 static uint8_t other_address(uint8_t address) {
   return address == BMP280_I2C_ADDRESS_0 ? BMP280_I2C_ADDRESS_1
                                          : BMP280_I2C_ADDRESS_0;
@@ -222,6 +236,7 @@ static bool i2c_probe(uint8_t *chip_id, uint8_t *address) {
         free_desc();
         *chip_id = id;
         *address = addresses[i];
+        chip_seen(true, id, addresses[i]);
         ESP_LOGI(TAG, "Detect: I2C chip at 0x%02X, chip ID 0x%02X",
                  addresses[i], id);
         return true;
@@ -231,6 +246,7 @@ static bool i2c_probe(uint8_t *chip_id, uint8_t *address) {
              esp_err_to_name(err));
   }
   free_desc();
+  chip_seen(false, 0, 0);
   return false;
 }
 
@@ -260,11 +276,13 @@ static esp_err_t bmx_ensure_chip(int model) {
   }
   if (err != ESP_OK) {
     free_desc();
+    chip_seen(false, 0, 0);
     ESP_LOGW(TAG, "%s not found at 0x76 nor 0x77: check VCC/GND/SDA/SCL wiring",
              sensor_logic_model_name(model));
     return err;
   }
 
+  chip_seen(true, (uint8_t)s_dev.id, s_address);
   bool is_bme = s_dev.id == BME280_CHIP_ID;
   if (model == SENSOR_BME280 && !is_bme) {
     ESP_LOGW(TAG, "Configured BME280 but the chip is a BMP280: no humidity");
@@ -506,6 +524,9 @@ void sensor_get_status(sensor_status_t *out) {
   out->model = s_model;
   out->auto_detected = s_setting == SENSOR_SETTING_AUTO && s_model != SENSOR_NONE;
   out->state = s_state;
+  out->chip_seen = s_chip_seen;
+  out->chip_id = s_chip_id;
+  out->chip_address = s_chip_address;
   xSemaphoreGive(s_lock);
 }
 

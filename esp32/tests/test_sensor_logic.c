@@ -238,6 +238,19 @@ static void test_detect_nothing(void) {
   CHECK(!sensor_logic_dht11_plausible(20.0f, 4.0f));
 }
 
+/* The chip on the bus vs the model in use (web status warning). */
+static void test_chip_mismatch(void) {
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_BME280, 0x60));
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_BMP280, 0x58));
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_BMP280, 0x56));
+  CHECK(sensor_logic_chip_mismatch(SENSOR_BMP280, 0x60)); /* forced bmp280 on a BME280 */
+  CHECK(sensor_logic_chip_mismatch(SENSOR_BME280, 0x58)); /* no humidity */
+  CHECK(sensor_logic_chip_mismatch(SENSOR_BME280, 0x55)); /* not a BMx280 */
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_DHT22, 0x60)); /* DHT models: not applicable */
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_DHT11, 0x58));
+  CHECK(!sensor_logic_chip_mismatch(SENSOR_NONE, 0x60));
+}
+
 int main(void) {
   RUN(test_model_keys_match_backend_catalog);
   RUN(test_variables_per_model);
@@ -252,6 +265,7 @@ int main(void) {
   RUN(test_model_from_key);
   RUN(test_effective_model);
   RUN(test_chip_id);
+  RUN(test_chip_mismatch);
   RUN(test_detect_i2c_first);
   RUN(test_detect_dht22);
   RUN(test_detect_dht11_frame_read_as_dht22);

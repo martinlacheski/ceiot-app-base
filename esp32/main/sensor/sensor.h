@@ -33,6 +33,11 @@ typedef struct {
   int model;          // model in use, SENSOR_NONE when there is none
   bool auto_detected; // the model comes from autodetection
   sensor_state_t state;
+  // BMP280/BME280 chip last seen on the I2C bus this boot (detection or
+  // initialization); chip_seen false when the last probe found none.
+  bool chip_seen;
+  uint8_t chip_id;      // register 0xD0: 0x60 BME280, 0x58 BMP280
+  uint8_t chip_address; // 0x76 or 0x77
 } sensor_status_t;
 
 // Loads the setting and the last detected model from NVS. No hardware

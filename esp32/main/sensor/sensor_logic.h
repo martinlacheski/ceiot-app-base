@@ -74,6 +74,11 @@ int sensor_logic_effective_model(int setting, int detected);
 // 0x57 on early BMP280 samples). SENSOR_NONE for any other value.
 int sensor_logic_model_from_chip_id(uint8_t chip_id);
 
+// True when the model in use is a BMP280/BME280 and the chip on the bus is a
+// different one (e.g. BMP280 forced on a BME280: humidity ignored; BME280 on
+// a BMP280: no humidity; or not a BMx280 at all). False for the DHT models.
+bool sensor_logic_chip_mismatch(int model, uint8_t chip_id);
+
 // One DHT frame (checksum valid = answered) decoded as a given type.
 typedef struct {
   bool answered;
