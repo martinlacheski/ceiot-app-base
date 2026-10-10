@@ -160,12 +160,12 @@ describe("Sidebar", () => {
       expect.stringContaining("Mi perfil"),
       expect.stringContaining("Establecimientos"),
       expect.stringContaining("Dispositivos"),
-      expect.stringContaining("Emuladores"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
       expect.stringContaining("Tipos de dispositivo"),
-      expect.stringContaining("Firmwares"),
       expect.stringContaining("Documentos"),
+      expect.stringContaining("Emuladores"),
+      expect.stringContaining("Firmwares"),
       expect.stringContaining("Usuarios"),
     ]);
     expect(screen.queryByRole("link", { name: "Generales" })).not.toBeInTheDocument();

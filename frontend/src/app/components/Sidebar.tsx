@@ -90,7 +90,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     ...(isAdmin
       ? [
           { icon: ScanQrCode, label: "Dispositivos", to: "/admin/devices" },
-          { icon: Radio, label: "Emuladores", to: "/admin/emulator" },
           {
             icon: ScanQrCode,
             label: "Vista de dispositivos",
@@ -104,8 +103,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 { icon: Gauge, label: "Variables", to: "/admin/variables" },
               ]
             : []),
-          { icon: HardDriveDownload, label: "Firmwares", to: "/admin/firmware" },
           { icon: FileText, label: "Documentos", to: "/admin/documents" },
+          { icon: Radio, label: "Emuladores", to: "/admin/emulator" },
+          { icon: HardDriveDownload, label: "Firmwares", to: "/admin/firmware" },
           { icon: Users, label: "Usuarios", to: "/admin/users" },
         ]
       : [
