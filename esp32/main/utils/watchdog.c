@@ -19,28 +19,26 @@ esp_err_t watchdog_init(void) {
     return ESP_OK;
   }
 
-  // Configurar Task Watchdog Timer (ESP-IDF 5.5 API)
-  // Timeout: 30 segundos
-  // Panic on timeout: true (reinicia el sistema si una tarea no alimenta el
-  // watchdog)
-  const esp_task_wdt_config_t wdt_config = {
-      .timeout_ms = 30000,  // 30 segundos
-      .idle_core_mask = 0,  // No monitorear tareas idle
-      .trigger_panic = true // Panic on timeout
-  };
-
   // With CONFIG_ESP_TASK_WDT_INIT (sdkconfig.defaults) ESP-IDF starts the TWDT
-  // before app_main: calling esp_task_wdt_init() again only logs
-  // "E task_wdt: ... TWDT already initialized". Reconfigure it instead.
-#if CONFIG_ESP_TASK_WDT_INIT
-  esp_err_t ret = esp_task_wdt_reconfigure(&wdt_config);
-#else
-  esp_err_t ret = esp_task_wdt_init(&wdt_config);
-#endif
+  // before app_main with the sdkconfig settings: 30 s, panic, idle tasks not
+  // watched (CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0/1 off). It is used as
+  // is. Reconfiguring it here to stop watching the idle tasks raced with the
+  // idle hook of the other core: IDLE1, already blocked inside
+  // esp_task_wdt_reset() on the TWDT spinlock while app_main unsubscribed it,
+  // then logged "E task_wdt: esp_task_wdt_reset(707): task not found".
+  esp_err_t ret;
+#if !CONFIG_ESP_TASK_WDT_INIT
+  const esp_task_wdt_config_t wdt_config = {
+      .timeout_ms = 30000,  // 30 s
+      .idle_core_mask = 0,  // idle tasks not watched
+      .trigger_panic = true // restart when a subscribed task stops feeding it
+  };
+  ret = esp_task_wdt_init(&wdt_config);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Error configurando el watchdog: %s", esp_err_to_name(ret));
     return ret;
   }
+#endif
 
   // Agregar tarea principal al watchdog
   ret = esp_task_wdt_add(NULL);
@@ -56,7 +54,8 @@ esp_err_t watchdog_init(void) {
   }
 
   watchdog_initialized = true;
-  ESP_LOGI(TAG, "Task Watchdog Timer inicializado (timeout: 30s)");
+  ESP_LOGI(TAG, "Task Watchdog Timer: main task subscribed (timeout %d s)",
+           CONFIG_ESP_TASK_WDT_TIMEOUT_S);
 
   return ESP_OK;
 }

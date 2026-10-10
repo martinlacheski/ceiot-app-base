@@ -64,6 +64,10 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 CONFIG_ESP_TASK_WDT_INIT=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=30
 CONFIG_ESP_TASK_WDT_PANIC=y
+# Only the tasks that subscribe are watched (app_main, see utils/watchdog.c):
+# the idle tasks are left out here instead of being unsubscribed at runtime.
+# CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU0 is not set
+# CONFIG_ESP_TASK_WDT_CHECK_IDLE_TASK_CPU1 is not set
 
 # Core dump to the `coredump` partition
 CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
