@@ -2,6 +2,12 @@ services:
   emqx:
     image: emqx:5.8.0
     restart: always
+    # Fixed node name: EMQX keeps its database under data/mnesia/<node name>.
+    # The default (emqx@<container IP>) changes when the container is
+    # recreated with another IP, which silently starts from an empty database
+    # (API keys, dashboard users and retained messages "disappear").
+    hostname: node1.emqx.ceiot
+
     ports:
       - 127.0.0.1:${MQTT_LISTENER_TCP:?MQTT_LISTENER_TCP is required}:1883
       # mTLS device listener: always on loopback (emulator, local tools) and,
@@ -27,6 +33,7 @@ services:
       - ./acl.conf:/opt/emqx/etc/acl.conf:ro
       - ./docker-entrypoint-wrapper.sh:/opt/emqx/docker-entrypoint-wrapper.sh:ro
     environment:
+      EMQX_NODE__NAME: emqx@node1.emqx.ceiot
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_PASSWORD:?}
       # Consumed by docker-entrypoint-wrapper.sh to render the built-in-database
       # bootstrap CSV for the shared "backend-services" user (see mqtt/acl.conf).
