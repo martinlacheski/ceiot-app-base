@@ -87,16 +87,28 @@ static bmp280_t s_dev;
 static bool s_desc_ready = false;
 static bool s_chip_ready = false;
 
-static esp_err_t hw_init(void) {
-  esp_err_t err = i2cdev_init();
-  if (err != ESP_OK) return err;
+static uint8_t s_address = SENSOR_I2C_ADDRESS;
+
+static esp_err_t init_desc(uint8_t address) {
   memset(&s_dev, 0, sizeof(s_dev));
-  err = bmp280_init_desc(&s_dev, SENSOR_I2C_ADDRESS, I2C_NUM_0,
-                         SENSOR_I2C_SDA_GPIO, SENSOR_I2C_SCL_GPIO);
+  esp_err_t err = bmp280_init_desc(&s_dev, address, I2C_NUM_0,
+                                   SENSOR_I2C_SDA_GPIO, SENSOR_I2C_SCL_GPIO);
   if (err != ESP_OK) return err;
   // Breakout boards carry their own pull-ups; the internal ones only help.
   s_dev.i2c_dev.cfg.sda_pullup_en = 1;
   s_dev.i2c_dev.cfg.scl_pullup_en = 1;
+  // The driver defaults to 1 MHz, too fast for breakout modules on jumper
+  // wires (no ACK at all); standard mode is plenty for one reading a minute.
+  s_dev.i2c_dev.cfg.master.clk_speed = SENSOR_I2C_CLOCK_HZ;
+  s_address = address;
+  return ESP_OK;
+}
+
+static esp_err_t hw_init(void) {
+  esp_err_t err = i2cdev_init();
+  if (err != ESP_OK) return err;
+  err = init_desc(SENSOR_I2C_ADDRESS);
+  if (err != ESP_OK) return err;
   s_desc_ready = true;
   ESP_LOGI(TAG, "%s on I2C SDA=GPIO%d SCL=GPIO%d addr=0x%02X",
            sensor_logic_model_name(SENSOR_MODEL), SENSOR_I2C_SDA_GPIO,
@@ -111,10 +123,22 @@ static esp_err_t ensure_chip(void) {
   bmp280_init_default_params(&params);
   esp_err_t err = bmp280_init(&s_dev, &params);
   if (err != ESP_OK) {
-    ESP_LOGW(TAG, "%s not found at 0x%02X (%s)",
-             sensor_logic_model_name(SENSOR_MODEL), SENSOR_I2C_ADDRESS,
-             esp_err_to_name(err));
-    return err;
+    // Modules strap SDO to GND (0x76) or VCC (0x77): try the other address.
+    uint8_t other = s_address == BMP280_I2C_ADDRESS_0 ? BMP280_I2C_ADDRESS_1
+                                                       : BMP280_I2C_ADDRESS_0;
+    ESP_LOGW(TAG, "%s not found at 0x%02X (%s), trying 0x%02X",
+             sensor_logic_model_name(SENSOR_MODEL), s_address,
+             esp_err_to_name(err), other);
+    bmp280_free_desc(&s_dev);
+    if (init_desc(other) == ESP_OK) {
+      err = bmp280_init(&s_dev, &params);
+    }
+    if (err != ESP_OK) {
+      ESP_LOGW(TAG, "%s not found at 0x%02X either: check VCC/GND/SDA/SCL wiring",
+               sensor_logic_model_name(SENSOR_MODEL), other);
+      return err;
+    }
+    ESP_LOGI(TAG, "%s found at 0x%02X", sensor_logic_model_name(SENSOR_MODEL), other);
   }
   bool is_bme = s_dev.id == BME280_CHIP_ID;
   if (SENSOR_MODEL == SENSOR_BME280 && !is_bme) {

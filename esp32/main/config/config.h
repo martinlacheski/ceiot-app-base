@@ -38,7 +38,8 @@
 // BMP280 / BME280 on I2C.
 #define SENSOR_I2C_SDA_GPIO 21
 #define SENSOR_I2C_SCL_GPIO 22
-#define SENSOR_I2C_ADDRESS 0x76 // 0x77 when the SDO pin is tied high
+#define SENSOR_I2C_ADDRESS 0x76 // 0x77 when the SDO pin is tied high (both are tried)
+#define SENSOR_I2C_CLOCK_HZ 100000 // standard mode: reliable on jumper wires
 
 // ---------------------------------------------------------------------------
 // Telemetry
