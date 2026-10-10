@@ -76,6 +76,8 @@ bool sensor_logic_sanitize(int model, sensor_reading_t *reading) {
     reading->has_pressure = false;
     return false;
   }
+  bool is_dht = model == SENSOR_DHT11 || model == SENSOR_DHT22;
+  bool dht_frame = is_dht && reading->has_temperature && reading->has_relative_humidity;
 
   if (reading->has_temperature &&
       !in_range(reading->temperature, temperature_range(model))) {
@@ -92,8 +94,15 @@ bool sensor_logic_sanitize(int model, sensor_reading_t *reading) {
     reading->has_pressure = false;
   }
 
+  // Both DHT values come from one frame: if either is out of range the frame
+  // is not trustworthy (a saturated/faulty DHT22 reports 125 C with 100 %),
+  // so the other value is dropped too instead of publishing it alone.
+  if (dht_frame && (!reading->has_temperature || !reading->has_relative_humidity)) {
+    reading->has_temperature = false;
+    reading->has_relative_humidity = false;
+  }
+
   // A DHT frame of all zeros passes the checksum but is a failed read.
-  bool is_dht = model == SENSOR_DHT11 || model == SENSOR_DHT22;
   if (is_dht && reading->has_temperature && reading->has_relative_humidity &&
       reading->temperature == 0.0f && reading->relative_humidity == 0.0f) {
     reading->has_temperature = false;

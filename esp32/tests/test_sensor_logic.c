@@ -65,9 +65,9 @@ static void test_out_of_range_and_nan_values_are_dropped(void) {
   CHECK(sensor_logic_sanitize(SENSOR_BME280, &r));
   CHECK(r.has_temperature && r.has_relative_humidity && !r.has_pressure);
 
-  r = full_reading(70.0f, 50.0f, 0.0f); /* DHT11 cannot read 70 C */
-  CHECK(sensor_logic_sanitize(SENSOR_DHT11, &r));
-  CHECK(!r.has_temperature && r.has_relative_humidity);
+  r = full_reading(70.0f, 50.0f, 0.0f); /* DHT11 cannot read 70 C: whole frame dropped */
+  CHECK(!sensor_logic_sanitize(SENSOR_DHT11, &r));
+  CHECK(!r.has_temperature && !r.has_relative_humidity);
 
   r = full_reading(-45.0f, 50.0f, 1000.0f);
   CHECK(sensor_logic_sanitize(SENSOR_BMP280, &r));
@@ -82,6 +82,14 @@ static void test_dht_all_zero_frame_is_a_failed_read(void) {
   r = full_reading(0.0f, 35.0f, 0.0f); /* 0 C with real humidity is fine */
   CHECK(sensor_logic_sanitize(SENSOR_DHT22, &r));
   CHECK(r.has_temperature && r.has_relative_humidity);
+}
+
+static void test_saturated_dht22_frame_is_dropped_whole(void) {
+  /* A faulty/saturated DHT22 reports its maxima: 125 C and 100 %. The 100 %
+   * is in range on its own but comes from the same untrustworthy frame. */
+  sensor_reading_t r = full_reading(125.0f, 100.0f, 0.0f);
+  CHECK(!sensor_logic_sanitize(SENSOR_DHT22, &r));
+  CHECK(!r.has_temperature && !r.has_relative_humidity);
 }
 
 static void test_values_not_flagged_stay_absent(void) {
@@ -101,6 +109,7 @@ int main(void) {
   RUN(test_bme280_keeps_all_three);
   RUN(test_out_of_range_and_nan_values_are_dropped);
   RUN(test_dht_all_zero_frame_is_a_failed_read);
+  RUN(test_saturated_dht22_frame_is_dropped_whole);
   RUN(test_values_not_flagged_stay_absent);
   TEST_MAIN_END();
 }

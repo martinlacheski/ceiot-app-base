@@ -65,6 +65,10 @@ static esp_err_t hw_read(sensor_reading_t *out) {
                               &temperature);
     s_last_dht_attempt_us = esp_timer_get_time();
     if (err == ESP_OK) {
+      // Raw values before the range filter, so a wrong variant or a faulty
+      // sensor shows up in the log instead of silently dropped variables.
+      ESP_LOGI(TAG, "DHT raw: temperature %.1f C, humidity %.1f %%", temperature,
+               humidity);
       out->has_temperature = true;
       out->temperature = temperature;
       out->has_relative_humidity = true;
