@@ -19,6 +19,7 @@
 #include "led_manager.h"
 #include "mqtt_manager.h"
 #include "nvs_manager.h"
+#include "ota_manager.h"
 #include "pins_config.h"
 #include "sensor.h"
 #include "telemetry.h"
@@ -118,11 +119,15 @@ void app_main(void) {
   // 5. Configuration web server (station IP and AP 192.168.4.1)
   ESP_ERROR_CHECK(web_server_start());
 
-  // 6. MQTT + telemetry. A brand-new device (no "storage" namespace)
+  // 6. MQTT + OTA + telemetry. A brand-new device (no "storage" namespace)
   // uses the defaults: mTLS on 8883 to the default broker, serial from the
   // factory snapshot. Without a serial there is no MQTT identity: stay in AP
   // mode so it can be set from the web UI.
   esp_err_t mqtt_ret = mqtt_manager_init();
+  // Before MQTT starts: reports/validates an image installed by OTA.
+  if (ota_manager_init(mqtt_manager_get_serial()) != ESP_OK) {
+    ESP_LOGE(TAG, "OTA client init failed");
+  }
   if (mqtt_ret == ESP_OK) {
     mqtt_manager_start();
   } else if (mqtt_ret == ESP_ERR_INVALID_STATE) {

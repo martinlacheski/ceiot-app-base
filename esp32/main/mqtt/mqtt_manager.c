@@ -18,6 +18,8 @@
 #include "network_manager.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "ota_logic.h"
+#include "ota_manager.h"
 #include "wifi_manager.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,7 +39,7 @@ static char *s_client_cert = NULL;
 static char *s_client_key = NULL;
 static char s_lwt_msg[128] = "{\"serial\":\"\",\"status\":\"offline\"}";
 static char s_topic_telemetry[80];
-static char s_topic_ota[72];
+static char s_topic_ota_command[88];
 static char s_topic_status[72];
 static char s_topic_time[72];
 static char s_topic_time_request[80];
@@ -56,6 +58,10 @@ static char s_cached_serial[32] = "";
 static char s_broker_host[128] = "";
 static int s_broker_port = 0;
 static bool s_use_tls = false;
+// ota/command reassembly: esp-mqtt hands a payload larger than its buffer in
+// several MQTT_EVENT_DATA chunks, only the first one carrying the topic.
+static char *s_ota_rx = NULL;
+static int s_ota_rx_total = 0;
 
 static esp_err_t open_nvs(const char *ns, nvs_open_mode_t mode,
                           nvs_handle_t *handle) {
@@ -134,7 +140,8 @@ static void build_topics(const char *serial) {
   const char *identity = (serial && serial[0]) ? serial : "unassigned";
   snprintf(s_topic_telemetry, sizeof(s_topic_telemetry),
            "iot/devices/%s/telemetry", identity);
-  snprintf(s_topic_ota, sizeof(s_topic_ota), "iot/devices/%s/ota", identity);
+  snprintf(s_topic_ota_command, sizeof(s_topic_ota_command),
+           "iot/devices/%s/ota/command", identity);
   snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/status",
            identity);
   snprintf(s_topic_time, sizeof(s_topic_time), "iot/devices/%s/time",
@@ -166,6 +173,44 @@ static esp_err_t publish_online(void) {
   return msg_id >= 0 ? ESP_OK : ESP_FAIL;
 }
 
+// Collects iot/devices/{serial}/ota/command (possibly in several chunks) and
+// hands the complete, NUL-terminated payload to the OTA client.
+static void handle_ota_command_chunk(esp_mqtt_event_handle_t event) {
+  if (event->current_data_offset == 0) {
+    free(s_ota_rx);
+    s_ota_rx = NULL;
+    bool is_command = event->topic_len == (int)strlen(s_topic_ota_command) &&
+                      strncmp(event->topic, s_topic_ota_command,
+                              event->topic_len) == 0;
+    if (!is_command) return;
+    if (event->total_data_len <= 0 ||
+        event->total_data_len > OTA_COMMAND_MAX) {
+      ESP_LOGW(TAG, "ota/command ignored: %d bytes", event->total_data_len);
+      return;
+    }
+    s_ota_rx_total = event->total_data_len;
+    s_ota_rx = malloc((size_t)s_ota_rx_total + 1);
+    if (s_ota_rx == NULL) {
+      ESP_LOGE(TAG, "No memory for ota/command");
+      return;
+    }
+  }
+  if (s_ota_rx == NULL) return;
+  int end = event->current_data_offset + event->data_len;
+  if (event->current_data_offset < 0 || end > s_ota_rx_total) {
+    free(s_ota_rx);
+    s_ota_rx = NULL;
+    return;
+  }
+  memcpy(s_ota_rx + event->current_data_offset, event->data, event->data_len);
+  if (end == s_ota_rx_total) {
+    s_ota_rx[s_ota_rx_total] = '\0';
+    ota_manager_handle_command(s_ota_rx);
+    free(s_ota_rx);
+    s_ota_rx = NULL;
+  }
+}
+
 static void mqtt_event_handler(void *args, esp_event_base_t base,
                                int32_t event_id, void *event_data) {
   (void)args;
@@ -178,12 +223,14 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
     set_event("connected");
     clear_error();
     led_set_mqtt_connected(true);
-    esp_mqtt_client_subscribe(event->client, s_topic_ota, MQTT_QOS);
+    // Subscriptions on every (re)connection: the session is clean.
+    esp_mqtt_client_subscribe(event->client, s_topic_ota_command, MQTT_QOS);
     esp_mqtt_client_subscribe(event->client, s_topic_time, MQTT_QOS);
     if (publish_online() != ESP_OK) {
       ESP_LOGW(TAG, "Could not publish the online status");
     }
     telemetry_request_now();
+    ota_manager_on_connected(); // unsent status + final report of an update
     break;
   case MQTT_EVENT_DISCONNECTED:
     s_connected = false;
@@ -206,6 +253,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
         event->data_len == event->total_data_len) {
       time_sync_on_mqtt_time(event->data, event->data_len);
     }
+    handle_ota_command_chunk(event);
     break;
   case MQTT_EVENT_ERROR:
     set_event("error");

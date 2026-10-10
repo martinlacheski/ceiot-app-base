@@ -20,6 +20,11 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
+The application image is `build/iot_device.bin`: the project name must stay
+`iot_device`, the only firmware the backend and the web app accept for OTA
+(`FIRMWARE_PROJECT` in `backend/app/api/device/firmware/rules.py`). Bump
+`PROJECT_VER` in `esp32/CMakeLists.txt` for every image published for OTA.
+
 ## Device certificates (mTLS)
 
 The broker requires a client certificate per device. The files are **never
@@ -56,7 +61,8 @@ See `mqtt/README.md` for how to issue them with the project PKI scripts.
 There is no factory app: the first flash writes `ota_0`, OTA updates
 alternate between the two slots, and `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE`
 rolls back an image that does not validate itself. An OTA image must not
-exceed **1966080 bytes** (0x1E0000).
+exceed **1966080 bytes** (0x1E0000): the backend rejects larger uploads
+(`MAX_IMAGE_BYTES`) and the device answers `image_too_large`.
 
 ## Sensor variant
 
@@ -89,6 +95,8 @@ follow `tools/emulador-dispositivo.py`:
 | --- | --- | --- |
 | `iot/devices/{serial}/telemetry` | 1 | `{"sensors":{"dht22":{"temperature":23.4,"relative_humidity":51.2}},"uptime":125,"firmware_version":"0.1.0"}` |
 | `iot/devices/{serial}/status` | 1, retained | `{"serial":"…","status":"online"}` on every connect; Last Will `"offline"` |
+| `iot/devices/{serial}/ota/command` | 1, subscribed | `{"request_id","version","url","sha256","size","force"?}` (see "OTA updates") |
+| `iot/devices/{serial}/ota/status` | 1 | `{"request_id","state","progress"?,"error"?:{"code","message"},"running_version","target_version"}` |
 
 Telemetry is published every `TELEMETRY_INTERVAL_SEC` (60 s by default) and
 right after each connection. `firmware_version` is `PROJECT_VER` from
@@ -137,6 +145,68 @@ reception time), so a device without time still reports. The status page
 shows the time source (`ntp`, `http`, `mqtt`, or `rtc` when a valid clock
 survived a software restart).
 
+## OTA updates
+
+Implemented in `main/ota/` (rules in `ota_logic.c`, host-tested; glue in
+`ota_manager.c`), ported from DVEM-App `devices/esp-idf-guition-1r1p` without
+its screens, sales and PSRAM. Contract: `tools/emulador-dispositivo.py --ota`
+and `backend/app/api/device/firmware/`.
+
+1. `ota/command` is subscribed on every MQTT (re)connection. The device
+   answers on `ota/status` (QoS 1) echoing the `request_id`:
+   `rejected` with `busy` (another update running, or the new image still
+   validating), `invalid_command` (url not `http://`/`https://`, sha256 not 64
+   lowercase hex, size not a positive integer, version not 1..32 chars,
+   `force` not boolean), `image_too_large` (`size` larger than the OTA slot,
+   0x1E0000) or `same_version` (unless `force`); otherwise `accepted`. A
+   redelivered `request_id` replays its last status and never runs twice.
+2. `downloading` with `progress` every 10 % (or every 5 s with some
+   advance): `esp_http_client` streams the image into the other OTA slot
+   while computing its SHA-256. Plain http is accepted on the LAN (the
+   command arrives over mTLS and carries the SHA-256); https verifies the
+   server with the ESP-IDF certificate bundle (common CAs). Redirects are
+   refused: the url must be the final one.
+3. `verifying`: size and SHA-256 must match the command
+   (`size_mismatch` / `sha256_mismatch`), and `esp_ota_end` checks the image;
+   the boot partition is never switched before that.
+4. `installing`: the marker `{request_id, target_version, previous_version,
+   target_slot}` is stored in NVS (`ota`/`marker`), the boot partition is
+   switched, `rebooting`, restart.
+5. The new image boots in `PENDING_VERIFY` (rollback enabled). It is marked
+   valid once Wi-Fi and MQTT are up, within 180 s; otherwise it rolls back.
+   Once connected it publishes `succeeded` for the stored `request_id` (or
+   `rolled_back` / `rollback` when the bootloader went back to the previous
+   image) and only then clears the marker.
+
+Other failures end in `failed` with `download_failed`, `tls_error`,
+`flash_error`, `no_ota_partition`, `no_memory` or `internal`; the image in use
+does not change.
+
+### Heap budget (no PSRAM; DVEM change 50 adapted)
+
+DVEM moved mbedTLS to PSRAM and disabled hardware AES because its S3 ran out
+of internal RAM. Neither applies here: there is no PSRAM, and the classic
+ESP32 AES accelerator does not use the DMA bounce buffer that failed on the
+S3. Instead everything stays in internal RAM and the budget is checked:
+
+- Static DRAM use (DHT22 build): 45.6 KB of 180.7 KB (`idf.py size`), which
+  leaves ~135 KB for the heap before Wi-Fi, lwIP, task stacks and the MQTT
+  client. Expected free heap with Wi-Fi, the web server and the MQTT mTLS
+  session up: roughly 90-120 KB (to be confirmed on the board).
+- MQTT mTLS with `CONFIG_MBEDTLS_DYNAMIC_BUFFER` and freed config data: about
+  35 KB at the handshake peak, far less once connected.
+- http download: 6 KB task stack + 4 KB chunk + ~3.5 KB HTTP buffers + the
+  lwIP receive window, ~20 KB. Required before starting: 32 KB free and a
+  12 KB block.
+- https download: a second TLS session (handshake peak ~35-40 KB, input
+  record up to 16 KB) and a 10 KB stack, ~60 KB. Required: 64 KB free and a
+  24 KB block.
+
+Below those thresholds the update ends `failed` / `no_memory` before touching
+the flash. The serial log prints the free heap, largest block and minimum ever
+before the download, halfway, after it and when the task ends, plus the task
+stack high-water mark; the main loop prints the free heap every 5 minutes.
+
 ## Configuration AP, BOOT button and status LED
 
 | BOOT button (GPIO0) | Effect |
@@ -164,8 +234,8 @@ survived a software restart).
 
 ## Host tests
 
-The pure logic (sensor rules, payloads, …) is tested on the PC, no board
-needed. cJSON is taken from `managed_components/` (run `idf.py build` once):
+The pure logic (sensor rules, payloads, BOOT button, time fallback, MQTT
+settings, OTA rules) is tested on the PC, no board needed. cJSON is taken from `managed_components/` (run `idf.py build` once):
 
 ```sh
 cmake -S esp32/tests -B /tmp/ceiot-fw-tests

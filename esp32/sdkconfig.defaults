@@ -41,6 +41,18 @@ CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
 # broker (and ask for the time over MQTT) when NTP and HTTP both failed.
 # See README.md, "Time synchronization".
 
+# DVEM change 50 adapted to this board (no PSRAM, see README "OTA updates"):
+# mbedTLS cannot move to PSRAM (CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC needs it) and
+# hardware AES stays on: the classic ESP32 AES accelerator has no DMA, so the
+# "esp-aes: Failed to allocate memory" DMA bounce buffer of the S3 does not
+# exist here. The dynamic buffers above keep the MQTT mTLS session small, and
+# the OTA client checks the free heap before an http/https download.
+# https OTA downloads verify the server with the certificate bundle; the
+# common-CA bundle (~40 KB of flash instead of ~68 KB) covers public CAs such
+# as Let's Encrypt.
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+
 # HTTP server (configuration web UI)
 CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 CONFIG_HTTPD_MAX_URI_LEN=512

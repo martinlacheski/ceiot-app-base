@@ -58,6 +58,14 @@ add_executable(test_time_sync_logic test_time_sync_logic.c)
 target_link_libraries(test_time_sync_logic time_sync_logic)
 add_test(NAME time_sync_logic COMMAND test_time_sync_logic)
 
+add_library(ota_logic STATIC ${FW}/ota/ota_logic.c)
+target_include_directories(ota_logic PUBLIC ${FW}/ota)
+target_link_libraries(ota_logic PUBLIC cjson)
+
+add_executable(test_ota_logic test_ota_logic.c)
+target_link_libraries(test_ota_logic ota_logic)
+add_test(NAME ota_logic COMMAND test_ota_logic)
+
 add_library(mqtt_config_logic STATIC ${FW}/mqtt/mqtt_config_logic.c)
 target_include_directories(mqtt_config_logic PUBLIC ${FW}/mqtt)
 
