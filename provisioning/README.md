@@ -176,9 +176,11 @@ Con `"sensor": "auto"` aparece en cambio
 
 Luego el dispositivo aparece conectado en la aplicación web y empieza a enviar
 telemetría. En la interfaz web del equipo (punto de acceso `WiFi_CEIoT_APP`),
-la página de estado muestra la línea **Identidad**: «Correcta (CN …)» y el
-**Sensor en uso**, con la indicación de si se detectó automáticamente o se
-eligió de forma manual.
+la pestaña **Estado** muestra en la fila **MQTT** «Conectado · mTLS · identidad
+correcta» y en la fila **Sensor** el modelo en uso, con la indicación de si se
+detectó automáticamente o se eligió de forma manual. El detalle de la
+identidad (CN del certificado) está en la pestaña **MQTT** y el del chip
+detectado, en la pestaña **Dispositivo**.
 
 ## Qué hace el firmware con estos archivos
 
