@@ -57,6 +57,10 @@ export default function OverviewPage() {
   const presence = countPresence(devices);
   const selectedDevice = pickSelectedDevice(devices, requestedDeviceId);
   const deviceId = selectedDevice?.id;
+  // Pin the default pick so a presence change on refresh does not switch the panel's device.
+  if (deviceId && requestedDeviceId !== deviceId) {
+    setRequestedDeviceId(deviceId);
+  }
   const telemetryEnabled = Boolean(deviceId && canReadTelemetry);
 
   // Same key prefixes as the device detail page so the live pulse refreshes the dashboard too.

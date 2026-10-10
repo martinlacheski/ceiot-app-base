@@ -237,6 +237,29 @@ describe("OverviewPage operational dashboard", () => {
     expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-offline-enabled", "24h"]);
   });
 
+  it("keeps the default device when its presence changes after a refresh", () => {
+    const { rerender } = renderPage();
+    expect((screen.getByLabelText("Dispositivo") as HTMLSelectElement).value).toBe("device-online");
+
+    const refreshed = {
+      ...devices,
+      items: devices.items.map((device) => ({ ...device, brokerConnected: device.id === "device-offline-enabled" })),
+    };
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
+      if (queryKey[0] === "devices") return state(refreshed, { refetch: deviceRefetch });
+      if (queryKey[0] === "environments") return state(environments, { refetch: environmentRefetch });
+      return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+    });
+    rerender(
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>,
+    );
+
+    expect((screen.getByLabelText("Dispositivo") as HTMLSelectElement).value).toBe("device-online");
+    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "24h"]);
+  });
+
   it("changes the history period with the range presets", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-10T12:30:00.000Z"));
