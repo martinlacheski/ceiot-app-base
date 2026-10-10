@@ -10,6 +10,8 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "led_manager.h"
+#include "telemetry.h"
+#include "telemetry_payload.h"
 #include "mqtt_client.h"
 #include "network_manager.h"
 #include "nvs.h"
@@ -23,20 +25,22 @@
 
 static const char *TAG = "MQTT_MGR";
 #define MQTT_TEST_TIMEOUT_SEC 10
-#define TELEMETRY_INTERVAL_SEC 300
+// Contract QoS (tools/emulador-dispositivo.py): telemetry, status and
+// subscriptions all use QoS 1.
+#define MQTT_QOS 1
+#define MQTT_DEFAULT_HOST "192.168.1.100"
+#define MQTT_DEFAULT_TLS_PORT 8883
+#define MQTT_DEFAULT_TCP_PORT 1883
 
 static esp_mqtt_client_handle_t s_client = NULL;
 static bool s_connected = false;
 static char *s_root_ca = NULL;
 static char *s_client_cert = NULL;
 static char *s_client_key = NULL;
-static int s_qos_telemetry = 0;
-static int s_qos_sub = 1;
-static char s_lwt_msg[256] = "{\"status\":\"offline\"}";
+static char s_lwt_msg[128] = "{\"serial\":\"\",\"status\":\"offline\"}";
 static char s_topic_telemetry[80];
 static char s_topic_ota[72];
 static char s_topic_status[72];
-static TaskHandle_t s_periodic_task = NULL;
 static TaskHandle_t s_start_task = NULL;
 static SemaphoreHandle_t s_status_lock = NULL;
 static bool s_test_pending = false;
@@ -175,67 +179,27 @@ static void build_topics(const char *serial) {
            identity);
 }
 
-static void timestamp(char *output, size_t size) {
-  time_t now;
-  struct tm local;
-  time(&now);
-  localtime_r(&now, &local);
-  strftime(output, size, "%Y-%m-%d %H:%M:%S", &local);
-}
-
 static void build_lwt(void) {
   char serial[32] = "";
-  char current_time[32];
   get_serial(serial, sizeof(serial));
-  timestamp(current_time, sizeof(current_time));
-
-  cJSON *root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "serial", serial);
-  cJSON_AddStringToObject(root, "status", "offline");
-  cJSON_AddStringToObject(root, "datetime", current_time);
-  char *json = cJSON_PrintUnformatted(root);
+  char *json = telemetry_presence_build(serial, false);
   if (json != NULL) {
     strlcpy(s_lwt_msg, json, sizeof(s_lwt_msg));
     free(json);
   }
-  cJSON_Delete(root);
 }
 
-static void send_telemetry(void) {
+// Retained "online" presence, published on every (re)connection; the broker
+// replaces it with the retained Last Will ("offline") when the link drops.
+static esp_err_t publish_online(void) {
   char serial[32] = "";
-  char current_time[32];
   get_serial(serial, sizeof(serial));
-  timestamp(current_time, sizeof(current_time));
-
-  cJSON *root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "serial", serial);
-  cJSON_AddStringToObject(root, "datetime", current_time);
-  cJSON_AddStringToObject(root, "status", "online");
-  cJSON_AddNumberToObject(root, "uptime", esp_timer_get_time() / 1000000);
-  cJSON_AddNumberToObject(root, "heap_free", esp_get_free_heap_size());
-  cJSON_AddNumberToObject(root, "wifi_rssi", wifi_manager_get_rssi());
-  cJSON_AddStringToObject(root, "wifi_ssid", wifi_manager_get_ssid());
-  cJSON_AddStringToObject(root, "wifi_ip", wifi_manager_get_ip());
-
-  char *json = cJSON_PrintUnformatted(root);
-  if (json != NULL) {
-    mqtt_manager_publish(s_topic_telemetry, json, s_qos_telemetry);
-    free(json);
-  }
-  cJSON_Delete(root);
-}
-
-static void periodic_task(void *arg) {
-  (void)arg;
-  uint32_t elapsed = 0;
-  while (1) {
-    if (s_connected && elapsed >= TELEMETRY_INTERVAL_SEC) {
-      send_telemetry();
-      elapsed = 0;
-    }
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    elapsed++;
-  }
+  char *json = telemetry_presence_build(serial, true);
+  if (json == NULL) return ESP_ERR_NO_MEM;
+  int msg_id =
+      esp_mqtt_client_publish(s_client, s_topic_status, json, 0, MQTT_QOS, 1);
+  free(json);
+  return msg_id >= 0 ? ESP_OK : ESP_FAIL;
 }
 
 static void mqtt_event_handler(void *args, esp_event_base_t base,
@@ -250,8 +214,11 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
     set_event("connected");
     clear_error();
     led_set_mqtt_connected(true);
-    esp_mqtt_client_subscribe(event->client, s_topic_ota, s_qos_sub);
-    send_telemetry();
+    esp_mqtt_client_subscribe(event->client, s_topic_ota, MQTT_QOS);
+    if (publish_online() != ESP_OK) {
+      ESP_LOGW(TAG, "Could not publish the online status");
+    }
+    telemetry_request_now();
     break;
   case MQTT_EVENT_DISCONNECTED:
     s_connected = false;
@@ -298,10 +265,6 @@ static void start_task(void *arg) {
 
   esp_err_t err = esp_mqtt_client_start(s_client);
   if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
-    if (s_periodic_task == NULL) {
-      xTaskCreate(periodic_task, "mqtt_periodic_task", 4096, NULL, 5,
-                  &s_periodic_task);
-    }
     set_event("start_requested");
   } else {
     set_error(esp_err_to_name(err), err, 0, 0, 0);
@@ -324,19 +287,22 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   strlcpy(s_cached_serial, client_id, sizeof(s_cached_serial));
   config->credentials.client_id = client_id;
 
+  // TLS (mTLS on 8883) unless explicitly disabled from the web UI.
   char tls_value[2] = "1";
   length = sizeof(tls_value);
-  bool use_tls = nvs_get_str(handle, "mqtt_use_tls", tls_value, &length) == ESP_OK &&
-                 tls_value[0] == '1';
+  if (nvs_get_str(handle, "mqtt_use_tls", tls_value, &length) != ESP_OK) {
+    tls_value[0] = '1';
+  }
+  bool use_tls = tls_value[0] == '1';
 
   char configured_host[128] = "";
   length = sizeof(configured_host);
   if (nvs_get_str(handle, "mqtt_uri", configured_host, &length) != ESP_OK) {
-    strlcpy(configured_host, "192.168.1.100", sizeof(configured_host));
+    strlcpy(configured_host, MQTT_DEFAULT_HOST, sizeof(configured_host));
   }
   char host[128];
   normalize_host(configured_host, host, sizeof(host));
-  if (host[0] == '\0') strlcpy(host, "192.168.1.100", sizeof(host));
+  if (host[0] == '\0') strlcpy(host, MQTT_DEFAULT_HOST, sizeof(host));
   snprintf(uri, uri_size, "%s%s", use_tls ? "mqtts://" : "mqtt://", host);
   config->broker.address.uri = uri;
 
@@ -345,24 +311,15 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   if (nvs_get_str(handle, "mqtt_port", port, &length) == ESP_OK && port[0]) {
     config->broker.address.port = atoi(port);
   } else {
-    config->broker.address.port = use_tls ? 8883 : 1883;
-  }
-
-  char qos[2] = "";
-  length = sizeof(qos);
-  if (nvs_get_str(handle, "mqtt_qos_pub_telemetry", qos, &length) == ESP_OK) {
-    s_qos_telemetry = atoi(qos);
-  }
-  length = sizeof(qos);
-  if (nvs_get_str(handle, "mqtt_qos_sub", qos, &length) == ESP_OK) {
-    s_qos_sub = atoi(qos);
+    config->broker.address.port =
+        use_tls ? MQTT_DEFAULT_TLS_PORT : MQTT_DEFAULT_TCP_PORT;
   }
 
   build_topics(client_id);
   build_lwt();
   config->session.last_will.topic = s_topic_status;
   config->session.last_will.msg = s_lwt_msg;
-  config->session.last_will.qos = 1;
+  config->session.last_will.qos = MQTT_QOS;
   config->session.last_will.retain = true;
 
   if (use_tls) {
@@ -416,10 +373,6 @@ esp_err_t mqtt_manager_stop(void) {
     vTaskDelete(s_start_task);
     s_start_task = NULL;
   }
-  if (s_periodic_task != NULL) {
-    vTaskDelete(s_periodic_task);
-    s_periodic_task = NULL;
-  }
   set_event("stopped");
   return esp_mqtt_client_stop(s_client);
 }
@@ -465,15 +418,19 @@ char *mqtt_manager_get_status_json(void) {
   return json ? json : strdup("{}");
 }
 
-int mqtt_manager_get_qos_pub(void) { return s_qos_telemetry; }
-int mqtt_manager_get_qos_sub(void) { return s_qos_sub; }
-
-esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos) {
+esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos,
+                               bool retain) {
   if (s_client == NULL || !s_connected) return ESP_ERR_INVALID_STATE;
-  return esp_mqtt_client_publish(s_client, topic, data, 0, qos, 0) >= 0
+  return esp_mqtt_client_publish(s_client, topic, data, 0, qos, retain) >= 0
              ? ESP_OK
              : ESP_FAIL;
 }
+
+esp_err_t mqtt_manager_publish_telemetry(const char *json) {
+  return mqtt_manager_publish(s_topic_telemetry, json, MQTT_QOS, false);
+}
+
+const char *mqtt_manager_get_serial(void) { return s_cached_serial; }
 
 bool mqtt_manager_start_test(void) {
   if (!s_connected) return false;
@@ -481,16 +438,10 @@ bool mqtt_manager_start_test(void) {
   s_test_success = false;
   s_test_start_us = esp_timer_get_time();
 
-  cJSON *root = cJSON_CreateObject();
-  cJSON_AddStringToObject(root, "type", "connection_test");
-  cJSON_AddStringToObject(root, "status", "online");
-  char *json = cJSON_PrintUnformatted(root);
-  s_test_success =
-      json != NULL &&
-      mqtt_manager_publish(s_topic_telemetry, json, s_qos_telemetry) == ESP_OK;
+  // Re-publishes the retained presence: a harmless message that exercises the
+  // connection without injecting anything into the telemetry topic.
+  s_test_success = publish_online() == ESP_OK;
   s_test_pending = false;
-  free(json);
-  cJSON_Delete(root);
   return s_test_success;
 }
 

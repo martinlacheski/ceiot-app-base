@@ -21,6 +21,7 @@
 #include "network_manager.h"
 #include "nvs_manager.h"
 #include "pins_config.h"
+#include "telemetry.h"
 #include "watchdog.h"
 #include "web_server.h"
 #include "wifi_manager.h"
@@ -172,6 +173,11 @@ void app_main(void) {
   if (mqtt_manager_init() == ESP_OK) {
     mqtt_manager_start();
     ESP_LOGI(TAG, "MQTT Client inicializado");
+  }
+
+  // 7b. Sensor readings + telemetry publication
+  if (telemetry_start() != ESP_OK) {
+    ESP_LOGE(TAG, "Telemetry task could not start");
   }
 
   // 8. Iniciar tarea de entradas (Botones)

@@ -26,9 +26,12 @@ esp_err_t mqtt_manager_stop(void);
 bool mqtt_manager_is_connected(void);
 esp_err_t mqtt_manager_get_status_snapshot(mqtt_status_snapshot_t *snapshot);
 char *mqtt_manager_get_status_json(void);
-int mqtt_manager_get_qos_pub(void);
-int mqtt_manager_get_qos_sub(void);
-esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos);
+esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos,
+                               bool retain);
+// QoS 1 on iot/devices/{serial}/telemetry.
+esp_err_t mqtt_manager_publish_telemetry(const char *json);
+// Device serial (MQTT client id and topic identity), "" when not assigned.
+const char *mqtt_manager_get_serial(void);
 bool mqtt_manager_start_test(void);
 void mqtt_manager_get_test_status(bool *pending, bool *success,
                                   int *elapsed_ms);

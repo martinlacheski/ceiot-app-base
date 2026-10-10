@@ -1,5 +1,6 @@
-# Main component. Registry dependencies (cJSON, MQTT, mDNS, LittleFS) come
-# from idf_component.yml and are added to the requirements automatically.
+# Main component. Registry dependencies (cJSON, MQTT, mDNS, LittleFS and the
+# esp-idf-lib sensor drivers) come from idf_component.yml and are added to the
+# requirements automatically.
 
 idf_component_register(
     SRCS
@@ -12,6 +13,10 @@ idf_component_register(
         "web/web_server.c"
         "web/nvs_manager.c"
         "mqtt/mqtt_manager.c"
+        "sensor/sensor.c"
+        "sensor/sensor_logic.c"
+        "telemetry/telemetry.c"
+        "telemetry/telemetry_payload.c"
     INCLUDE_DIRS
         "."
         "config"
@@ -21,6 +26,8 @@ idf_component_register(
         "network"
         "web"
         "mqtt"
+        "sensor"
+        "telemetry"
     REQUIRES
         "esp_event"
         "esp_http_server"
