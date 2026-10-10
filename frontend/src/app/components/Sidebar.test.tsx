@@ -21,7 +21,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Sensores" })).toHaveAttribute("href", "/admin/sensors");
     expect(screen.getByRole("link", { name: "Variables" })).toHaveAttribute("href", "/admin/variables");
     expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toHaveAttribute("href", "/admin/device-types");
-    expect(screen.getByRole("link", { name: "Firmware" })).toHaveAttribute("href", "/admin/firmware");
+    expect(screen.getByRole("link", { name: "Firmwares" })).toHaveAttribute("href", "/admin/firmware");
   });
 
   it("pone Mapa inmediatamente después de Inicio para un usuario común", () => {
@@ -133,7 +133,7 @@ describe("Sidebar", () => {
       "href",
       "/admin/devices",
     );
-    expect(within(navigation).getByRole("link", { name: "Emulador" })).toHaveAttribute(
+    expect(within(navigation).getByRole("link", { name: "Emuladores" })).toHaveAttribute(
       "href",
       "/admin/emulator",
     );
@@ -160,11 +160,11 @@ describe("Sidebar", () => {
       expect.stringContaining("Mi perfil"),
       expect.stringContaining("Establecimientos"),
       expect.stringContaining("Dispositivos"),
-      expect.stringContaining("Emulador"),
+      expect.stringContaining("Emuladores"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
       expect.stringContaining("Tipos de dispositivo"),
-      expect.stringContaining("Firmware"),
+      expect.stringContaining("Firmwares"),
       expect.stringContaining("Documentos"),
       expect.stringContaining("Usuarios"),
     ]);
@@ -276,7 +276,7 @@ describe("Sidebar", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("link", { name: "Emulador" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Emuladores" })).toHaveAttribute(
       "href",
       "/admin/emulator",
     );
@@ -301,9 +301,9 @@ describe("Sidebar", () => {
     );
 
     expect(
-      screen.queryByRole("link", { name: "Emulador" }),
+      screen.queryByRole("link", { name: "Emuladores" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Firmware" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Firmwares" })).not.toBeInTheDocument();
   });
 
   it("omits Mercado Pago navigation for administrators", async () => {
