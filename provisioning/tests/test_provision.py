@@ -105,10 +105,34 @@ class SensorPlanTests(unittest.TestCase):
 
 
 class CommandTests(unittest.TestCase):
-    def test_build_commands_use_a_build_dir_per_variant(self):
-        commands = provision.build_commands("bmp280", "/dev/ttyUSB1")
-        self.assertIn("idf.py -B build-bmp280 -DCEIOT_SENSOR=bmp280 reconfigure build", commands)
-        self.assertIn("idf.py -B build-bmp280 -p /dev/ttyUSB1 erase-flash flash", commands)
+    def test_build_commands_use_the_single_image(self):
+        commands = provision.build_commands("/dev/ttyUSB1")
+        self.assertIn("idf.py reconfigure build", commands)
+        self.assertIn("idf.py -p /dev/ttyUSB1 erase-flash flash", commands)
+        self.assertIn("idf.py -p /dev/ttyUSB1 monitor", commands)
+        self.assertFalse(any("CEIOT_SENSOR" in c or " -B " in c for c in commands))
+
+
+class FirmwareSensorTests(unittest.TestCase):
+    def parse(self, *extra):
+        return provision.build_parser().parse_args(["prepare", "--sensor", "bmp280", *extra])
+
+    def test_defaults_to_the_app_sensor(self):
+        args = self.parse()
+        self.assertEqual(provision.firmware_sensor(args), "bmp280")
+
+    def test_auto_or_another_model(self):
+        self.assertEqual(provision.firmware_sensor(self.parse("--firmware-sensor", "auto")), "auto")
+        self.assertEqual(provision.firmware_sensor(self.parse("--firmware-sensor", "bme280")), "bme280")
+
+    def test_invalid_value_is_rejected(self):
+        with self.assertRaises(SystemExit):
+            self.parse("--firmware-sensor", "ds18b20")
+
+    def test_firmware_profile_adds_the_sensor(self):
+        profile = {"mqtt_uri": "h", "mqtt_port": "18883", "mqtt_use_tls": "1"}
+        self.assertEqual(provision.firmware_profile(profile, "auto"), {**profile, "sensor": "auto"})
+        self.assertNotIn("sensor", profile)
 
 
 class StageTests(unittest.TestCase):
@@ -121,7 +145,7 @@ class StageTests(unittest.TestCase):
                 (certs / name).write_text(name, encoding="utf-8")
             ca = tmp / "ca.crt"
             ca.write_text("ca", encoding="utf-8")
-            profile = {"mqtt_uri": "h", "mqtt_port": "18883", "mqtt_use_tls": "1"}
+            profile = {"mqtt_uri": "h", "mqtt_port": "18883", "mqtt_use_tls": "1", "sensor": "auto"}
             staged = provision.stage(tmp / "build", "IOT-DEM0-0009", certs, ca, profile)
             provision.copy_to_firmware(staged, tmp / "fw")
             self.assertEqual(sorted(p.name for p in (tmp / "fw").iterdir()), sorted(provision.STAGED_FILES))

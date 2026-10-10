@@ -41,13 +41,15 @@ La URL del backend es `CEIOT_API_BASE_URL` si está definida; si no,
 - ESP-IDF 6.1 (`~/.espressif/tools/activate_idf_v6.1.sh`) para compilar y grabar.
 - Una cuenta de administrador de la plataforma.
 
-## Variantes de firmware y seriales de demostración
+## Sensor del firmware y seriales de demostración
 
-Cada imagen de firmware lee un único sensor. La variante se elige al compilar
-con `-DCEIOT_SENSOR=<variante>`; sin esa opción se usa la predeterminada de
-`esp32/main/config/config.h` (DHT22).
+Hay una sola imagen de firmware para los cuatro sensores (DHT11, DHT22,
+BMP280 y BME280). El modelo en uso es una configuración del equipo guardada
+en su NVS: `auto` (predeterminado) lo detecta solo, o se fija un modelo. Se
+cambia desde la interfaz web del equipo (página «Dispositivo») y, en el
+aprovisionamiento, con el campo `"sensor"` de `provisioning.json`.
 
-| Serial | Nombre | Variante (`--sensor`) | Clave de telemetría |
+| Serial | Nombre | Sensor en la plataforma (`--sensor`) | Clave de telemetría |
 | --- | --- | --- | --- |
 | `IOT-DEM0-0001` | Demo DHT11 | `dht11` | `dht11` |
 | `IOT-DEM0-0002` | Demo DHT22 | `dht22` | `dht22` |
@@ -82,6 +84,9 @@ python3 provisioning/provision.py prepare \
   --environment-of IOT-DEM0-0001
 ```
 
+Para que el equipo detecte el sensor por sí mismo en lugar de fijarlo, agregue
+`--firmware-sensor auto` (ver el paso 3 de «El script»).
+
 Dispositivo nuevo con serial generado por el backend (comportamiento de DVEM):
 
 ```bash
@@ -94,7 +99,7 @@ El script:
 
 1. **Registra o concilia el dispositivo** en la plataforma:
    - sin `--serial`, `POST /api/provisioning/devices/prepare` reserva un serial
-     nuevo y deja instalado el sensor de la variante;
+     nuevo y deja instalado el sensor de `--sensor`;
    - con `--serial`, reutiliza el dispositivo si existe o lo da de alta con
      `POST /api/devices`;
    - deja el tipo ambiental, el nombre indicado (`--name`; por defecto
@@ -102,7 +107,7 @@ El script:
      `--environment-id` o al del dispositivo indicado en `--environment-of`.
      Un dispositivo que ya pertenece a otro establecimiento no se mueve
      (se avisa; se mueve desde la aplicación web);
-   - deja **un solo sensor activo**, el de la variante y con su clave
+   - deja **un solo sensor activo**, el de `--sensor` y con su clave
      (`dht11`, `dht22`, `bmp280` o `bme280`). Los sensores anteriores se
      desactivan, no se borran, para conservar el historial. La API de sensores
      solo opera sobre dispositivos asociados a un establecimiento: un
@@ -113,38 +118,41 @@ El script:
    certificado; si no existe, se emite con
    `mqtt/pki/emitir-certificado-dispositivo.sh <SERIAL>`.
 3. **Preparación**: `provisioning/build/<SERIAL>/cert/` con `root.crt`,
-   `client.crt`, `client.key`, `serial.txt` y `provisioning.json` (perfil del
-   broker, por defecto `profiles/local.json`; otro con `--profile`).
+   `client.crt`, `client.key`, `serial.txt` y `provisioning.json`: el perfil
+   del broker (por defecto `profiles/local.json`; otro con `--profile`) y el
+   sensor del firmware en `"sensor"`. Por defecto es el mismo modelo de
+   `--sensor`, así la clave que publica el equipo coincide siempre con el
+   sensor dado de alta en la plataforma; `--firmware-sensor auto` deja que el
+   firmware lo detecte (o `--firmware-sensor <modelo>` fija otro).
 4. **Copia a `esp32/cert/`** (la omite `--skip-firmware-copy`). Esa carpeta
    contiene siempre los archivos del último dispositivo preparado.
-5. Muestra los comandos de compilación y grabación para el puerto
-   `--port` (por defecto `/dev/ttyUSB0`).
+5. Muestra los comandos de compilación y grabación de la imagen única para
+   el puerto `--port` (por defecto `/dev/ttyUSB0`).
 
 Volver a ejecutar el script con los mismos datos no cambia nada: es seguro
 repetirlo.
 
 ### 3. Compilar y grabar
 
-Ejemplo para `IOT-DEM0-0002` (variante DHT22), tal como lo imprime el script:
+Ejemplo para `IOT-DEM0-0002`, tal como lo imprime el script (la misma imagen
+sirve para cualquier sensor):
 
 ```bash
 source ~/.espressif/tools/activate_idf_v6.1.sh
 cd esp32
-idf.py -B build-dht22 -DCEIOT_SENSOR=dht22 reconfigure build
-idf.py -B build-dht22 -p /dev/ttyUSB0 erase-flash flash
-idf.py -B build-dht22 -p /dev/ttyUSB0 monitor
+idf.py reconfigure build
+idf.py -p /dev/ttyUSB0 erase-flash flash
+idf.py -p /dev/ttyUSB0 monitor
 ```
 
-- **Una carpeta de compilación por variante** (`build-dht11`, `build-dht22`,
-  `build-bmp280`, `build-bme280`): `CEIOT_SENSOR` queda guardado en la caché de
-  CMake de cada carpeta, así las variantes no se mezclan.
 - **`reconfigure`** es necesario después de preparar otro dispositivo: la
   lista de archivos de la imagen LittleFS se fija al configurar CMake. En la
   salida debe aparecer
   `LittleFS image files: root.crt;client.crt;client.key;serial.txt;provisioning.json`.
-- **`erase-flash`** borra la NVS anterior. El firmware solo toma el serial y el
-  broker de LittleFS cuando el espacio `factory` de la NVS todavía no los
-  tiene; sin borrar, una placa ya usada conservaría su identidad anterior.
+- **`erase-flash`** borra la NVS anterior. El firmware solo toma el serial, el
+  broker y el sensor de LittleFS cuando el espacio `factory` de la NVS
+  todavía no los tiene; sin borrar, una placa ya usada conservaría su
+  identidad y su configuración anteriores.
 
 Para que el script compile y grabe directamente, agregue
 `--flash /dev/ttyUSB0` (ejecuta `reconfigure build` y `erase-flash flash`;
@@ -157,19 +165,31 @@ En el monitor serie, al arrancar:
 ```
 NVS_MGR: Provisioning: factory serial IOT-DEM0-0002 from /littlefs/serial.txt
 NVS_MGR: Provisioning: broker 192.168.1.100:18883 (TLS on) from /littlefs/provisioning.json
+NVS_MGR: Provisioning: sensor dht22 from /littlefs/provisioning.json
+SENSOR: Sensor setting: DHT22 (manual)
 MQTT_MGR: Broker 192.168.1.100:18883 (mTLS), client id IOT-DEM0-0002
 ```
 
+Con `"sensor": "auto"` aparece en cambio
+`SENSOR: Detected DHT22; stored in NVS, not detected again on boot` (o
+`No sensor detected ...` si no encuentra ninguno: revise el cableado).
+
 Luego el dispositivo aparece conectado en la aplicación web y empieza a enviar
 telemetría. En la interfaz web del equipo (punto de acceso `WiFi_CEIoT_APP`),
-la página de estado muestra la línea **Identidad**: «Correcta (CN …)».
+la página de estado muestra la línea **Identidad**: «Correcta (CN …)» y el
+**Sensor en uso**, con la indicación de si se detectó automáticamente o se
+eligió de forma manual.
 
 ## Qué hace el firmware con estos archivos
 
 - En el arranque, `serial.txt` y `provisioning.json` se copian al espacio
-  `factory` de la NVS (serial, `mqtt_uri`, `mqtt_port`, `mqtt_use_tls`) si
-  todavía no existen, y de ahí a la configuración activa. Por eso el dispositivo
-  conserva su identidad y su broker después de una restauración de fábrica.
+  `factory` de la NVS (serial, `mqtt_uri`, `mqtt_port`, `mqtt_use_tls` y
+  `sensor_model`) si todavía no existen, y de ahí a la configuración activa
+  cuando a esta le faltan. Por eso el dispositivo conserva su identidad, su
+  broker y su sensor después de una restauración de fábrica. Un `"sensor"`
+  inválido se registra en el log y se ignora; el broker se aplica igual.
+- El sensor elegido en la interfaz web del equipo tiene prioridad sobre el de
+  `provisioning.json` y se conserva tras reinicios y actualizaciones OTA.
 - **Control de identidad**: si el CN de `client.crt` no coincide con el serial,
   el firmware registra el error, no inicia MQTT con TLS, levanta el punto de
   acceso y la página de estado lo muestra en rojo. Se corrige grabando los
@@ -187,3 +207,4 @@ la página de estado muestra la línea **Identidad**: «Correcta (CN …)».
 | `Sensor key '...' already belongs to another model` | Otro modelo de sensor del dispositivo usa esa clave: renómbrelo desde la aplicación web. |
 | El equipo arranca con el serial anterior | No se borró la flash: repita con `erase-flash`. |
 | La imagen no incluye `serial.txt` | Falta `reconfigure` (o use una carpeta de compilación nueva). |
+| «Sin sensor detectado» en la página de estado | Con `auto` no respondió ningún sensor: revise el cableado (I2C en GPIO21/22, DHT en GPIO4) y pulse «Detectar de nuevo», o elija el modelo a mano en «Dispositivo». |
