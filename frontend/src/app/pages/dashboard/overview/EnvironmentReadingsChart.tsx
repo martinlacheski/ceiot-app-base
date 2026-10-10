@@ -12,13 +12,15 @@ interface EnvironmentReadingsChartProps {
   series: EnvironmentSeries[];
   points: EnvironmentPoint[];
   range: ReadingsRange;
+  /** Accessible name; defaults to the establishment wording. */
+  ariaLabel?: string;
 }
 
 const numberFormat = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
 const formatReading = (value: number, unit: string) => `${numberFormat.format(value)}${unit ? ` ${unit}` : ""}`;
 
-export function EnvironmentReadingsChart({ variable, series, points, range }: EnvironmentReadingsChartProps) {
+export function EnvironmentReadingsChart({ variable, series, points, range, ariaLabel }: EnvironmentReadingsChartProps) {
   const config: ChartConfig = Object.fromEntries(series.map((entry, index) => [entry.key, {
     label: entry.label,
     color: seriesStroke(index).color,
@@ -28,9 +30,9 @@ export function EnvironmentReadingsChart({ variable, series, points, range }: En
   return (
     <ChartContainer
       config={config}
-      className="aspect-auto h-[320px] w-full"
+      className="aspect-auto h-[220px] w-full sm:h-[260px]"
       role="img"
-      aria-label={`Historial de ${variable.name} por sensor del establecimiento`}
+      aria-label={ariaLabel ?? `Historial de ${variable.name} por sensor del establecimiento`}
     >
       <LineChart accessibilityLayer data={points} margin={{ top: 8, right: 12, bottom: 8, left: 4 }}>
         <CartesianGrid vertical={false} />

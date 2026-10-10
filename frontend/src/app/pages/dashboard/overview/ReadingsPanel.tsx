@@ -1,22 +1,31 @@
-import { ArrowUpRight, Cpu, Link as LinkIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowUpRight, Building2, Cpu, Link as LinkIcon } from "lucide-react";
 import { Link } from "react-router";
 
 import type { Device } from "@/app/types/device.types";
 import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
-import { EnvironmentalReadingsSection } from "@/components/dashboard/EnvironmentalReadingsSection";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CurrentValuesStrip } from "./CurrentValuesStrip";
+import { LatestRecordsTable } from "./LatestRecordsTable";
 import { deviceLabel, type ReadingsRange } from "./overviewModel";
-import { Notice, RangePresets, ReadingsViewToggle, TelemetryPermissionNotice, type ReadingsView } from "./ReadingsControls";
+import {
+  DisplayToggle,
+  Notice,
+  NoticeContent,
+  RangePresets,
+  ReadingsViewToggle,
+  TelemetryPermissionNotice,
+  VariableChips,
+  type ReadingsDisplay,
+  type ReadingsView,
+} from "./ReadingsControls";
+import { SeriesReadingsBody, type SeriesReadingsState } from "./SeriesReadingsBody";
 
-export interface TelemetryState {
-  latest?: TelemetryPage;
-  history?: TelemetryPage;
-  latestLoading: boolean;
-  historyLoading: boolean;
-  latestError: boolean;
-  historyError: boolean;
+export interface LatestReadingsState {
+  page?: TelemetryPage;
+  isLoading: boolean;
+  isError: boolean;
 }
 
 interface ReadingsPanelProps {
@@ -24,61 +33,121 @@ interface ReadingsPanelProps {
   devices: Device[];
   selectedDevice?: Device;
   onSelectDevice: (deviceId: string) => void;
+  environments: Array<{ id: string; name: string }>;
+  selectedEnvironmentId?: string;
+  onSelectEnvironment: (environmentId: string) => void;
   range: ReadingsRange;
   onRangeChange: (range: ReadingsRange) => void;
-  canReadTelemetry: boolean;
-  telemetry: TelemetryState;
   view: ReadingsView;
   onViewChange: (view: ReadingsView) => void;
-  /** Rendered instead of the per-device readings when the establishment view is active. */
-  environmentView: ReactNode;
+  display: ReadingsDisplay;
+  onDisplayChange: (display: ReadingsDisplay) => void;
+  onSelectVariable: (variableCode: string) => void;
+  canReadTelemetry: boolean;
+  /** History of the active view: the selected device or the selected establishment. */
+  readings: SeriesReadingsState;
+  /** Recent raw readings of the selected device (current values and records table). */
+  latest: LatestReadingsState;
 }
 
-function ReadingsToolbar({
-  devices,
-  selectedDevice,
-  onSelectDevice,
-  range,
-  onRangeChange,
-}: Pick<ReadingsPanelProps, "devices" | "onSelectDevice" | "range" | "onRangeChange"> & { selectedDevice: Device }) {
+const SELECT_CLASS = "h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm";
+
+function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device }) {
+  const {
+    devices, selectedDevice, onSelectDevice, environments, selectedEnvironmentId, onSelectEnvironment,
+    range, onRangeChange, view, onViewChange, display, onDisplayChange, canReadTelemetry,
+  } = props;
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border bg-card p-3 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
-      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-        <label htmlFor="overview-device" className="text-xs font-medium text-muted-foreground">Dispositivo</label>
-        <select
-          id="overview-device"
-          className="h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm sm:max-w-sm"
-          value={selectedDevice.id}
-          onChange={(event) => onSelectDevice(event.target.value)}
-        >
-          {devices.map((device) => (
-            <option key={device.id} value={device.id}>
-              {deviceLabel(device)}{device.environment?.name ? ` · ${device.environment.name}` : ""}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex items-end justify-between gap-2 sm:justify-start">
-        <RangePresets range={range} onRangeChange={onRangeChange} />
+    <div className="flex flex-wrap items-center gap-2">
+      <ReadingsViewToggle view={view} onViewChange={onViewChange} />
+      {view === "device" ? (
+        <div className="min-w-44 flex-1 sm:max-w-xs">
+          <label htmlFor="overview-device" className="sr-only">Dispositivo</label>
+          <select
+            id="overview-device"
+            className={SELECT_CLASS}
+            value={selectedDevice.id}
+            onChange={(event) => onSelectDevice(event.target.value)}
+          >
+            {devices.map((device) => (
+              <option key={device.id} value={device.id}>
+                {deviceLabel(device)}{device.environment?.name ? ` · ${device.environment.name}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : environments.length > 0 && (
+        <div className="min-w-44 flex-1 sm:max-w-xs">
+          <label htmlFor="overview-environment" className="sr-only">Establecimiento</label>
+          <select
+            id="overview-environment"
+            className={SELECT_CLASS}
+            value={selectedEnvironmentId}
+            onChange={(event) => onSelectEnvironment(event.target.value)}
+          >
+            {environments.map((environment) => (
+              <option key={environment.id} value={environment.id}>{environment.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <RangePresets range={range} onRangeChange={onRangeChange} />
+      {canReadTelemetry && <DisplayToggle display={display} onDisplayChange={onDisplayChange} />}
+      {view === "device" && (
         <Button asChild variant="outline" size="sm" className="h-9">
           <Link to={`/app/devices/${selectedDevice.id}`}>
             Ver detalle
             <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
           </Link>
         </Button>
-      </div>
+      )}
     </div>
   );
 }
 
+function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device }) {
+  const { selectedDevice, environments, view, display, range, onSelectVariable, canReadTelemetry, readings, latest } = props;
+
+  if (!canReadTelemetry) return <TelemetryPermissionNotice />;
+  if (view === "environment" && environments.length === 0) {
+    return (
+      <NoticeContent icon={Building2} title="Ningún dispositivo está asignado a un establecimiento.">
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Asigná tus dispositivos a un establecimiento para comparar sus sensores en un solo gráfico.
+        </p>
+      </NoticeContent>
+    );
+  }
+  if (view === "device" && display === "table") {
+    return <LatestRecordsTable deviceId={selectedDevice.id} {...latest} />;
+  }
+
+  return (
+    <>
+      {readings.variables.length > 0 && (
+        <VariableChips variables={readings.variables} selected={readings.variable?.code} onSelect={onSelectVariable} />
+      )}
+      {view === "device" && (
+        <CurrentValuesStrip
+          {...latest}
+          selectedVariable={readings.variable?.code}
+          onSelectVariable={onSelectVariable}
+        />
+      )}
+      <SeriesReadingsBody scope={view} display={display} range={range} readings={readings} />
+    </>
+  );
+}
+
+/** One card holding the whole readings area: toolbar, variable chips and the chart or table. */
 export function ReadingsPanel(props: ReadingsPanelProps) {
-  const { devicesStatus, devices, selectedDevice, canReadTelemetry, telemetry, view, onViewChange, environmentView } = props;
+  const { devicesStatus, devices, selectedDevice } = props;
 
   if (devicesStatus === "loading") {
     return (
-      <div aria-busy="true" className="space-y-3">
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-72 w-full rounded-xl" />
+      <div aria-busy="true">
+        <Skeleton className="h-80 w-full rounded-xl" />
       </div>
     );
   }
@@ -104,14 +173,11 @@ export function ReadingsPanel(props: ReadingsPanelProps) {
   }
 
   return (
-    <section aria-label="Lecturas" className="space-y-3">
-      <ReadingsViewToggle view={view} onViewChange={onViewChange} />
-      {view === "environment" ? environmentView : (
-        <>
-          <ReadingsToolbar {...props} selectedDevice={selectedDevice} />
-          {canReadTelemetry ? <EnvironmentalReadingsSection {...telemetry} /> : <TelemetryPermissionNotice />}
-        </>
-      )}
-    </section>
+    <Card role="region" aria-label="Lecturas" className="gap-0 py-4">
+      <CardContent className="space-y-3 px-4">
+        <ReadingsToolbar {...props} selectedDevice={selectedDevice} />
+        <ReadingsBody {...props} selectedDevice={selectedDevice} />
+      </CardContent>
+    </Card>
   );
 }

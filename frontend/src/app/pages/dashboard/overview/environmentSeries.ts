@@ -54,6 +54,13 @@ export function defaultVariableCode(variables: TelemetryVariable[]): string | un
   return variables.find((variable) => variable.code === "temperature")?.code ?? variables[0]?.code;
 }
 
+/** Names a series from its device and sensor names. */
+export type SeriesLabel = (deviceName: string, sensorName: string) => string;
+
+export const deviceSensorLabel: SeriesLabel = (deviceName, sensorName) => `${deviceName} · ${sensorName}`;
+/** For a single device, where repeating its name on every series adds nothing. */
+export const sensorLabel: SeriesLabel = (_deviceName, sensorName) => sensorName;
+
 /**
  * One series per device sensor that measures `variableCode`, merged on a shared time axis:
  * readings are grouped in `bucketMs` buckets and averaged per series, ignoring nulls.
@@ -63,6 +70,7 @@ export function buildEnvironmentSeries(
   histories: DeviceHistory[],
   variableCode: string,
   bucketMs: number,
+  label: SeriesLabel = deviceSensorLabel,
 ): { series: EnvironmentSeries[]; points: EnvironmentPoint[] } {
   const series: EnvironmentSeries[] = [];
   const buckets = new Map<number, Map<string, { sum: number; count: number }>>();
@@ -72,7 +80,7 @@ export function buildEnvironmentSeries(
     for (const sensor of page.sensors) {
       if (!sensor.variables.some((variable) => variable.code === variableCode)) continue;
       const key = `s${series.length}`;
-      series.push({ key, label: `${deviceName} · ${sensor.sensorName}`, deviceId, sensorKey: sensor.key });
+      series.push({ key, label: label(deviceName, sensor.sensorName), deviceId, sensorKey: sensor.key });
 
       for (const item of page.items) {
         const value = item.values[sensor.key]?.[variableCode];
@@ -99,6 +107,11 @@ export function buildEnvironmentSeries(
     });
 
   return { series, points };
+}
+
+/** The newest `limit` buckets, newest first, for the table view. */
+export function latestPoints(points: EnvironmentPoint[], limit: number): EnvironmentPoint[] {
+  return points.slice(-limit).reverse();
 }
 
 const CHART_TOKENS = 5;

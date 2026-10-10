@@ -8,7 +8,6 @@ import { environmentalSensorService } from "@/app/services/environmentalSensor.s
 import { DEVICE_SORT_BY } from "@/app/types/device.types";
 import { ENVIRONMENT_SORT_BY } from "@/app/types/environment.types";
 import { useAuthStore } from "@/auth/store/auth.store";
-import { EnvironmentReadingsView } from "./overview/EnvironmentReadingsView";
 import {
   BUCKET_LABEL,
   BUCKET_MS,
@@ -16,6 +15,8 @@ import {
   collectVariables,
   defaultVariableCode,
   listDeviceEnvironments,
+  sensorLabel,
+  type DeviceHistory,
 } from "./overview/environmentSeries";
 import { EnvironmentsCard } from "./overview/EnvironmentsCard";
 import { FleetStatusCard } from "./overview/FleetStatusCard";
@@ -27,9 +28,9 @@ import {
   RECENT_READINGS_LIMIT,
   type ReadingsRange,
 } from "./overview/overviewModel";
-import type { ReadingsView } from "./overview/ReadingsControls";
+import type { ReadingsDisplay, ReadingsView } from "./overview/ReadingsControls";
 import { ReadingsPanel } from "./overview/ReadingsPanel";
-import { RecentRecordsCard } from "./overview/RecentRecordsCard";
+import type { SeriesReadingsState } from "./overview/SeriesReadingsBody";
 import { historyQueryOptions, TELEMETRY_REFETCH_MS } from "./overview/telemetryQueries";
 
 const INVENTORY_PAGE_SIZE = 100;
@@ -40,6 +41,7 @@ export default function OverviewPage() {
   const [requestedDeviceId, setRequestedDeviceId] = useState<string | null>(null);
   const [range, setRange] = useState<ReadingsRange>("24h");
   const [view, setView] = useState<ReadingsView>("device");
+  const [display, setDisplay] = useState<ReadingsDisplay>("chart");
   const [requestedEnvironmentId, setRequestedEnvironmentId] = useState<string | null>(null);
   const [requestedVariableCode, setRequestedVariableCode] = useState<string | null>(null);
 
@@ -95,17 +97,40 @@ export default function OverviewPage() {
   const environmentHistory = useQueries({
     queries: environmentDevices.map((device) => historyQueryOptions(device.id, range, environmentEnabled)),
   });
-  const histories = environmentDevices.map((device, index) => ({
+  const environmentHistories: DeviceHistory[] = environmentDevices.map((device, index) => ({
     deviceId: device.id,
     deviceName: deviceLabel(device),
     page: environmentHistory[index]?.data,
   }));
+  const deviceHistories: DeviceHistory[] = selectedDevice
+    ? [{ deviceId: selectedDevice.id, deviceName: deviceLabel(selectedDevice), page: historyQuery.data }]
+    : [];
+
+  // Both views share the variable chips, the range bucketing and the series model.
+  const histories = view === "environment" ? environmentHistories : deviceHistories;
   const variables = collectVariables(histories);
   const variable = variables.find((entry) => entry.code === requestedVariableCode)
     ?? variables.find((entry) => entry.code === defaultVariableCode(variables));
-  const environmentSeries = variable
-    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[range])
+  const seriesModel = variable
+    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[range], view === "device" ? sensorLabel : undefined)
     : { series: [], points: [] };
+  const readings: SeriesReadingsState = {
+    ...(view === "environment"
+      ? {
+        loading: environmentHistory.some((query) => query.isLoading),
+        failedDevices: environmentHistory.filter((query) => query.isError && !query.data).length,
+        deviceCount: environmentDevices.length,
+      }
+      : {
+        loading: historyQuery.isLoading,
+        failedDevices: historyQuery.isError && !historyQuery.data ? 1 : 0,
+        deviceCount: 1,
+      }),
+    variables,
+    variable,
+    ...seriesModel,
+    bucketLabel: BUCKET_LABEL[range],
+  };
 
   const devicesStatus = devicesQuery.isPending
     ? "loading"
@@ -130,49 +155,20 @@ export default function OverviewPage() {
               devices={devices}
               selectedDevice={selectedDevice}
               onSelectDevice={setRequestedDeviceId}
+              environments={environmentOptions}
+              selectedEnvironmentId={selectedEnvironment?.id}
+              onSelectEnvironment={setRequestedEnvironmentId}
               range={range}
               onRangeChange={setRange}
-              canReadTelemetry={canReadTelemetry}
-              telemetry={{
-                latest: latestQuery.data,
-                history: historyQuery.data,
-                latestLoading: latestQuery.isLoading,
-                historyLoading: historyQuery.isLoading,
-                latestError: latestQuery.isError,
-                historyError: historyQuery.isError,
-              }}
               view={view}
               onViewChange={setView}
-              environmentView={(
-                <EnvironmentReadingsView
-                  environments={environmentOptions}
-                  selectedEnvironmentId={selectedEnvironment?.id}
-                  onSelectEnvironment={setRequestedEnvironmentId}
-                  range={range}
-                  onRangeChange={setRange}
-                  onSelectVariable={setRequestedVariableCode}
-                  canReadTelemetry={canReadTelemetry}
-                  readings={{
-                    loading: environmentHistory.some((query) => query.isLoading),
-                    failedDevices: environmentHistory.filter((query) => query.isError && !query.data).length,
-                    deviceCount: environmentDevices.length,
-                    variables,
-                    variable,
-                    ...environmentSeries,
-                    bucketLabel: BUCKET_LABEL[range],
-                  }}
-                />
-              )}
+              display={display}
+              onDisplayChange={setDisplay}
+              onSelectVariable={setRequestedVariableCode}
+              canReadTelemetry={canReadTelemetry}
+              readings={readings}
+              latest={{ page: latestQuery.data, isLoading: latestQuery.isLoading, isError: latestQuery.isError }}
             />
-            {selectedDevice && canReadTelemetry && (
-              <RecentRecordsCard
-                deviceId={selectedDevice.id}
-                deviceName={deviceLabel(selectedDevice)}
-                page={latestQuery.data}
-                isLoading={latestQuery.isLoading}
-                isError={latestQuery.isError}
-              />
-            )}
           </div>
           <div className="min-w-0 space-y-4">
             <FleetStatusCard

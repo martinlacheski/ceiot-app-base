@@ -57,6 +57,20 @@ describe("EnvironmentReadingsChart", () => {
     expect(lines[5].strokeDasharray).toBeTruthy();
   });
 
+  it("accepts a custom accessible name", () => {
+    render(
+      <EnvironmentReadingsChart
+        variable={variable}
+        series={series.slice(0, 1)}
+        points={[]}
+        range="24h"
+        ariaLabel="Historial de Temperatura por sensor del dispositivo"
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "Historial de Temperatura por sensor del dispositivo" })).toBeInTheDocument();
+  });
+
   it("formats tooltip values with the es-AR locale and the variable unit", () => {
     render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
 

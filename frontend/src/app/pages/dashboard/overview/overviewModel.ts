@@ -8,7 +8,7 @@ export const READINGS_RANGES: Array<{ id: ReadingsRange; label: string; descript
   { id: "7d", label: "7d", description: "Últimos 7 días", hours: 24 * 7 },
 ];
 
-/** Recent readings fetched for the records table (and the current-value cards). */
+/** Recent readings fetched for the records table and the current-values strip. */
 export const RECENT_READINGS_LIMIT = 10;
 
 /** ISO bounds of a rolling window that ends at `now`. */

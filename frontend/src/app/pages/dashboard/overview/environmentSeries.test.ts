@@ -7,7 +7,9 @@ import {
   buildEnvironmentSeries,
   collectVariables,
   defaultVariableCode,
+  latestPoints,
   listDeviceEnvironments,
+  sensorLabel,
   seriesStroke,
   type DeviceHistory,
 } from "./environmentSeries";
@@ -82,8 +84,25 @@ describe("buildEnvironmentSeries", () => {
     expect(points[0]).toEqual({ time: at("12:01"), s0: 20, s1: null, s2: null });
   });
 
+  it("labels series with the sensor name only when given the sensor label strategy", () => {
+    const { series, points } = buildEnvironmentSeries(histories.slice(0, 1), "temperature", BUCKET_MS["24h"], sensorLabel);
+
+    expect(series.map((entry) => entry.label)).toEqual(["DHT22", "BMP280"]);
+    expect(points[0]).toEqual({ time: at("12:00"), s0: 21, s1: 21.5 });
+  });
+
   it("returns no series or points for an unknown variable", () => {
     expect(buildEnvironmentSeries(histories, "co2", BUCKET_MS["7d"])).toEqual({ series: [], points: [] });
+  });
+});
+
+describe("latestPoints", () => {
+  it("returns the newest buckets first, up to the limit", () => {
+    const { points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"]);
+
+    expect(latestPoints(points, 2).map((point) => point.time)).toEqual([at("12:15"), at("12:05")]);
+    expect(latestPoints(points, 20)).toHaveLength(4);
+    expect(points[0].time).toBe(at("12:01"));
   });
 });
 

@@ -34,12 +34,6 @@ vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: () => ({ user: auth.user }),
 }));
 
-vi.mock("@/components/dashboard/charts/EnvironmentalReadingsChart", () => ({
-  EnvironmentalReadingsChart: ({ variableCode, sensors }: { variableCode: string; sensors: unknown[] }) => (
-    <div data-testid={`chart-${variableCode}`}>{sensors.length} series</div>
-  ),
-}));
-
 vi.mock("./overview/EnvironmentReadingsChart", () => ({
   EnvironmentReadingsChart: ({ variable, series }: { variable: { code: string }; series: Array<{ key: string; label: string }> }) => (
     <ul data-testid="environment-chart" data-variable={variable.code}>
@@ -323,14 +317,49 @@ describe("OverviewPage operational dashboard", () => {
     }
   });
 
-  it("renders current values, charts and the latest records table", () => {
+  it("charts the selected device in a single chart with one series per sensor", () => {
     renderPage();
 
-    expect(screen.getByText(/23,4 °C/)).toBeInTheDocument();
-    expect(screen.getByTestId("chart-temperature")).toHaveTextContent("1 series");
+    const charts = screen.getAllByTestId("environment-chart");
+    expect(charts).toHaveLength(1);
+    expect(charts[0]).toHaveAttribute("data-variable", "temperature");
+    expect(within(charts[0]).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["DHT22"]);
+    expect(screen.getByText("1 sensor · promedio cada 10 minutos")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Últimos registros" })).not.toBeInTheDocument();
 
-    const records = screen.getByRole("region", { name: "Últimos registros" });
-    const table = within(records).getByRole("table");
+    fireEvent.click(screen.getByRole("button", { name: "Humedad (%)" }));
+
+    expect(screen.getByRole("button", { name: "Humedad (%)" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-variable", "relative_humidity");
+  });
+
+  it("shows the current values of the device in a compact strip", () => {
+    renderPage();
+
+    const strip = screen.getByRole("list", { name: "Valores actuales" });
+    const items = within(strip).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent("Temperatura");
+    expect(items[0]).toHaveTextContent("23,4 °C");
+    expect(items[1]).toHaveTextContent("Humedad");
+    expect(items[1]).toHaveTextContent("51,25 %");
+    expect(screen.getByText(/^Última lectura hace /)).toBeInTheDocument();
+
+    fireEvent.click(within(items[1]).getByRole("button"));
+
+    expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-variable", "relative_humidity");
+  });
+
+  it("switches the device readings to the latest records table", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Gráfico" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Tabla" }));
+
+    expect(screen.getByRole("button", { name: "Tabla" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+    const readingsArea = screen.getByRole("region", { name: "Lecturas" });
+    const table = within(readingsArea).getByRole("table");
     expect(within(table).getByRole("columnheader", { name: "DHT22 · Temperatura (°C)" })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: "DHT22 · Humedad (%)" })).toBeInTheDocument();
     const rows = within(table).getAllByRole("row").slice(1);
@@ -338,21 +367,25 @@ describe("OverviewPage operational dashboard", () => {
     expect(within(rows[0]).getByText("23,4")).toBeInTheDocument();
     expect(within(rows[0]).getByText("51,25")).toBeInTheDocument();
     expect(within(rows[1]).getByText("-")).toBeInTheDocument();
-    expect(within(records).getByRole("link", { name: "Ver historial completo" })).toHaveAttribute(
+    expect(within(readingsArea).getByRole("link", { name: "Ver historial completo" })).toHaveAttribute(
       "href",
       "/app/devices/device-online",
     );
   });
 
-  it("shows an empty records state when the device has no readings", () => {
+  it("shows empty chart and records states when the device has no readings", () => {
     telemetry.latest = state({ items: [], total: 0, sensors: [] });
     telemetry.history = state({ items: [], total: 0, sensors: [] });
 
     renderPage();
 
-    const records = screen.getByRole("region", { name: "Últimos registros" });
-    expect(within(records).getByText("Aún no hay registros para este dispositivo.")).toBeInTheDocument();
-    expect(within(records).queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+    expect(screen.getByText("No hay lecturas de este dispositivo en el período elegido.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tabla" }));
+
+    expect(screen.getByText("Aún no hay registros para este dispositivo.")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   it("does not request telemetry without the telemetry permission", () => {
@@ -363,7 +396,8 @@ describe("OverviewPage operational dashboard", () => {
     expect(screen.getByText("Tu usuario no tiene permiso para ver lecturas.")).toBeInTheDocument();
     expect(lastTelemetryQuery("latest").enabled).toBe(false);
     expect(lastTelemetryQuery("history").enabled).toBe(false);
-    expect(screen.queryByRole("region", { name: "Últimos registros" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Valores actuales" })).not.toBeInTheDocument();
   });
 
   it("invites to pair a device when the fleet is empty", () => {
@@ -518,6 +552,35 @@ describe("OverviewPage operational dashboard", () => {
 
     expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
     expect(screen.getByText("No hay lecturas de este establecimiento en el período elegido.")).toBeInTheDocument();
+  });
+
+  it("switches the establishment readings to a table of merged buckets", () => {
+    useEstablishmentDevices();
+    renderPage();
+    openEstablishmentView();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tabla" }));
+
+    expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+    const table = within(screen.getByRole("region", { name: "Lecturas" })).getByRole("table");
+    expect(within(table).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Hora",
+      "Sensor Sur · DHT22 (°C)",
+      "Sensor Norte · DHT22 (°C)",
+    ]);
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getAllByText("23,4")).toHaveLength(2);
+    expect(within(rows[1]).getAllByText("23,1")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Humedad (%)" }));
+
+    expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+      "Hora",
+      "Sensor Sur · DHT22 (%)",
+      "Sensor Norte · DHT22 (%)",
+    ]);
+    expect(within(screen.getByRole("table")).getAllByRole("row").slice(1)).toHaveLength(1);
   });
 
   it("does not request establishment telemetry without the telemetry permission", () => {
