@@ -100,7 +100,7 @@ describe("FirmwareReleasesPage", () => {
     await waitFor(() => expect(mocks.downloadReport).toHaveBeenCalled());
     const [format, report] = mocks.downloadReport.mock.calls[0];
     expect(format).toBe("excel");
-    expect(report.title).toBe("Reporte de Firmware");
+    expect(report.title).toBe("Reporte de Firmwares");
     expect(report.columns).toEqual(["Versión", "Tamaño", "Notas", "Subido", "Estado"]);
     expect(report.data[0]).toEqual(["1.2.0", "2,1 MB", "iot_device · compilado", expect.stringMatching(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/), "Activo"]);
   });
