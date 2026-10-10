@@ -154,6 +154,9 @@ follow `tools/emulador-dispositivo.py`:
 | `iot/devices/{serial}/status` | 1, retained | `{"serial":"…","status":"online"}` on every connect; Last Will `"offline"` |
 | `iot/devices/{serial}/ota/command` | 1, subscribed | `{"request_id","version","url","sha256","size","force"?}` (see "OTA updates") |
 | `iot/devices/{serial}/ota/status` | 1 | `{"request_id","state","progress"?,"error"?:{"code","message"},"running_version","target_version"}` |
+| `iot/devices/{serial}/ota/check` | 1 | `{"request_id","running_version"}` (web UI "Buscar actualización") |
+| `iot/devices/{serial}/ota/request` | 1 | `{"request_id","version","running_version"}` (web UI "Actualizar a X") |
+| `iot/devices/{serial}/ota/available` | 1, subscribed | `{"request_id","version"\|null,"size"?,"error"?:{"code","message"}}` (answer to check, or a refused request) |
 
 Telemetry is published every `TELEMETRY_INTERVAL_SEC` (60 s by default) and
 right after each connection. `firmware_version` is `PROJECT_VER` from
@@ -241,6 +244,40 @@ Other failures end in `failed` with `download_failed`, `tls_error`,
 `flash_error`, `no_ota_partition`, `no_memory` or `internal`; the image in use
 does not change.
 
+### Updates started from the device (web UI "Firmware" page)
+
+Rules in `main/ota/ota_remote.c` (host-tested), glue in `ota_manager.c`;
+ported from DVEM-App `ota_remote` / `ota_flow` without the device screen.
+Backend side: `FirmwareService.handle_check` / `handle_request`.
+
+1. "Buscar actualización" (`POST /api/ota/check`) publishes `ota/check`
+   `{"request_id":<uuid>,"running_version"}`. The backend answers on
+   `ota/available` (subscribed on every connection) with the latest active
+   release: `{"request_id","version":"0.3.0","size":…}`, or `"version":null`
+   when the device already runs it (or there is none). The answer, its age and
+   any error are shown on the page (`/api/status` → `ota.check`). No answer in
+   20 s → `timeout`.
+2. "Actualizar a X" (enabled only after an answer with a version, with MQTT
+   connected and nothing in flight; `POST /api/ota/request`) publishes
+   `ota/request` `{"request_id":<new uuid>,"version":"X","running_version"}`.
+   The backend runs the same checks as an update started from the platform
+   and sends the ordinary `ota/command` with that `request_id`, so the flow
+   above applies (progress on the page from `ota.active`). A refusal arrives on
+   `ota/available` with `error` (`release_unavailable`, `in_progress`,
+   `same_version`, `internal`).
+3. "Cambiar a X" (`POST /api/ota/switch`) boots the image already in the
+   other OTA slot when it is readable, of another version and not marked
+   invalid/pending (`ota_prev_decide`). It is local only: the backend has no
+   such operation. A marker with request id `local-switch:<uuid>` is stored,
+   `esp_ota_set_boot_partition` verifies the image and the device restarts;
+   the usual rules then apply (validated once Wi-Fi + MQTT are up within
+   180 s, else the bootloader goes back). The final `ota/status` goes out
+   under the `local-switch:` id, which the backend ignores (unknown attempt);
+   the platform sees the new version in the telemetry `firmware_version`.
+   After a cable flash the other slot may hold an old image ("grabada por
+   cable", otadata erased): it is offered too and protected by the same
+   validation.
+
 ### Heap budget (no PSRAM; DVEM change 50 adapted)
 
 DVEM moved mbedTLS to PSRAM and disabled hardware AES because its S3 ran out
@@ -281,10 +318,12 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
   3 s hold of BOOT, or "Desactivar punto de acceso" on the status page.
 - Web login: `admin` / `admin` by default (change it under "Seguridad").
   Pages: status (serial, firmware, sensor setting and sensor in use
-  —autodetected or manual—, last reading, Wi-Fi, AP, MQTT, certificates,
-  time), Wi-Fi scan/connect/forget, MQTT broker + certificate upload, device
-  serial and sensor model ("Detectar de nuevo"), password, restart and
-  factory reset.
+  —autodetected or manual—, the BMP280/BME280 chip found on I2C with a
+  warning when it differs from the model in use, last reading, Wi-Fi, AP,
+  MQTT, certificates, time), Wi-Fi scan/connect/forget, MQTT broker +
+  certificate upload, device serial and sensor model ("Detectar de nuevo"),
+  firmware (running version and slot, the other slot, check / update /
+  switch, progress), password, restart and factory reset.
 - Factory reset (button or web) erases the Wi-Fi network, the MQTT broker
   settings, the sensor setting and the web password, and restores the
   serial, the certificates, the TLS flag and the provisioned broker and
@@ -298,7 +337,8 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
 ## Host tests
 
 The pure logic (sensor rules, sensor setting and autodetection decision,
-payloads, BOOT button, time fallback, MQTT settings, OTA rules, provisioning
+payloads, BOOT button, time fallback, MQTT settings, OTA rules (platform and
+device-initiated updates, slot switch), provisioning
 files) is tested on the PC, no board needed. cJSON is taken from `managed_components/` (run `idf.py build` once):
 
 ```sh

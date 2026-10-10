@@ -21,6 +21,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_random.h"
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -29,6 +30,7 @@
 #include "mqtt_manager.h"
 #include "nvs.h"
 #include "ota_logic.h"
+#include "ota_remote.h"
 #include "psa/crypto.h"
 #include "wifi_manager.h"
 #include <stdio.h>
@@ -52,6 +54,8 @@ static const char *TAG = "OTA";
 
 static bool s_initialized = false;
 static char s_topic_status[88];
+static char s_topic_check[88];
+static char s_topic_request[88];
 static char s_running_version[OTA_VERSION_MAX];
 
 static SemaphoreHandle_t s_lock = NULL;       /* guards s_tracker, s_unsent */
@@ -66,6 +70,13 @@ static bool s_final_pending = false;               /* guarded by s_final_lock */
 static bool s_final_ready = false;                 /* validated (or nothing to validate) */
 static bool s_final_sending = false;               /* a publish of s_final is in progress */
 static ota_status_t s_final;
+
+/* Updates started from the device (web UI). Never held while publishing:
+ * ota_manager_handle_available() takes it in the MQTT task, which holds the
+ * client lock a publish needs. */
+static SemaphoreHandle_t s_remote_lock = NULL;
+static ota_remote_t s_remote;
+static volatile bool s_switch_pending = false; /* boot partition switched, restart pending */
 
 /* ------------------------------------------------------------------ */
 /* marker (NVS)                                                        */
@@ -405,7 +416,7 @@ void ota_manager_handle_command(const char *payload) {
   const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
   ota_env_t env = {.running_version = s_running_version,
                    /* the new image must be validated (and its final status sent) first */
-                   .device_busy = s_validation_pending,
+                   .device_busy = s_validation_pending || s_switch_pending,
                    .slot_size = next != NULL ? (uint32_t)next->size : 0};
   xSemaphoreTake(s_lock, portMAX_DELAY);
   ota_decision_t d = ota_decide(&s_tracker, cmd, pr == OTA_PARSE_OK, env);
@@ -497,9 +508,9 @@ void ota_manager_on_connected(void) {
   try_publish_final();
 }
 
-static ota_img_state_t running_image_state(void) {
+static ota_img_state_t image_state(const esp_partition_t *part) {
   esp_ota_img_states_t st;
-  if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &st) != ESP_OK) {
+  if (part == NULL || esp_ota_get_state_partition(part, &st) != ESP_OK) {
     return OTA_IMG_UNDEFINED; /* flashed by cable: otadata erased */
   }
   switch (st) {
@@ -546,8 +557,12 @@ static void validate_task(void *arg) {
 void ota_manager_set_serial(const char *serial) {
   if (serial != NULL && serial[0] != '\0') {
     snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/ota/status", serial);
+    snprintf(s_topic_check, sizeof(s_topic_check), "iot/devices/%s/ota/check", serial);
+    snprintf(s_topic_request, sizeof(s_topic_request), "iot/devices/%s/ota/request", serial);
   } else {
     s_topic_status[0] = '\0';
+    s_topic_check[0] = '\0';
+    s_topic_request[0] = '\0';
   }
 }
 
@@ -561,14 +576,16 @@ esp_err_t ota_manager_init(const char *serial) {
 
   s_lock = xSemaphoreCreateMutex();
   s_final_lock = xSemaphoreCreateMutex();
-  if (s_lock == NULL || s_final_lock == NULL) return ESP_ERR_NO_MEM;
+  s_remote_lock = xSemaphoreCreateMutex();
+  if (s_lock == NULL || s_final_lock == NULL || s_remote_lock == NULL) return ESP_ERR_NO_MEM;
   ota_tracker_init(&s_tracker);
+  ota_remote_init(&s_remote);
 
   int slot = slot_of(esp_ota_get_running_partition());
   ota_marker_t marker;
   bool has_marker = marker_load(&marker);
   ota_boot_plan_t plan = ota_boot_decide(has_marker ? &marker : NULL, s_running_version, slot,
-                                         running_image_state());
+                                         image_state(esp_ota_get_running_partition()));
   ESP_LOGI(TAG, "Running %s (slot %d), marker %s, validate=%d report=%d", s_running_version, slot,
            has_marker ? marker.request_id : "none", (int)plan.validate, (int)plan.report);
 
@@ -597,4 +614,210 @@ esp_err_t ota_manager_init(const char *serial) {
     }
   }
   return ESP_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* updates started from the device (web UI)                            */
+/* ------------------------------------------------------------------ */
+
+static int64_t now_ms(void) { return esp_timer_get_time() / 1000; }
+
+static void new_request_id(char *out, size_t size, const char *prefix) {
+  uint32_t rnd[4] = {esp_random(), esp_random(), esp_random(), esp_random()};
+  if (!ota_make_request_id(out, size, prefix, rnd)) out[0] = '\0';
+}
+
+/* An update in flight, or the running image still to be validated. */
+static bool device_busy(void) {
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  bool updating = ota_tracker_active(&s_tracker) != NULL;
+  xSemaphoreGive(s_lock);
+  return updating || s_validation_pending || s_switch_pending;
+}
+
+/* The partition the next update overwrites, and what it holds. */
+static void other_slot(ota_prev_candidate_t *c, const esp_partition_t **part_out) {
+  memset(c, 0, sizeof(*c));
+  c->slot = -1;
+  c->state = OTA_IMG_UNDEFINED;
+  const esp_partition_t *next = esp_ota_get_next_update_partition(NULL);
+  if (part_out != NULL) *part_out = next;
+  c->slot = slot_of(next);
+  if (c->slot < 0) return;
+  esp_app_desc_t desc;
+  if (esp_ota_get_partition_description(next, &desc) == ESP_OK && desc.version[0] != '\0') {
+    c->readable = true;
+    strlcpy(c->version, desc.version, sizeof(c->version));
+  }
+  c->state = image_state(next);
+}
+
+/* Keeps the question in step with the OTA client: the backend's ota/command
+ * carries the request id the device asked with. Call with s_remote_lock held. */
+static void remote_sync_locked(void) {
+  ota_remote_step(&s_remote, now_ms());
+  if (s_remote.phase != OTA_REMOTE_REQUESTING && s_remote.phase != OTA_REMOTE_UPDATING) return;
+  ota_status_t st;
+  bool found = false;
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const ota_status_t *tracked = ota_tracker_find(&s_tracker, s_remote.request_id);
+  if (tracked != NULL) {
+    st = *tracked;
+    found = true;
+  }
+  xSemaphoreGive(s_lock);
+  if (found) ota_remote_on_status(&s_remote, &st, now_ms());
+}
+
+void ota_manager_get_local_view(ota_local_view_t *out) {
+  memset(out, 0, sizeof(*out));
+  ota_remote_init(&out->remote);
+  out->running_slot = -1;
+  out->other.slot = -1;
+  out->mqtt_connected = mqtt_manager_is_connected();
+  if (!s_initialized) return;
+
+  strlcpy(out->running_version, s_running_version, sizeof(out->running_version));
+  const esp_partition_t *running = esp_ota_get_running_partition();
+  out->running_slot = slot_of(running);
+  if (running != NULL) strlcpy(out->running_label, running->label, sizeof(out->running_label));
+  out->validation_pending = s_validation_pending;
+
+  const esp_partition_t *next = NULL;
+  other_slot(&out->other, &next);
+  if (next != NULL) strlcpy(out->other_label, next->label, sizeof(out->other_label));
+  out->other_reason = ota_prev_decide(&out->other, s_running_version);
+
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  remote_sync_locked();
+  out->remote = s_remote;
+  xSemaphoreGive(s_remote_lock);
+
+  xSemaphoreTake(s_lock, portMAX_DELAY);
+  const ota_status_t *active = ota_tracker_active(&s_tracker);
+  if (active != NULL) {
+    out->has_active = true;
+    out->active = *active;
+  }
+  if (s_tracker.count > 0) { /* the newest request is the last entry */
+    out->has_last = true;
+    out->last = s_tracker.entries[s_tracker.count - 1];
+  }
+  xSemaphoreGive(s_lock);
+}
+
+/* Publishes the question just opened; a failed publish closes it with an error. */
+static ota_local_result_t publish_question(const char *topic, const char *payload) {
+  if (mqtt_manager_publish(topic, payload, OTA_TOPIC_QOS, false) == ESP_OK) {
+    ESP_LOGI(TAG, "%s sent: %s", topic, payload);
+    return OTA_LOCAL_OK;
+  }
+  ESP_LOGW(TAG, "%s not published", topic);
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  ota_remote_fail(&s_remote, "publish_failed", "No se pudo enviar la consulta a la plataforma");
+  xSemaphoreGive(s_remote_lock);
+  return OTA_LOCAL_FAILED;
+}
+
+ota_local_result_t ota_manager_check(void) {
+  if (!s_initialized || s_topic_check[0] == '\0' || !mqtt_manager_is_connected()) return OTA_LOCAL_OFFLINE;
+  char id[OTA_ID_MAX];
+  new_request_id(id, sizeof(id), NULL);
+  if (id[0] == '\0') return OTA_LOCAL_FAILED;
+  char buf[OTA_REMOTE_PAYLOAD_MAX];
+  if (ota_build_check(buf, sizeof(buf), id, s_running_version) == 0) return OTA_LOCAL_FAILED;
+
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  remote_sync_locked();
+  bool started = ota_remote_begin_check(&s_remote, id, now_ms());
+  xSemaphoreGive(s_remote_lock);
+  if (!started) return OTA_LOCAL_BUSY;
+  return publish_question(s_topic_check, buf);
+}
+
+ota_local_result_t ota_manager_request(void) {
+  if (!s_initialized || s_topic_request[0] == '\0' || !mqtt_manager_is_connected()) {
+    return OTA_LOCAL_OFFLINE;
+  }
+  if (device_busy()) return OTA_LOCAL_BUSY;
+  char id[OTA_ID_MAX];
+  new_request_id(id, sizeof(id), NULL);
+  if (id[0] == '\0') return OTA_LOCAL_FAILED;
+
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  remote_sync_locked();
+  bool asking = ota_remote_is_busy(&s_remote);
+  bool started = ota_remote_begin_request(&s_remote, id, now_ms());
+  char version[OTA_VERSION_MAX];
+  strlcpy(version, s_remote.version, sizeof(version));
+  xSemaphoreGive(s_remote_lock);
+  if (!started) return asking ? OTA_LOCAL_BUSY : OTA_LOCAL_NOTHING;
+
+  char buf[OTA_REMOTE_PAYLOAD_MAX];
+  if (ota_build_request(buf, sizeof(buf), id, version, s_running_version) == 0) {
+    xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+    ota_remote_fail(&s_remote, "internal", "No se pudo armar el pedido");
+    xSemaphoreGive(s_remote_lock);
+    return OTA_LOCAL_FAILED;
+  }
+  return publish_question(s_topic_request, buf);
+}
+
+void ota_manager_handle_available(const char *payload) {
+  if (!s_initialized || payload == NULL) return;
+  ota_available_t answer;
+  if (!ota_parse_available(payload, &answer)) {
+    ESP_LOGW(TAG, "ota/available ignored: unreadable message");
+    return;
+  }
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  bool mine = ota_remote_on_available(&s_remote, &answer, now_ms());
+  xSemaphoreGive(s_remote_lock);
+  if (!mine) {
+    ESP_LOGI(TAG, "ota/available %s is not the awaited answer: ignored", answer.request_id);
+    return;
+  }
+  ESP_LOGI(TAG, "ota/available %s: version %s%s%s", answer.request_id,
+           answer.has_version ? answer.version : "none", answer.has_error ? ", error " : "",
+           answer.has_error ? answer.error_code : "");
+}
+
+ota_local_result_t ota_manager_switch_slot(char *version, size_t size) {
+  if (version != NULL && size > 0) version[0] = '\0';
+  if (!s_initialized) return OTA_LOCAL_FAILED;
+  xSemaphoreTake(s_remote_lock, portMAX_DELAY);
+  remote_sync_locked();
+  bool asking = ota_remote_is_busy(&s_remote);
+  xSemaphoreGive(s_remote_lock);
+  if (asking || device_busy()) return OTA_LOCAL_BUSY;
+
+  ota_prev_candidate_t other;
+  const esp_partition_t *part = NULL;
+  other_slot(&other, &part);
+  if (part == NULL || ota_prev_decide(&other, s_running_version) != OTA_PREV_OFFER) {
+    ESP_LOGW(TAG, "Switch refused: no valid image of another version in the other slot");
+    return OTA_LOCAL_NOTHING;
+  }
+  char id[OTA_ID_MAX];
+  new_request_id(id, sizeof(id), OTA_SWITCH_PREFIX);
+  if (id[0] == '\0') return OTA_LOCAL_FAILED;
+
+  s_switch_pending = true; /* ota/command is answered busy from here */
+  ota_marker_t marker;
+  ota_switch_marker(&marker, id, &other, s_running_version);
+  if (!marker_store(&marker)) {
+    s_switch_pending = false;
+    return OTA_LOCAL_FAILED;
+  }
+  esp_err_t err = esp_ota_set_boot_partition(part); /* verifies the whole image first */
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Switch to %s failed: %s", part->label, esp_err_to_name(err));
+    marker_erase();
+    s_switch_pending = false;
+    return OTA_LOCAL_FAILED;
+  }
+  ESP_LOGI(TAG, "Boot partition switched to %s (%s), request %s: restart pending", part->label,
+           other.version, id);
+  if (version != NULL) strlcpy(version, other.version, size);
+  return OTA_LOCAL_OK;
 }

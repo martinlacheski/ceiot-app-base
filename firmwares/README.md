@@ -89,6 +89,24 @@ los 10 minutos (`FIRMWARE_DOWNLOAD_BASE_URL` en `backend/.env`, por ejemplo
 `http://192.168.1.100:18000`). El equipo verifica el tamaño y el SHA-256
 recibidos por MQTT con mTLS antes de instalar.
 
+### Desde el propio equipo
+
+La página web local del equipo (punto de acceso `WiFi_CEIoT_APP` o su IP en la
+red) tiene la sección **Firmware**:
+
+1. **Buscar actualización**: el equipo consulta a la plataforma (MQTT
+   `ota/check`) y muestra la última versión activa, o que ya tiene la última.
+2. **Actualizar a X**: se habilita solo si hay una versión disponible y el
+   equipo está conectado a la plataforma. El equipo la pide (`ota/request`) y
+   la plataforma inicia la actualización habitual: queda registrada en el
+   detalle del dispositivo igual que si se hubiera pedido desde la aplicación,
+   y el avance se ve también en la página del equipo.
+3. **Cambiar a X**: el equipo guarda dos versiones (particiones `ota_0` y
+   `ota_1`). Si la otra tiene una versión válida distinta, este botón reinicia
+   el equipo con ella; si no logra conectarse en 3 minutos, vuelve solo a la
+   actual. Es un cambio local: la plataforma no lo registra como
+   actualización, pero ve la versión nueva en la telemetría.
+
 Qué pasa si algo falla:
 
 | Situación | Resultado |

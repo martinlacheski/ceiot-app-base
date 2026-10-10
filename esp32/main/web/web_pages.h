@@ -31,7 +31,7 @@ static const char *HTML_HEAD =
 static const char *HTML_NAV =
     "<div class='container'><div class='nav'>"
     "<a href='/status'>Estado</a><a href='/wifi'>Wi-Fi</a><a href='/mqtt'>MQTT</a>"
-    "<a href='/device'>Dispositivo</a><a href='/password'>Seguridad</a>"
+    "<a href='/device'>Dispositivo</a><a href='/firmware'>Firmware</a><a href='/password'>Seguridad</a>"
     "<button onclick='logout()'>Cerrar sesión</button></div>";
 
 static const char *HTML_LOGIN =
@@ -115,6 +115,26 @@ static const char *VIEW_DEVICE =
     "y, si no hay ninguno, un DHT22 o DHT11 en GPIO4. El cambio se aplica sin reiniciar el equipo.</p>"
     "<button onclick='saveSensor()'>Guardar sensor</button><button onclick='detectSensor()'>Detectar de nuevo</button></div>";
 
+static const char *VIEW_FIRMWARE =
+    "<div class='card'><h1>Firmware</h1><dl>"
+    "<dt>Versión en uso</dt><dd id='fw-running'>-</dd>"
+    "<dt>Partición</dt><dd id='fw-partition'>-</dd>"
+    "<dt>Otra partición</dt><dd id='fw-other'>-</dd>"
+    "<dt>Plataforma (MQTT)</dt><dd id='fw-mqtt'>-</dd></dl></div>"
+    "<div class='card'><h2>Actualizaciones</h2>"
+    "<p>Última consulta: <strong id='fw-check'>-</strong></p>"
+    "<button id='fw-check-btn' onclick='otaCheck()'>Buscar actualización</button>"
+    "<button id='fw-update-btn' style='display:none' onclick='otaUpdate()'>Actualizar</button>"
+    "<p>Actualización: <strong id='fw-active'>-</strong></p>"
+    "<progress id='fw-progress' max='100' value='0' style='width:100%;display:none'></progress>"
+    "<p class='muted'>Necesita conexión con la plataforma. El equipo descarga la versión, verifica su tamaño y su SHA-256, "
+    "la instala y se reinicia. Si la versión nueva no logra conectarse en 3 minutos, vuelve sola a la anterior.</p></div>"
+    "<div class='card'><h2>Otra versión instalada</h2>"
+    "<p id='fw-switch-note'>-</p>"
+    "<button id='fw-switch-btn' style='display:none' onclick='otaSwitch()'>Cambiar</button>"
+    "<p class='muted'>El equipo guarda dos versiones (particiones ota_0 y ota_1). Cambiar reinicia el equipo con la otra; "
+    "si no logra conectarse en 3 minutos, vuelve solo a la actual. Este cambio es local y la plataforma no lo registra como actualización.</p></div>";
+
 static const char *VIEW_PASSWORD =
     "<div class='card'><h1>Seguridad</h1><form id='password-form'>"
     "<label>Contraseña actual</label><input id='current-pass' type='password' required>"
@@ -149,8 +169,37 @@ static const char *HTML_FOOTER =
     "if(!s||!s.last){add('Estado','Sin lecturas válidas todavía');return}"
     "add('Sensor',s.model);"
     "for(const k in s.last){const l=LABELS[k]||[k,''];add(l[0],s.last[k]+' '+l[1])}add('Antigüedad',dur(s.age_s))}"
-    "async function loadStatus(){if(!el('st-serial')&&!el('mqtt-uri')&&!el('serial')&&!el('wifi-saved'))return;"
-    "const d=await (await request('/status')).json();"
+    "const OTA_ST={accepted:'aceptada',rejected:'rechazada',downloading:'descargando',verifying:'verificando',installing:'instalando',"
+    "rebooting:'reiniciando',succeeded:'completada',failed:'falló',rolled_back:'volvió a la versión anterior'};"
+    "const IMG={valid:'válida',pending_verify:'sin validar',new:'nueva',invalid:'no válida',undefined:'grabada por cable'};"
+    "const SWITCH={same_version:'La otra partición tiene la misma versión.',not_valid:'La imagen de la otra partición no está validada.',no_image:'La otra partición está vacía.'};"
+    "function ago(s){s=Math.floor(s||0);return 'hace '+(s<60?s+' s':dur(s))}"
+    "function checkText(c){const P={idle:'Sin consultar',checking:'Consultando a la plataforma...',up_to_date:'El equipo tiene la última versión',"
+    "available:'Versión disponible: '+c.version,requesting:'Pidiendo la actualización a '+c.version+'...',updating:'Actualizando a '+c.version,"
+    "error:'Error: '+(c.error_message||c.error)};let t=P[c.phase]||c.phase;"
+    "if(c.answered_age_s!==null&&c.answered_age_s!==undefined&&c.phase!=='checking'&&c.phase!=='requesting')t+=' ('+ago(c.answered_age_s)+')';return t}"
+    "function updateText(u){return (OTA_ST[u.state]||u.state)+' '+u.target_version+(u.progress!==undefined?' ('+u.progress+' %)':'')+(u.error_message?': '+u.error_message:'')}"
+    "function renderOta(d){const o=d.ota;if(!o||!el('fw-running'))return;const c=o.check,ot=o.other,a=o.active,mq=d.mqtt.connected;"
+    "set('fw-running',o.running.version);set('fw-partition',o.running.partition+(o.running.validation_pending?' (validando la versión nueva)':''));"
+    "set('fw-other',ot.version?ot.version+' en '+ot.partition+' ('+(IMG[ot.state]||ot.state)+')':'Vacía ('+ot.partition+')');"
+    "set('fw-mqtt',mq?'Conectado':'Desconectado: no se puede consultar');set('fw-check',checkText(c));"
+    "const busy=['checking','requesting','updating'].includes(c.phase)||!!a||o.running.validation_pending;"
+    "el('fw-check-btn').disabled=busy||!mq;const ub=el('fw-update-btn');ub.style.display=c.phase==='available'?'':'none';"
+    "ub.textContent='Actualizar a '+(c.version||'');ub.disabled=busy||!mq;"
+    "set('fw-active',a?'En curso: '+updateText(a):(o.last?'Última: '+updateText(o.last):'Ninguna desde el encendido'));"
+    "const p=el('fw-progress');p.style.display=a?'':'none';p.value=a?(a.state==='downloading'?(a.progress||0):(['verifying','installing','rebooting'].includes(a.state)?100:0)):0;"
+    "const sb=el('fw-switch-btn');sb.style.display=ot.switch==='offer'?'':'none';sb.textContent='Cambiar a '+(ot.version||'');sb.disabled=busy;"
+    "set('fw-switch-note',ot.switch==='offer'?'La otra partición tiene la versión '+ot.version+'.':SWITCH[ot.switch]||'')}"
+    "async function otaPost(path){const r=await request('/ota/'+path,{method:'POST'});let m='';try{m=(await r.json()).message}catch(e){}"
+    "if(!r.ok)toast(m||'No se pudo completar la acción');await loadStatus();return r.ok}"
+    "async function otaCheck(){await otaPost('check')}"
+    "async function otaUpdate(){const v=el('fw-update-btn').textContent.replace('Actualizar a ','');"
+    "if(confirm('¿Actualizar a '+v+'? El equipo descarga la versión, la instala y se reinicia.'))await otaPost('request')}"
+    "async function otaSwitch(){const v=el('fw-switch-btn').textContent.replace('Cambiar a ','');"
+    "if(!confirm('¿Cambiar a '+v+'? El equipo se reinicia con esa versión y, si no logra conectarse en 3 minutos, vuelve solo a la actual.'))return;"
+    "if(await otaPost('switch'))toast('Reiniciando con '+v+'. Vuelva a ingresar en unos segundos.')}"
+    "async function loadStatus(){if(!el('st-serial')&&!el('mqtt-uri')&&!el('serial')&&!el('wifi-saved')&&!el('fw-running'))return;"
+    "const d=await (await request('/status')).json();renderOta(d);"
     "if(el('st-serial')){set('st-serial',d.serial||'Sin asignar');set('st-fw',d.device.firmware_version);"
     "set('st-sensor-setting',SENSORS[d.sensor.setting]||d.sensor.setting);set('st-sensor',sensorText(d.sensor));set('st-chip',chipText(d.sensor));showWarn('st-chip-warn',chipWarn(d.sensor));set('st-uptime',dur(d.device.uptime));"
     "set('st-heap',Math.round(d.device.heap_free/1024)+' KB');"
@@ -214,7 +263,7 @@ static const char *HTML_FOOTER =
     "async function restartDevice(){if(!confirm('¿Reiniciar el dispositivo?'))return;await request('/restart',{method:'POST'});toast('Reiniciando...')}"
     "async function resetDevice(){if(confirm('¿Restaurar los valores de fábrica? Se borrará la red Wi-Fi y la configuración.'))"
     "{await request('/reset-factory',{method:'POST'});toast('Restaurando y reiniciando...')}}"
-    "if(!el('login-form')){loadStatus();setInterval(loadStatus,5000)}"
+    "if(!el('login-form')){loadStatus();setInterval(loadStatus,el('fw-running')?2000:5000)}"
     "</script></body></html>";
 
 #endif // WEB_PAGES_H

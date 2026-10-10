@@ -16,6 +16,7 @@
 #include "telemetry.h"
 #include "time_sync.h"
 #include "network_manager.h"
+#include "ota_manager.h"
 #include "wifi_manager.h"
 #include <ctype.h>
 #include <math.h>
@@ -220,6 +221,17 @@ static esp_err_t device_page_handler(httpd_req_t *req) {
   return send_page(req, VIEW_DEVICE);
 }
 
+// GET /firmware
+static esp_err_t firmware_page_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/login");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+  }
+  return send_page(req, VIEW_FIRMWARE);
+}
+
 // GET /password
 static esp_err_t password_page_handler(httpd_req_t *req) {
   if (!is_authenticated(req)) {
@@ -251,6 +263,10 @@ static const httpd_uri_t page_device = {.uri = "/device",
                                         .method = HTTP_GET,
                                         .handler = device_page_handler,
                                         .user_ctx = NULL};
+static const httpd_uri_t page_firmware = {.uri = "/firmware",
+                                          .method = HTTP_GET,
+                                          .handler = firmware_page_handler,
+                                          .user_ctx = NULL};
 static const httpd_uri_t page_password = {.uri = "/password",
                                           .method = HTTP_GET,
                                           .handler = password_page_handler,
@@ -337,6 +353,90 @@ static void add_sensor_status(cJSON *root) {
   cJSON_AddNumberToObject(sensor, "age_s", (double)age_s);
 }
 
+static const char *img_state_name(ota_img_state_t state) {
+  switch (state) {
+  case OTA_IMG_VALID: return "valid";
+  case OTA_IMG_PENDING_VERIFY: return "pending_verify";
+  case OTA_IMG_NEW: return "new";
+  case OTA_IMG_INVALID: return "invalid";
+  case OTA_IMG_UNDEFINED:
+  default: return "undefined";
+  }
+}
+
+static const char *prev_reason_name(ota_prev_reason_t reason) {
+  switch (reason) {
+  case OTA_PREV_OFFER: return "offer";
+  case OTA_PREV_SAME_VERSION: return "same_version";
+  case OTA_PREV_NOT_VALID: return "not_valid";
+  case OTA_PREV_NO_IMAGE:
+  default: return "no_image";
+  }
+}
+
+static void add_update_status(cJSON *obj, const char *key, const ota_status_t *st) {
+  cJSON *u = cJSON_AddObjectToObject(obj, key);
+  cJSON_AddStringToObject(u, "request_id", st->request_id);
+  cJSON_AddStringToObject(u, "state", ota_state_name(st->state));
+  cJSON_AddStringToObject(u, "target_version", st->target_version);
+  if (st->state == OTA_ST_DOWNLOADING && st->progress >= 0) {
+    cJSON_AddNumberToObject(u, "progress", st->progress);
+  }
+  if (st->error != OTA_ERR_NONE) {
+    cJSON_AddStringToObject(u, "error", ota_error_code(st->error));
+    cJSON_AddStringToObject(u, "error_message", ota_error_message(st->error));
+  }
+}
+
+// "ota": running image and slot, the other slot, the last check / request
+// started from this UI and the update in flight (progress).
+static void add_ota_status(cJSON *root) {
+  ota_local_view_t v;
+  ota_manager_get_local_view(&v);
+  int64_t now_ms = esp_timer_get_time() / 1000;
+  cJSON *ota = cJSON_AddObjectToObject(root, "ota");
+  cJSON *running = cJSON_AddObjectToObject(ota, "running");
+  cJSON_AddStringToObject(running, "version", v.running_version);
+  cJSON_AddStringToObject(running, "partition", v.running_label);
+  cJSON_AddNumberToObject(running, "slot", v.running_slot);
+  cJSON_AddBoolToObject(running, "validation_pending", v.validation_pending);
+
+  cJSON *other = cJSON_AddObjectToObject(ota, "other");
+  cJSON_AddStringToObject(other, "partition", v.other_label);
+  cJSON_AddNumberToObject(other, "slot", v.other.slot);
+  if (v.other.readable) {
+    cJSON_AddStringToObject(other, "version", v.other.version);
+  } else {
+    cJSON_AddNullToObject(other, "version");
+  }
+  cJSON_AddStringToObject(other, "state", img_state_name(v.other.state));
+  cJSON_AddStringToObject(other, "switch", prev_reason_name(v.other_reason));
+
+  cJSON *check = cJSON_AddObjectToObject(ota, "check");
+  cJSON_AddStringToObject(check, "phase", ota_remote_phase_name(v.remote.phase));
+  if (v.remote.version[0] != '\0') {
+    cJSON_AddStringToObject(check, "version", v.remote.version);
+    cJSON_AddNumberToObject(check, "size", v.remote.size);
+  } else {
+    cJSON_AddNullToObject(check, "version");
+  }
+  if (v.remote.error_code[0] != '\0') {
+    cJSON_AddStringToObject(check, "error", v.remote.error_code);
+    cJSON_AddStringToObject(check, "error_message", v.remote.error_message);
+  }
+  if (v.remote.has_answer) {
+    cJSON_AddNumberToObject(check, "answered_age_s",
+                            (double)((now_ms - v.remote.answered_ms) / 1000));
+  } else {
+    cJSON_AddNullToObject(check, "answered_age_s");
+  }
+
+  if (v.has_active) add_update_status(ota, "active", &v.active);
+  else cJSON_AddNullToObject(ota, "active");
+  if (v.has_last) add_update_status(ota, "last", &v.last);
+  else cJSON_AddNullToObject(ota, "last");
+}
+
 static void add_time_status(cJSON *root) {
   time_t now;
   struct tm utc;
@@ -376,6 +476,7 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
 
   add_sensor_status(root);
   add_time_status(root);
+  add_ota_status(root);
 
   wifi_status_snapshot_t wifi;
   wifi_manager_get_status_snapshot(&wifi);
@@ -853,6 +954,82 @@ static esp_err_t api_restart_post_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
+// Answers a device-initiated OTA action: 202 when sent, 409 when it cannot
+// run now (MQTT down, busy, nothing to do), 500 on a failure.
+static esp_err_t send_ota_result(httpd_req_t *req, ota_local_result_t result,
+                                 const char *ok_message) {
+  const char *status = "202 Accepted";
+  const char *message = ok_message;
+  switch (result) {
+  case OTA_LOCAL_OK: break;
+  case OTA_LOCAL_OFFLINE:
+    status = "409 Conflict";
+    message = "MQTT no está conectado: la plataforma no se puede consultar";
+    break;
+  case OTA_LOCAL_BUSY:
+    status = "409 Conflict";
+    message = "Hay una consulta o una actualización en curso";
+    break;
+  case OTA_LOCAL_NOTHING:
+    status = "409 Conflict";
+    message = "No hay una versión disponible para esta acción";
+    break;
+  case OTA_LOCAL_FAILED:
+  default:
+    status = "500 Internal Server Error";
+    message = "No se pudo completar la acción";
+    break;
+  }
+  cJSON *root = cJSON_CreateObject();
+  cJSON_AddStringToObject(root, "status", result == OTA_LOCAL_OK ? "ok" : "error");
+  cJSON_AddStringToObject(root, "message", message);
+  char *body = cJSON_PrintUnformatted(root);
+  cJSON_Delete(root);
+  httpd_resp_set_status(req, status);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, body != NULL ? body : "{}", HTTPD_RESP_USE_STRLEN);
+  free(body);
+  return ESP_OK;
+}
+
+// POST /api/ota/check: ota/check to the platform; the answer appears in
+// /api/status (ota.check).
+static esp_err_t api_ota_check_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  return send_ota_result(req, ota_manager_check(), "Consultando a la plataforma");
+}
+
+// POST /api/ota/request: ota/request for the version offered by the last
+// check; the platform answers with the ordinary ota/command.
+static esp_err_t api_ota_request_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  return send_ota_result(req, ota_manager_request(), "Actualización pedida a la plataforma");
+}
+
+// POST /api/ota/switch: boot the image in the other OTA slot (local only),
+// then restart. The usual 180 s validation and rollback apply.
+static esp_err_t api_ota_switch_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  char version[OTA_VERSION_MAX];
+  ota_local_result_t result = ota_manager_switch_slot(version, sizeof(version));
+  send_ota_result(req, result, "Reiniciando con la otra versión instalada");
+  if (result == OTA_LOCAL_OK) {
+    ESP_LOGI(TAG, "Switching to %s: restarting", version);
+    xTaskCreate((TaskFunction_t)restart_device, "restart_task", 2048, NULL, 5,
+                NULL);
+  }
+  return ESP_OK;
+}
+
 // POST /api/mqtt/reset-certs
 static esp_err_t api_mqtt_reset_certs_post_handler(httpd_req_t *req) {
   if (!is_authenticated(req)) {
@@ -1084,7 +1261,7 @@ esp_err_t web_server_start(void) {
   }
 
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.max_uri_handlers = 32;
+  config.max_uri_handlers = 40; // 31 registered below
   config.stack_size = 8192; // Aumentar stack si es necesario
 
   ESP_LOGI(TAG, "Iniciando servidor web en puerto: %d", config.server_port);
@@ -1098,6 +1275,7 @@ esp_err_t web_server_start(void) {
     httpd_register_uri_handler(server, &page_mqtt);
     httpd_register_uri_handler(server, &page_device);
     httpd_register_uri_handler(server, &page_password);
+    httpd_register_uri_handler(server, &page_firmware);
 
     httpd_register_uri_handler(server, &favicon);
     httpd_register_uri_handler(server, &api_status);
@@ -1155,6 +1333,24 @@ esp_err_t web_server_start(void) {
         .handler = api_mqtt_reset_certs_post_handler,
         .user_ctx = NULL};
     httpd_register_uri_handler(server, &api_mqtt_reset_certs);
+
+    // Device-initiated OTA (Firmware page)
+    static const httpd_uri_t api_ota_check = {.uri = "/api/ota/check",
+                                              .method = HTTP_POST,
+                                              .handler = api_ota_check_post_handler,
+                                              .user_ctx = NULL};
+    httpd_register_uri_handler(server, &api_ota_check);
+    static const httpd_uri_t api_ota_request = {
+        .uri = "/api/ota/request",
+        .method = HTTP_POST,
+        .handler = api_ota_request_post_handler,
+        .user_ctx = NULL};
+    httpd_register_uri_handler(server, &api_ota_request);
+    static const httpd_uri_t api_ota_switch = {.uri = "/api/ota/switch",
+                                               .method = HTTP_POST,
+                                               .handler = api_ota_switch_post_handler,
+                                               .user_ctx = NULL};
+    httpd_register_uri_handler(server, &api_ota_switch);
 
     // Auth Management
     static const httpd_uri_t api_auth_password = {

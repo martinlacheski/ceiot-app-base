@@ -80,3 +80,11 @@ target_link_libraries(provisioning_logic PUBLIC sensor_logic cjson m)
 add_executable(test_provisioning_logic test_provisioning_logic.c)
 target_link_libraries(test_provisioning_logic provisioning_logic)
 add_test(NAME provisioning_logic COMMAND test_provisioning_logic)
+
+add_library(ota_remote STATIC ${FW}/ota/ota_remote.c)
+target_include_directories(ota_remote PUBLIC ${FW}/ota)
+target_link_libraries(ota_remote PUBLIC ota_logic cjson)
+
+add_executable(test_ota_remote test_ota_remote.c)
+target_link_libraries(test_ota_remote ota_remote)
+add_test(NAME ota_remote COMMAND test_ota_remote)

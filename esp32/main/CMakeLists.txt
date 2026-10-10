@@ -17,6 +17,7 @@ idf_component_register(
         "mqtt/mqtt_config_logic.c"
         "ota/ota_logic.c"
         "ota/ota_manager.c"
+        "ota/ota_remote.c"
         "provisioning/provisioning_logic.c"
         "sensor/sensor.c"
         "sensor/sensor_logic.c"

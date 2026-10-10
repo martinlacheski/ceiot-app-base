@@ -43,6 +43,7 @@ static char *s_client_key = NULL;
 static char s_lwt_msg[128] = "{\"serial\":\"\",\"status\":\"offline\"}";
 static char s_topic_telemetry[80];
 static char s_topic_ota_command[88];
+static char s_topic_ota_available[88];
 static char s_topic_status[72];
 static char s_topic_time[72];
 static char s_topic_time_request[80];
@@ -64,6 +65,7 @@ static bool s_use_tls = false;
 // ota/command reassembly: esp-mqtt hands a payload larger than its buffer in
 // several MQTT_EVENT_DATA chunks, only the first one carrying the topic.
 static char *s_ota_rx = NULL;
+#define OTA_AVAILABLE_MAX 512 // ota/available answers are well below this
 static int s_ota_rx_total = 0;
 // Client certificate CN vs serial (provisioning_logic.h), shown by the web UI.
 static prov_identity_t s_identity = PROV_IDENTITY_NO_CERT;
@@ -151,6 +153,8 @@ static void build_topics(const char *serial) {
            "iot/devices/%s/telemetry", identity);
   snprintf(s_topic_ota_command, sizeof(s_topic_ota_command),
            "iot/devices/%s/ota/command", identity);
+  snprintf(s_topic_ota_available, sizeof(s_topic_ota_available),
+           "iot/devices/%s/ota/available", identity);
   snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/status",
            identity);
   snprintf(s_topic_time, sizeof(s_topic_time), "iot/devices/%s/time",
@@ -220,6 +224,24 @@ static void handle_ota_command_chunk(esp_mqtt_event_handle_t event) {
   }
 }
 
+// iot/devices/{serial}/ota/available: a small JSON answer, taken only when it
+// arrives in a single chunk.
+static void handle_ota_available(esp_mqtt_event_handle_t event) {
+  if (event->topic_len != (int)strlen(s_topic_ota_available) ||
+      strncmp(event->topic, s_topic_ota_available, event->topic_len) != 0) {
+    return;
+  }
+  char payload[OTA_AVAILABLE_MAX + 1];
+  if (event->current_data_offset != 0 || event->data_len != event->total_data_len ||
+      event->data_len <= 0 || event->data_len > OTA_AVAILABLE_MAX) {
+    ESP_LOGW(TAG, "ota/available ignored: %d bytes", event->total_data_len);
+    return;
+  }
+  memcpy(payload, event->data, (size_t)event->data_len);
+  payload[event->data_len] = '\0';
+  ota_manager_handle_available(payload);
+}
+
 static void mqtt_event_handler(void *args, esp_event_base_t base,
                                int32_t event_id, void *event_data) {
   (void)args;
@@ -234,6 +256,8 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
     led_set_mqtt_connected(true);
     // Subscriptions on every (re)connection: the session is clean.
     esp_mqtt_client_subscribe(event->client, s_topic_ota_command, MQTT_QOS);
+    // Answers to the ota/check and ota/request of the web UI (Firmware page).
+    esp_mqtt_client_subscribe(event->client, s_topic_ota_available, MQTT_QOS);
     esp_mqtt_client_subscribe(event->client, s_topic_time, MQTT_QOS);
     if (publish_online() != ESP_OK) {
       ESP_LOGW(TAG, "Could not publish the online status");
@@ -262,6 +286,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
         event->data_len == event->total_data_len) {
       time_sync_on_mqtt_time(event->data, event->data_len);
     }
+    handle_ota_available(event);
     handle_ota_command_chunk(event);
     break;
   case MQTT_EVENT_ERROR:
