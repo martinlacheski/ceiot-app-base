@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CalendarDays, LayoutGrid, List } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
@@ -27,9 +27,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Range = "24h" | "7d" | "30d" | "custom";
 type View = "charts" | "daily" | "detailed";
+type DetailTab = "general" | "telemetry" | "firmware";
 interface CustomRange { from: Date; to: Date }
 
 const RANGE_DAYS = { "24h": 1, "7d": 7, "30d": 30 } as const;
@@ -59,6 +61,7 @@ function defaultCustomRange(): CustomRange {
 export default function DeviceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [range, setRange] = useState<Range>("24h");
   const [view, setView] = useState<View>("charts");
   const [custom, setCustom] = useState<CustomRange>(defaultCustomRange);
@@ -127,6 +130,17 @@ export default function DeviceDetailPage() {
   }
 
   const isOwner = device.environment?.ownerId === user?.id;
+  // The active tab lives in the URL (`?tab=`) so a reload or a shared link keeps it;
+  // a tab the user can't see falls back to "general".
+  const availableTabs: DetailTab[] = ["general", ...(canReadTelemetry ? ["telemetry" as const] : []), ...(user?.isAdmin ? ["firmware" as const] : [])];
+  const requestedTab = searchParams.get("tab") as DetailTab | null;
+  const activeTab: DetailTab = requestedTab && availableTabs.includes(requestedTab) ? requestedTab : "general";
+  const changeTab = (next: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (next === "general") params.delete("tab");
+    else params.set("tab", next);
+    setSearchParams(params, { replace: true });
+  };
 
   return (
     <div className="space-y-4">
@@ -134,71 +148,83 @@ export default function DeviceDetailPage() {
         title={device.name ?? "Dispositivo"}
         subtitle={device.environment?.name || device.serial}
       />
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-lg">Identificación y ubicación</CardTitle>
-            <CardDescription>
-              Últimos datos de conectividad reportados por el dispositivo.
-            </CardDescription>
+      <Tabs value={activeTab} onValueChange={changeTab}>
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          {canReadTelemetry && <TabsTrigger value="telemetry">Telemetría</TabsTrigger>}
+          {user?.isAdmin && <TabsTrigger value="firmware">Firmware (OTA)</TabsTrigger>}
+        </TabsList>
+        <TabsContent value="general" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-lg">Identificación y ubicación</CardTitle>
+                <CardDescription>
+                  Últimos datos de conectividad reportados por el dispositivo.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-3">
+                <LiveIndicator />
+                <DevicePresenceBadge brokerConnected={device.brokerConnected} />
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-sm font-medium">MAC</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatDeviceMac(device)}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">Último GPS</p>
+                <p className="text-sm text-muted-foreground">
+                  {formatDeviceGpsSummary(device)}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+          <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} deviceTypeId={device.deviceTypeId} />
+          <DeviceGuestManagementCard deviceId={id} isOwner={isOwner} />
+        </TabsContent>
+        {canReadTelemetry && <TabsContent value="telemetry" className="space-y-4">
+          <div role="group" aria-label="Vista de las lecturas" className="grid w-full grid-cols-3 items-center gap-1 rounded-md border p-1 sm:inline-grid sm:w-auto">
+            {VIEWS.map(({ id: viewId, label, Icon }) => <Button key={viewId} type="button"
+              className="h-auto min-h-11 flex-col gap-1 whitespace-normal px-1 py-2 text-xs leading-tight sm:flex-row sm:gap-2 sm:px-3 sm:text-sm"
+              variant={view === viewId ? "secondary" : "ghost"} aria-pressed={view === viewId} onClick={() => changeView(viewId)}>
+              <Icon data-icon="inline-start" />{label}
+            </Button>)}
           </div>
-          <div className="flex items-center gap-3">
-            <LiveIndicator />
-            <DevicePresenceBadge brokerConnected={device.brokerConnected} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <label className="flex items-center gap-2 text-sm" htmlFor="telemetry-range">Período de lecturas
+              <select id="telemetry-range" className="h-11 rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => changeRange(event.target.value as Range)}>
+                <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option><option value="custom">Personalizado</option>
+              </select>
+            </label>
+            {range === "custom" && <DateRangePicker key={`${custom.from.toDateString()}|${custom.to.toDateString()}`}
+              initialDateFrom={custom.from} initialDateTo={custom.to} align="start" locale="es" showCompare={false} mobileLayout
+              triggerClassName="w-full sm:w-auto"
+              onUpdate={({ range: picked }) => {
+                const next = { from: picked.from ?? custom.from, to: picked.to ?? picked.from ?? custom.to };
+                setCustom(next);
+                changeRange("custom", next);
+              }} />}
           </div>
-        </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <p className="text-sm font-medium">MAC</p>
-            <p className="text-sm text-muted-foreground">
-              {formatDeviceMac(device)}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm font-medium">Último GPS</p>
-            <p className="text-sm text-muted-foreground">
-              {formatDeviceGpsSummary(device)}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-      {user?.isAdmin && <DeviceFirmwareSection device={device} />}
-      <DeviceSensorsSection deviceId={id} canManage={Boolean(user?.isAdmin || isOwner)} deviceTypeId={device.deviceTypeId} />
-      {canReadTelemetry && <>
-        <div role="group" aria-label="Vista de las lecturas" className="grid w-full grid-cols-3 items-center gap-1 rounded-md border p-1 sm:inline-grid sm:w-auto">
-          {VIEWS.map(({ id: viewId, label, Icon }) => <Button key={viewId} type="button"
-            className="h-auto min-h-11 flex-col gap-1 whitespace-normal px-1 py-2 text-xs leading-tight sm:flex-row sm:gap-2 sm:px-3 sm:text-sm"
-            variant={view === viewId ? "secondary" : "ghost"} aria-pressed={view === viewId} onClick={() => changeView(viewId)}>
-            <Icon data-icon="inline-start" />{label}
-          </Button>)}
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-          <label className="flex items-center gap-2 text-sm" htmlFor="telemetry-range">Período de lecturas
-            <select id="telemetry-range" className="h-11 rounded-md border bg-background px-3 py-2" value={range} onChange={(event) => changeRange(event.target.value as Range)}>
-              <option value="24h">Últimas 24 horas</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option><option value="custom">Personalizado</option>
-            </select>
-          </label>
-          {range === "custom" && <DateRangePicker key={`${custom.from.toDateString()}|${custom.to.toDateString()}`}
-            initialDateFrom={custom.from} initialDateTo={custom.to} align="start" locale="es" showCompare={false} mobileLayout
-            triggerClassName="w-full sm:w-auto"
-            onUpdate={({ range: picked }) => {
-              const next = { from: picked.from ?? custom.from, to: picked.to ?? picked.from ?? custom.to };
-              setCustom(next);
-              changeRange("custom", next);
-            }} />}
-        </div>
-        {view === "charts" && <EnvironmentalReadingsSection
-          latest={latestReadings}
-          history={historyReadings}
-          latestLoading={latestReadingsLoading}
-          historyLoading={historyReadingsLoading}
-          latestError={latestReadingsError}
-          historyError={historyReadingsError}
-        />}
-        {view === "daily" && tablePeriod && <DeviceDailySummary device={device} start={tablePeriod.start} end={tablePeriod.end} />}
-        {view === "detailed" && tablePeriod && <DeviceDetailedReadings device={device} start={tablePeriod.start} end={tablePeriod.end} />}
-      </>}
-      <DeviceGuestManagementCard deviceId={id} isOwner={isOwner} />
+          {view === "charts" && <EnvironmentalReadingsSection
+            latest={latestReadings}
+            history={historyReadings}
+            latestLoading={latestReadingsLoading}
+            historyLoading={historyReadingsLoading}
+            latestError={latestReadingsError}
+            historyError={historyReadingsError}
+          />}
+          {view === "daily" && tablePeriod && <DeviceDailySummary device={device} start={tablePeriod.start} end={tablePeriod.end} />}
+          {view === "detailed" && tablePeriod && <DeviceDetailedReadings device={device} start={tablePeriod.start} end={tablePeriod.end} />}
+        </TabsContent>}
+        {/* Mounted only while active, so the firmware queries never run in the background. */}
+        {user?.isAdmin && <TabsContent value="firmware">
+          <DeviceFirmwareSection device={device} />
+        </TabsContent>}
+      </Tabs>
     </div>
   );
 }

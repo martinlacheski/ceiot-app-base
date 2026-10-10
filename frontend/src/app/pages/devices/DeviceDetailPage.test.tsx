@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import DeviceDetailPage from "./DeviceDetailPage";
@@ -24,7 +25,8 @@ const device = { id: "device-1", name: "Sensor norte", serial: "IOT-0000-0001", 
 const sensors = [{ key: "dht22", sensorCode: "dht22", sensorName: "DHT22", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] }, { key: "bmp280", sensorCode: "bmp280", sensorName: "BMP280", variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }] }];
 const telemetry = { items: [{ time: "2026-09-21T12:30:00Z", values: { dht22: { temperature: 23.4 }, bmp280: { temperature: 22.9 } } }], total: 1, sensors };
 const result = (data?: unknown, opts: { isLoading?: boolean; isError?: boolean } = {}) => ({ data, isLoading: opts.isLoading ?? false, isError: opts.isError ?? false });
-function renderPage() { return render(<MemoryRouter initialEntries={["/app/devices/device-1"]}><Routes><Route path="/app/devices/:id" element={<DeviceDetailPage />} /></Routes></MemoryRouter>); }
+const page = (entry: string) => <MemoryRouter initialEntries={[entry]}><Routes><Route path="/app/devices/:id" element={<DeviceDetailPage />} /></Routes></MemoryRouter>;
+function renderPage(entry = "/app/devices/device-1?tab=telemetry") { return render(page(entry)); }
 beforeEach(() => { vi.clearAllMocks(); state.isAdmin = false; state.latest = result({ items: [], total: 0, sensors: [] }); state.history = result({ items: [], total: 0, sensors: [] }); mocks.useQuery.mockImplementation((options: { queryKey: readonly unknown[] }) => options.queryKey[0] === "device" ? result(device) : options.queryKey[1] === "latest" ? state.latest : state.history); });
 
 describe("DeviceDetailPage", () => {
@@ -42,21 +44,27 @@ describe("DeviceDetailPage", () => {
     expect(mocks.getHistory).toHaveBeenCalledWith("device-1", "2026-09-20T12:30:00.000Z", "2026-09-21T12:30:00.000Z");
     vi.useRealTimers();
   });
-  it("shows sensor management and grouped measurements", () => {
+  it("shows sensor management in General and grouped measurements in Telemetría", () => {
     state.latest = result(telemetry); state.history = result(telemetry);
-    renderPage();
+    const { unmount } = renderPage("/app/devices/device-1");
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Sensores del dispositivo")).toBeInTheDocument();
+    expect(screen.getByText("Identificación y ubicación")).toBeInTheDocument();
+    expect(mocks.guestCard).toHaveBeenCalledWith({ deviceId: "device-1", isOwner: true });
+    expect(screen.queryByText(/23,4 °C/)).toBeNull();
+    unmount();
+    renderPage();
+    expect(screen.queryByText("Sensores del dispositivo")).toBeNull();
     expect(screen.getByText(/23,4 °C/)).toBeInTheDocument();
     expect(screen.getByText(/22,9 °C/)).toBeInTheDocument();
     expect(screen.getByTestId("chart-temperature")).toHaveTextContent("2 series");
-    expect(mocks.guestCard).toHaveBeenCalledWith({ deviceId: "device-1", isOwner: true });
   });
   it("shows honest loading, error and empty states", () => {
     const view = renderPage();
     expect(screen.getByText("Aún no hay lecturas ambientales.")).toBeInTheDocument();
-    state.latest = result(undefined, { isLoading: true }); view.rerender(<MemoryRouter initialEntries={["/app/devices/device-1"]}><Routes><Route path="/app/devices/:id" element={<DeviceDetailPage />} /></Routes></MemoryRouter>);
+    state.latest = result(undefined, { isLoading: true }); view.rerender(page("/app/devices/device-1?tab=telemetry"));
     expect(screen.getByText("Cargando valores actuales…")).toBeInTheDocument();
-    state.latest = result(undefined, { isError: true }); state.history = result(); view.rerender(<MemoryRouter initialEntries={["/app/devices/device-1"]}><Routes><Route path="/app/devices/:id" element={<DeviceDetailPage />} /></Routes></MemoryRouter>);
+    state.latest = result(undefined, { isError: true }); state.history = result(); view.rerender(page("/app/devices/device-1?tab=telemetry"));
     expect(screen.getByRole("alert")).toHaveTextContent("No se pudieron cargar los valores actuales.");
   });
   it("switches between charts, daily summary and detailed view for the selected period", () => {
@@ -91,12 +99,33 @@ describe("DeviceDetailPage", () => {
       end: new Date(2026, 8, 3, 23, 59, 59, 999).toISOString() }));
   });
 
-  it("offers the firmware update only to administrators", () => {
-    const { unmount } = renderPage();
+  it("switches between the General, Telemetría and Firmware (OTA) tabs", async () => {
+    state.isAdmin = true; state.latest = result(telemetry); state.history = result(telemetry);
+    const user = userEvent.setup();
+    renderPage("/app/devices/device-1");
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByText("Firmware de device-1")).toBeNull();
-    unmount();
+    await user.click(screen.getByRole("tab", { name: "Telemetría" }));
+    expect(screen.getByRole("tabpanel", { name: "Telemetría" })).toHaveTextContent("23,4 °C");
+    expect(screen.queryByText("Sensores del dispositivo")).toBeNull();
+    await user.click(screen.getByRole("tab", { name: "Firmware (OTA)" }));
+    expect(screen.getByRole("tabpanel", { name: "Firmware (OTA)" })).toHaveTextContent("Firmware de device-1");
+    await user.click(screen.getByRole("tab", { name: "General" }));
+    expect(screen.getByText("Sensores del dispositivo")).toBeInTheDocument();
+    expect(screen.queryByText("Firmware de device-1")).toBeNull();
+  });
+
+  it("opens the tab requested in the URL", () => {
     state.isAdmin = true;
-    renderPage();
+    renderPage("/app/devices/device-1?tab=firmware");
+    expect(screen.getByRole("tab", { name: "Firmware (OTA)" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Firmware de device-1")).toBeInTheDocument();
+  });
+
+  it("hides the Firmware (OTA) tab from non-administrators, even when requested in the URL", () => {
+    renderPage("/app/devices/device-1?tab=firmware");
+    expect(screen.queryByRole("tab", { name: "Firmware (OTA)" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Firmware de device-1")).toBeNull();
   });
 });
