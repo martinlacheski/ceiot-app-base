@@ -55,7 +55,8 @@ export function EnvironmentReadingsChart({ variable, series, points, range, aria
         <ChartTooltip
           content={(
             <ChartTooltipContent
-              indicator="line"
+              // "dot" keeps the time label on one-item payloads; the formatter draws its own series marker.
+              indicator="dot"
               labelFormatter={(_, payload) => {
                 const time = payload?.[0]?.payload?.time;
                 return typeof time === "number" ? format(new Date(time), "PP p", { locale: es }) : null;

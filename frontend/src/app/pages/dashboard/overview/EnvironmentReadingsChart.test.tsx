@@ -83,4 +83,16 @@ describe("EnvironmentReadingsChart", () => {
     expect(screen.getByText("23,46 °C")).toBeInTheDocument();
     expect(formatter(null, "s1", { color: "red" })).toBeNull();
   });
+
+  it("keeps the tooltip time visible when a single series has a value", () => {
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
+
+    // shadcn nests (and with a custom formatter drops) the label for one-item payloads unless the indicator is "dot".
+    const { indicator, labelFormatter } = mocks.tooltip.mock.calls[0][0] as {
+      indicator: string;
+      labelFormatter: (label: unknown, payload: { payload: { time: number } }[]) => ReactNode;
+    };
+    expect(indicator).toBe("dot");
+    expect(labelFormatter(undefined, [{ payload: { time: Date.parse("2026-10-10T12:30:00Z") } }])).toBeTruthy();
+  });
 });
