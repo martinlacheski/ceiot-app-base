@@ -49,10 +49,12 @@ See `mqtt/README.md` for how to issue them with the project PKI scripts.
   step logs `LittleFS image files: ...`. The list is fixed when CMake runs:
   `idf.py reconfigure` after staging another device.
 - At boot, `serial.txt` and `provisioning.json` (`mqtt_uri`, `mqtt_port`,
-  `mqtt_use_tls`) fill the NVS `factory` namespace when it does not have those
-  values yet (DVEM approach, `main/web/nvs_manager.c`), and from there the
-  active `storage` settings: a freshly flashed board connects with no web
-  visit. Reprovisioning a used board needs `idf.py erase-flash`.
+  `mqtt_use_tls` and the optional `sensor`: `auto` or a model) fill the NVS
+  `factory` namespace when it does not have those values yet (DVEM approach,
+  `main/web/nvs_manager.c`), and from there the active `storage` settings
+  that are still missing: a freshly flashed board connects with no web
+  visit. An invalid `sensor` is logged and ignored (the broker profile still
+  applies). Reprovisioning a used board needs `idf.py erase-flash`.
 - Identity check: the client certificate CN must equal the serial (the broker
   maps the CN to the MQTT username). On a mismatch, or an unreadable CN, the
   firmware logs an error, does not start MQTT over TLS, starts the
@@ -80,40 +82,66 @@ rolls back an image that does not validate itself. An OTA image must not
 exceed **1966080 bytes** (0x1E0000): the backend rejects larger uploads
 (`MAX_IMAGE_BYTES`) and the device answers `image_too_large`.
 
-## Sensor variant
+## Sensor model (runtime setting)
 
-Each image supports exactly one sensor. The default is set in
-`main/config/config.h`:
+One image drives the four supported sensors: the DHT11, DHT22, BMP280 and
+BME280 drivers are always linked. Which one is used is a runtime setting kept
+in NVS (`storage` namespace), so it survives restarts and OTA updates:
 
-```c
-#define SENSOR_MODEL SENSOR_DHT22   // SENSOR_DHT11, SENSOR_DHT22, SENSOR_BMP280, SENSOR_BME280
-```
+| NVS key (`storage`) | Content |
+| --- | --- |
+| `sensor_model` | `auto` (default when absent), `dht11`, `dht22`, `bmp280` or `bme280` |
+| `sensor_detected` | model found by the last autodetection (only used with `auto`) |
 
-A build can override it without editing files (`main/CMakeLists.txt` maps
-`CEIOT_SENSOR` to `-DSENSOR_MODEL=SENSOR_<VARIANT>`):
+The setting comes from the web UI ("Dispositivo" page: model selector,
+"Guardar sensor", "Detectar de nuevo") or, at the first boot, from
+`provisioning.json` (`"sensor"`, written by `provisioning/provision.py`). A
+change from the web UI is applied by the telemetry task within seconds, no
+restart. Pins, I2C address and clock and the telemetry period stay in
+`main/config/config.h`.
 
-```sh
-idf.py -B build-dht11 -DCEIOT_SENSOR=dht11 build    # dht11 | dht22 | bmp280 | bme280
-```
-
-`CEIOT_SENSOR` is a CMake cache variable, so it sticks to its build
-directory: use one directory per variant (`build-<variant>` is gitignored) so
-variants never mix, or pass `-DCEIOT_SENSOR=` to return to the `config.h`
-default in the same directory.
-
-| Variant | Wiring (defaults, editable in `config.h`) | Telemetry key | Variables |
+| Model | Wiring (defaults, editable in `config.h`) | Telemetry key | Variables |
 | --- | --- | --- | --- |
 | DHT11 | data GPIO4 | `dht11` | `temperature`, `relative_humidity` |
 | DHT22 / AM2302 | data GPIO4 | `dht22` | `temperature`, `relative_humidity` |
-| BMP280 | I2C SDA GPIO21, SCL GPIO22, address 0x76 | `bmp280` | `temperature`, `pressure` |
-| BME280 | I2C SDA GPIO21, SCL GPIO22, address 0x76 | `bme280` | `temperature`, `relative_humidity`, `pressure` |
+| BMP280 | I2C SDA GPIO21, SCL GPIO22, address 0x76 or 0x77 | `bmp280` | `temperature`, `pressure` |
+| BME280 | I2C SDA GPIO21, SCL GPIO22, address 0x76 or 0x77 | `bme280` | `temperature`, `relative_humidity`, `pressure` |
 
+The telemetry key is the model in use (manual setting or autodetected).
 Units: °C, % and hPa. The keys and variables match the backend sensor
 catalog (`backend/app/api/sensor_catalog/constants.py`). Drivers come from
 esp-idf-lib (`esp-idf-lib/dht`, `esp-idf-lib/bmp280`, which also drives the
-BME280). A failed or implausible value (NaN, out of the sensor range, the
-all-zero DHT frame) is never published: that variable is left out, and when
-nothing valid remains the cycle is skipped.
+BME280; the I2C bus runs at 100 kHz). A failed or implausible value (NaN, out
+of the sensor range, the all-zero DHT frame) is never published: that
+variable is left out (a DHT frame with one value out of range is dropped
+whole), and when nothing valid remains the cycle is skipped. Every DHT read
+logs its raw values.
+
+### Autodetection
+
+With the setting `auto`, the firmware detects the sensor at the first boot
+(or after "Detectar de nuevo", or when switching from a manual model back to
+`auto`) and stores the result in `sensor_detected`, so later boots do not
+detect again:
+
+1. **I2C** (SDA 21, SCL 22, 100 kHz): an address-only probe at 0x76, then
+   0x77; the first chip that answers has its ID register (0xD0) read:
+   `0x60` → BME280, `0x58` (also `0x56`/`0x57`, early BMP280 samples) →
+   BMP280. Any other ID is ignored. The probe releases the I2C device (and the
+   bus) when nothing answers.
+2. **DHT on GPIO4**, read as DHT22 (AM2301 decoding): a valid frame with
+   humidity 0-100 % and temperature -40..80 °C → DHT22. Otherwise, at least
+   2 s later, read as DHT11: integer humidity 5-95 % and temperature 0..50 °C
+   → DHT11. A DHT11 frame decoded as DHT22 gives a humidity far above 100 %
+   (its integer byte lands in the high byte), which tells the two apart.
+3. Nothing found: the log says so, nothing is published, the status page
+   shows "Sin sensor detectado" and the detection is retried every
+   `SENSOR_DETECT_RETRY_SEC` (60 s) while the setting is `auto`.
+
+The decision rules are pure C (`main/sensor/sensor_logic.c`, host-tested); a
+manual model skips the detection. The esp-idf-lib BMP280 driver only accepts
+the chip IDs `0x58` and `0x60`: an early-sample BMP280 (`0x56`/`0x57`) is
+detected but then fails to initialize (logged every cycle).
 
 ## MQTT contract
 
@@ -220,8 +248,8 @@ of internal RAM. Neither applies here: there is no PSRAM, and the classic
 ESP32 AES accelerator does not use the DMA bounce buffer that failed on the
 S3. Instead everything stays in internal RAM and the budget is checked:
 
-- Static DRAM use (DHT22 build): 45.6 KB of 180.7 KB (`idf.py size`), which
-  leaves ~135 KB for the heap before Wi-Fi, lwIP, task stacks and the MQTT
+- Static DRAM use (single image, all sensor drivers): 45.1 KB of 176.5 KB
+  (`idf.py size`), which leaves ~131 KB for the heap before Wi-Fi, lwIP, task stacks and the MQTT
   client. Expected free heap with Wi-Fi, the web server and the MQTT mTLS
   session up: roughly 90-120 KB (to be confirmed on the board).
 - MQTT mTLS with `CONFIG_MBEDTLS_DYNAMIC_BUFFER` and freed config data: about
@@ -252,12 +280,16 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
   when no Wi-Fi network is saved. It stays up until restart, another
   3 s hold of BOOT, or "Desactivar punto de acceso" on the status page.
 - Web login: `admin` / `admin` by default (change it under "Seguridad").
-  Pages: status (serial, firmware, sensor and last reading, Wi-Fi, AP, MQTT,
-  certificates, time), Wi-Fi scan/connect/forget, MQTT broker + certificate
-  upload, device serial, password, restart and factory reset.
+  Pages: status (serial, firmware, sensor setting and sensor in use
+  —autodetected or manual—, last reading, Wi-Fi, AP, MQTT, certificates,
+  time), Wi-Fi scan/connect/forget, MQTT broker + certificate upload, device
+  serial and sensor model ("Detectar de nuevo"), password, restart and
+  factory reset.
 - Factory reset (button or web) erases the Wi-Fi network, the MQTT broker
-  settings and the web password, and restores the serial, the certificates
-  and the TLS flag from the NVS `factory` snapshot.
+  settings, the sensor setting and the web password, and restores the
+  serial, the certificates, the TLS flag and the provisioned broker and
+  sensor setting from the NVS `factory` snapshot (no provisioned sensor:
+  `auto`, detected again).
 - Status LED (GPIO2): fast blink = AP active; solid = MQTT connected; slow
   blink = Wi-Fi connected, MQTT not yet; short flash every 2 s = offline.
   While BOOT is held: solid from 3 s (release to toggle the AP), very fast
@@ -265,8 +297,9 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
 
 ## Host tests
 
-The pure logic (sensor rules, payloads, BOOT button, time fallback, MQTT
-settings, OTA rules) is tested on the PC, no board needed. cJSON is taken from `managed_components/` (run `idf.py build` once):
+The pure logic (sensor rules, sensor setting and autodetection decision,
+payloads, BOOT button, time fallback, MQTT settings, OTA rules, provisioning
+files) is tested on the PC, no board needed. cJSON is taken from `managed_components/` (run `idf.py build` once):
 
 ```sh
 cmake -S esp32/tests -B /tmp/ceiot-fw-tests

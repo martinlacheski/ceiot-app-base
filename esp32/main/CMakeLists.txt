@@ -55,23 +55,9 @@ idf_component_register(
         "lwip"
 )
 
-# Sensor variant: config/config.h holds the default (SENSOR_MODEL), a build
-# can override it without editing files:
-#   idf.py -B build-dht11 -DCEIOT_SENSOR=dht11 build
-# CEIOT_SENSOR is a CMake cache variable, so it sticks to its build directory:
-# use one build directory per variant (or `-DCEIOT_SENSOR=` to go back to the
-# config.h default in the same directory).
-set(CEIOT_SENSOR "" CACHE STRING "Sensor variant override: dht11, dht22, bmp280 or bme280 (empty = config.h)")
-if(CEIOT_SENSOR)
-    string(TOUPPER "${CEIOT_SENSOR}" _ceiot_sensor)
-    if(NOT _ceiot_sensor MATCHES "^(DHT11|DHT22|BMP280|BME280)$")
-        message(FATAL_ERROR "CEIOT_SENSOR=${CEIOT_SENSOR}: expected dht11, dht22, bmp280 or bme280")
-    endif()
-    target_compile_definitions(${COMPONENT_LIB} PRIVATE SENSOR_MODEL=SENSOR_${_ceiot_sensor})
-    message(STATUS "CEIoT sensor variant: ${_ceiot_sensor} (CEIOT_SENSOR override)")
-else()
-    message(STATUS "CEIoT sensor variant: config/config.h default (SENSOR_MODEL)")
-endif()
+# One image for every sensor: the DHT11, DHT22, BMP280 and BME280 drivers
+# are always linked and the model is a runtime setting (NVS, autodetected by
+# default; see sensor/sensor.h).
 
 # LittleFS image for the `storage` partition with the device mTLS material.
 # The certificates are never committed (esp32/cert/ is gitignored): copy

@@ -4,8 +4,10 @@
 
 #include "sensor_logic.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stddef.h>
+#include <string.h>
 
 typedef struct {
   float min;
@@ -111,4 +113,98 @@ bool sensor_logic_sanitize(int model, sensor_reading_t *reading) {
 
   return reading->has_temperature || reading->has_relative_humidity ||
          reading->has_pressure;
+}
+
+bool sensor_logic_is_model(int model) {
+  return model >= SENSOR_DHT11 && model <= SENSOR_BME280;
+}
+
+static bool equals_ignore_case(const char *a, const char *b) {
+  while (*a && *b) {
+    if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return false;
+    a++;
+    b++;
+  }
+  return *a == *b;
+}
+
+bool sensor_logic_parse_setting(const char *text, int *setting) {
+  if (text == NULL || setting == NULL) return false;
+  if (equals_ignore_case(text, "auto")) {
+    *setting = SENSOR_SETTING_AUTO;
+    return true;
+  }
+  for (int model = SENSOR_DHT11; model <= SENSOR_BME280; model++) {
+    if (equals_ignore_case(text, sensor_logic_model_key(model))) {
+      *setting = model;
+      return true;
+    }
+  }
+  return false;
+}
+
+const char *sensor_logic_setting_key(int setting) {
+  if (setting == SENSOR_SETTING_AUTO) return "auto";
+  return sensor_logic_model_key(setting);
+}
+
+int sensor_logic_model_from_key(const char *key) {
+  if (key == NULL) return SENSOR_NONE;
+  for (int model = SENSOR_DHT11; model <= SENSOR_BME280; model++) {
+    if (strcmp(key, sensor_logic_model_key(model)) == 0) return model;
+  }
+  return SENSOR_NONE;
+}
+
+int sensor_logic_effective_model(int setting, int detected) {
+  if (setting == SENSOR_SETTING_AUTO) {
+    return sensor_logic_is_model(detected) ? detected : SENSOR_NONE;
+  }
+  return sensor_logic_is_model(setting) ? setting : SENSOR_NONE;
+}
+
+int sensor_logic_model_from_chip_id(uint8_t chip_id) {
+  switch (chip_id) {
+  case 0x60:
+    return SENSOR_BME280;
+  case 0x56:
+  case 0x57:
+  case 0x58:
+    return SENSOR_BMP280;
+  default:
+    return SENSOR_NONE;
+  }
+}
+
+bool sensor_logic_dht22_plausible(float temperature, float relative_humidity) {
+  if (!in_range(temperature, (range_t){-40.0f, 80.0f}) ||
+      !in_range(relative_humidity, (range_t){0.0f, 100.0f})) {
+    return false;
+  }
+  return !(temperature == 0.0f && relative_humidity == 0.0f);
+}
+
+bool sensor_logic_dht11_plausible(float temperature, float relative_humidity) {
+  return in_range(temperature, (range_t){0.0f, 50.0f}) &&
+         in_range(relative_humidity, (range_t){5.0f, 95.0f}) &&
+         fabsf(relative_humidity - roundf(relative_humidity)) < 0.05f;
+}
+
+int sensor_logic_detect(const sensor_probe_t *probe) {
+  if (probe == NULL) return SENSOR_NONE;
+  if (probe->i2c_answered) {
+    int model = sensor_logic_model_from_chip_id(probe->i2c_chip_id);
+    if (model != SENSOR_NONE) return model;
+  }
+  if (probe->dht22.answered &&
+      sensor_logic_dht22_plausible(probe->dht22.temperature,
+                                   probe->dht22.relative_humidity)) {
+    return SENSOR_DHT22;
+  }
+  if (probe->dht11.answered &&
+      sensor_logic_dht11_plausible(probe->dht11.temperature,
+                                   probe->dht11.relative_humidity)) {
+    return SENSOR_DHT11;
+  }
+  return SENSOR_NONE;
 }

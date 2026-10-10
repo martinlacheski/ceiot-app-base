@@ -28,7 +28,7 @@ target_include_directories(cjson PUBLIC ${CJSON_DIR})
 target_compile_options(cjson PRIVATE -w)
 
 add_library(sensor_logic STATIC ${FW}/sensor/sensor_logic.c)
-target_include_directories(sensor_logic PUBLIC ${FW}/sensor ${FW}/config)
+target_include_directories(sensor_logic PUBLIC ${FW}/sensor)
 target_link_libraries(sensor_logic PUBLIC m)
 
 add_executable(test_sensor_logic test_sensor_logic.c)
@@ -75,7 +75,7 @@ add_test(NAME mqtt_config_logic COMMAND test_mqtt_config_logic)
 
 add_library(provisioning_logic STATIC ${FW}/provisioning/provisioning_logic.c)
 target_include_directories(provisioning_logic PUBLIC ${FW}/provisioning)
-target_link_libraries(provisioning_logic PUBLIC cjson m)
+target_link_libraries(provisioning_logic PUBLIC sensor_logic cjson m)
 
 add_executable(test_provisioning_logic test_provisioning_logic.c)
 target_link_libraries(test_provisioning_logic provisioning_logic)

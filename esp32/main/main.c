@@ -21,7 +21,6 @@
 #include "nvs_manager.h"
 #include "ota_manager.h"
 #include "pins_config.h"
-#include "sensor.h"
 #include "telemetry.h"
 #include "time_sync.h"
 #include "watchdog.h"
@@ -98,8 +97,8 @@ static void button_task(void *arg) {
 
 void app_main(void) {
   const esp_app_desc_t *app = esp_app_get_description();
-  ESP_LOGI(TAG, "CEIoT environmental device %s (%s), ESP-IDF %s", app->version,
-           sensor_name(), esp_get_idf_version());
+  ESP_LOGI(TAG, "CEIoT environmental device %s, ESP-IDF %s", app->version,
+           esp_get_idf_version());
 
   // 1. Storage: NVS, LittleFS (certificates) and the factory snapshot
   ESP_ERROR_CHECK(nvs_manager_init());

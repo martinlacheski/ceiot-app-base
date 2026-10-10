@@ -21,6 +21,7 @@
 #define PROV_SERIAL_MAX 32
 #define PROV_HOST_MAX 128
 #define PROV_PORT_MAX 8
+#define PROV_SENSOR_MAX 8
 
 /* Broker profile from provisioning.json, normalized to the NVS string form
  * of the "storage" keys mqtt_uri / mqtt_port / mqtt_use_tls. */
@@ -28,6 +29,11 @@ typedef struct {
   char host[PROV_HOST_MAX]; /* "mqtt_uri": non-empty string */
   char port[PROV_PORT_MAX]; /* "mqtt_port": 1..65535, number or digit string */
   char use_tls[2];          /* "mqtt_use_tls": "1" or "0" (bool, 0/1, "true"/"false") */
+  /* Optional "sensor": "auto" or a model key, normalized to lowercase; ""
+   * when absent or invalid. An invalid value only sets `sensor_invalid`: it
+   * never costs the broker profile. */
+  char sensor[PROV_SENSOR_MAX];
+  bool sensor_invalid;
 } prov_profile_t;
 
 typedef enum {
@@ -46,8 +52,8 @@ bool prov_serial_is_valid(const char *serial);
  * whitespace trimmed, then it must be a valid serial. `out` is "" on false. */
 bool prov_parse_serial_text(const char *text, size_t len, char *out, size_t size);
 
-/* provisioning.json: all three fields required and valid; `out` untouched
- * on false. */
+/* provisioning.json: the three broker fields required and valid, "sensor"
+ * optional; `out` untouched on false. */
 bool prov_parse_profile(const char *json, prov_profile_t *out);
 
 /* Extracts the CN from an mbedtls_x509_dn_gets() string such as

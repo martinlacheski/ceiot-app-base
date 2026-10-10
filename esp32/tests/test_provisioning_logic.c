@@ -122,6 +122,33 @@ static void test_profile_invalid_leaves_output(void) {
   CHECK(!prov_parse_profile("{\"mqtt_uri\":\"h\",\"mqtt_port\":\"1\",\"mqtt_use_tls\":\"1\"}", NULL));
 }
 
+static void test_profile_sensor(void) {
+  prov_profile_t p;
+  /* optional: absent means "not provisioned" */
+  CHECK(prov_parse_profile(
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true}", &p));
+  CHECK(p.sensor[0] == '\0' && !p.sensor_invalid);
+
+  CHECK(prov_parse_profile(
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":\"auto\"}", &p));
+  CHECK(strcmp(p.sensor, "auto") == 0 && !p.sensor_invalid);
+  CHECK(prov_parse_profile(
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":\"BMP280\"}", &p));
+  CHECK(strcmp(p.sensor, "bmp280") == 0 && !p.sensor_invalid); /* normalized */
+
+  /* an invalid sensor never costs the broker profile: it is only flagged */
+  const char *bad[] = {
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":\"ds18b20\"}",
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":\"\"}",
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":4}",
+      "{\"mqtt_uri\":\"h\",\"mqtt_port\":1883,\"mqtt_use_tls\":true,\"sensor\":null}",
+  };
+  for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
+    CHECK(prov_parse_profile(bad[i], &p));
+    CHECK(strcmp(p.host, "h") == 0 && p.sensor[0] == '\0' && p.sensor_invalid);
+  }
+}
+
 static void test_cn_from_dn(void) {
   char cn[PROV_SERIAL_MAX];
   CHECK(prov_cn_from_dn("CN=IOT-DEM0-0001", cn, sizeof(cn)));
@@ -175,6 +202,7 @@ int main(void) {
   RUN(test_serial_text);
   RUN(test_profile_strings);
   RUN(test_profile_native_types);
+  RUN(test_profile_sensor);
   RUN(test_profile_invalid_leaves_output);
   RUN(test_cn_from_dn);
   RUN(test_identity_check);

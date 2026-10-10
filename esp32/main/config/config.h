@@ -1,32 +1,15 @@
 /*
  * config.h
  *
- * Build-time device configuration. Edit this file to choose the sensor
- * variant of the image and its pins, then rebuild and flash.
+ * Build-time device configuration: sensor pins, I2C bus and telemetry
+ * period. The sensor model is not chosen here: every image drives the DHT11,
+ * DHT22, BMP280 and BME280, and the model is a runtime setting stored in NVS
+ * (web UI "Dispositivo", or "sensor" in provisioning.json), autodetected by
+ * default.
  */
 
 #ifndef CONFIG_H
 #define CONFIG_H
-
-// ---------------------------------------------------------------------------
-// Sensor variant: exactly one per firmware image.
-// ---------------------------------------------------------------------------
-#define SENSOR_DHT11 1  // temperature, relative_humidity
-#define SENSOR_DHT22 2  // temperature, relative_humidity (also AM2302)
-#define SENSOR_BMP280 3 // temperature, pressure
-#define SENSOR_BME280 4 // temperature, relative_humidity, pressure
-
-// Default variant. A build can override it without editing this file:
-//   idf.py -B build-dht11 -DCEIOT_SENSOR=dht11 build   (dht11|dht22|bmp280|bme280)
-// main/CMakeLists.txt maps it to -DSENSOR_MODEL=SENSOR_<VARIANT>.
-#ifndef SENSOR_MODEL
-#define SENSOR_MODEL SENSOR_DHT22
-#endif
-
-#if SENSOR_MODEL != SENSOR_DHT11 && SENSOR_MODEL != SENSOR_DHT22 &&           \
-    SENSOR_MODEL != SENSOR_BMP280 && SENSOR_MODEL != SENSOR_BME280
-#error "SENSOR_MODEL must be SENSOR_DHT11, SENSOR_DHT22, SENSOR_BMP280 or SENSOR_BME280"
-#endif
 
 // ---------------------------------------------------------------------------
 // Sensor pins
@@ -46,5 +29,9 @@
 // ---------------------------------------------------------------------------
 // Seconds between readings published on iot/devices/{serial}/telemetry.
 #define TELEMETRY_INTERVAL_SEC 60
+
+// Seconds between autodetection attempts while the setting is "auto" and no
+// sensor has been found.
+#define SENSOR_DETECT_RETRY_SEC 60
 
 #endif // CONFIG_H

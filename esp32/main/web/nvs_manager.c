@@ -312,6 +312,21 @@ esp_err_t provisioning_bootstrap_from_littlefs(void) {
                  profile.use_tls[0] == '1' ? "on" : "off",
                  PROVISIONING_FILE_PATH);
       }
+      // Optional sensor setting ("auto" or a model): only when the factory
+      // snapshot has none yet; restore_factory_defaults() copies it into
+      // "storage"/"sensor_model" when that has no setting.
+      if (profile.sensor_invalid) {
+        ESP_LOGW(TAG, "Provisioning: %s \"sensor\" ignored; expected auto, "
+                      "dht11, dht22, bmp280 or bme280",
+                 PROVISIONING_FILE_PATH);
+      } else if (profile.sensor[0] != '\0') {
+        before = changed;
+        set_str_if_missing(h_factory, "sensor_model", profile.sensor, &changed);
+        if (changed != before) {
+          ESP_LOGI(TAG, "Provisioning: sensor %s from %s", profile.sensor,
+                   PROVISIONING_FILE_PATH);
+        }
+      }
     } else {
       ESP_LOGE(TAG, "Provisioning: %s invalid; it needs mqtt_uri, mqtt_port "
                     "(1-65535) and mqtt_use_tls",
@@ -368,17 +383,18 @@ esp_err_t restore_factory_defaults(void) {
     restore_file_from_nvs(h_factory, "cl_key", "/littlefs/client.key");
   }
 
-  // Restore the broker settings (provisioning profile / TLS flag) that the
-  // active "storage" namespace does not have.
-  static const char *const MQTT_KEYS[] = {"mqtt_uri", "mqtt_port",
-                                          "mqtt_use_tls"};
+  // Restore the broker settings (provisioning profile / TLS flag) and the
+  // provisioned sensor setting that the active "storage" namespace does not
+  // have.
+  static const char *const FACTORY_KEYS[] = {"mqtt_uri", "mqtt_port",
+                                          "mqtt_use_tls", "sensor_model"};
   nvs_handle_t h_storage;
   if (nvs_open("storage", NVS_READWRITE, &h_storage) == ESP_OK) {
     bool copied = false;
-    for (size_t i = 0; i < sizeof(MQTT_KEYS) / sizeof(MQTT_KEYS[0]); i++) {
-      if (nvs_str_exists(h_factory, MQTT_KEYS[i]) &&
-          !nvs_str_exists(h_storage, MQTT_KEYS[i])) {
-        copy_string_nvs(h_factory, h_storage, MQTT_KEYS[i]);
+    for (size_t i = 0; i < sizeof(FACTORY_KEYS) / sizeof(FACTORY_KEYS[0]); i++) {
+      if (nvs_str_exists(h_factory, FACTORY_KEYS[i]) &&
+          !nvs_str_exists(h_storage, FACTORY_KEYS[i])) {
+        copy_string_nvs(h_factory, h_storage, FACTORY_KEYS[i]);
         copied = true;
       }
     }

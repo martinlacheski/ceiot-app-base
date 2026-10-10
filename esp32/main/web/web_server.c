@@ -13,6 +13,7 @@
 #include "provisioning_logic.h"
 #include "nvs_manager.h"
 #include "sensor.h"
+#include "telemetry.h"
 #include "time_sync.h"
 #include "network_manager.h"
 #include "wifi_manager.h"
@@ -272,13 +273,30 @@ static bool file_exists(const char *path) {
   return stat(path, &st) == 0 && st.st_size > 0;
 }
 
+// "sensor": setting ("auto" or a model key), model/key in use (null when
+// none), source ("auto" detection or "manual" setting), state and the last
+// valid reading of the model in use.
 static void add_sensor_status(cJSON *root) {
   cJSON *sensor = cJSON_AddObjectToObject(root, "sensor");
-  cJSON_AddStringToObject(sensor, "model", sensor_name());
-  cJSON_AddStringToObject(sensor, "key", sensor_key());
+  sensor_status_t status;
+  sensor_get_status(&status);
+  cJSON_AddStringToObject(sensor, "setting",
+                          sensor_logic_setting_key(status.setting));
+  if (status.model != SENSOR_NONE) {
+    cJSON_AddStringToObject(sensor, "model",
+                            sensor_logic_model_name(status.model));
+    cJSON_AddStringToObject(sensor, "key", sensor_logic_model_key(status.model));
+  } else {
+    cJSON_AddNullToObject(sensor, "model");
+    cJSON_AddNullToObject(sensor, "key");
+  }
+  cJSON_AddStringToObject(sensor, "source",
+                          status.setting == SENSOR_SETTING_AUTO ? "auto"
+                                                                : "manual");
+  cJSON_AddStringToObject(sensor, "state", sensor_state_name(status.state));
   sensor_reading_t last;
   int64_t age_s = 0;
-  if (!sensor_get_last(&last, &age_s)) {
+  if (!sensor_get_last(&last, NULL, &age_s)) {
     cJSON_AddNullToObject(sensor, "last");
     return;
   }
@@ -570,8 +588,8 @@ static esp_err_t api_config_post_handler(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// POST /api/config/sensor
-static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
+// POST /api/config/serial {"serial":"IOT-XXXX-XXXX"}
+static esp_err_t api_config_serial_post_handler(httpd_req_t *req) {
   if (!is_authenticated(req)) {
     httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
     return ESP_OK;
@@ -604,6 +622,60 @@ static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
                         "El serial debe tener el formato IOT-XXXX-XXXX");
   }
   cJSON_Delete(root);
+  return ESP_OK;
+}
+
+// POST /api/config/sensor {"setting":"auto|dht11|dht22|bmp280|bme280"}
+// Stored in NVS and applied by the telemetry task without a restart.
+static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  char buf[128];
+  int remaining = req->content_len;
+  if (remaining <= 0 || remaining >= (int)sizeof(buf)) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid payload");
+    return ESP_OK;
+  }
+  int received = httpd_req_recv(req, buf, remaining);
+  if (received <= 0) return ESP_FAIL;
+  buf[received] = '\0';
+
+  cJSON *root = cJSON_Parse(buf);
+  cJSON *value = root ? cJSON_GetObjectItem(root, "setting") : NULL;
+  int setting = SENSOR_SETTING_AUTO;
+  bool valid = cJSON_IsString(value) &&
+               sensor_logic_parse_setting(value->valuestring, &setting);
+  cJSON_Delete(root);
+  if (!valid) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                        "El sensor debe ser auto, dht11, dht22, bmp280 o bme280");
+    return ESP_OK;
+  }
+  if (sensor_set_setting(setting) != ESP_OK) {
+    httpd_resp_send_500(req);
+    return ESP_OK;
+  }
+  telemetry_request_now(); // the telemetry task applies it right away
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+// POST /api/config/sensor/detect: setting "auto" and a fresh detection.
+static esp_err_t api_config_sensor_detect_post_handler(httpd_req_t *req) {
+  if (!is_authenticated(req)) {
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
+    return ESP_OK;
+  }
+  if (sensor_request_detection() != ESP_OK) {
+    httpd_resp_send_500(req);
+    return ESP_OK;
+  }
+  telemetry_request_now();
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, "{\"status\":\"detecting\"}", HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -956,10 +1028,20 @@ static const httpd_uri_t api_config_post = {.uri = "/api/config",
                                             .handler = api_config_post_handler,
                                             .user_ctx = NULL};
 
+static const httpd_uri_t api_config_serial = {
+    .uri = "/api/config/serial",
+    .method = HTTP_POST,
+    .handler = api_config_serial_post_handler,
+    .user_ctx = NULL};
 static const httpd_uri_t api_config_sensor = {
     .uri = "/api/config/sensor",
     .method = HTTP_POST,
     .handler = api_config_sensor_post_handler,
+    .user_ctx = NULL};
+static const httpd_uri_t api_config_sensor_detect = {
+    .uri = "/api/config/sensor/detect",
+    .method = HTTP_POST,
+    .handler = api_config_sensor_detect_post_handler,
     .user_ctx = NULL};
 static const httpd_uri_t api_config_mqtt = {.uri = "/api/config/mqtt",
                                             .method = HTTP_POST,
@@ -1003,7 +1085,9 @@ esp_err_t web_server_start(void) {
     httpd_register_uri_handler(server, &api_scan_post);
     httpd_register_uri_handler(server, &api_scan_get);
     httpd_register_uri_handler(server, &api_config_post);
+    httpd_register_uri_handler(server, &api_config_serial);
     httpd_register_uri_handler(server, &api_config_sensor);
+    httpd_register_uri_handler(server, &api_config_sensor_detect);
     httpd_register_uri_handler(server, &api_config_mqtt);
 
     // New endpoints

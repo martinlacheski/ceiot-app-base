@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "cJSON.h"
+#include "sensor_logic.h"
 
 #define SERIAL_LEN 13 /* IOT-XXXX-XXXX */
 
@@ -108,6 +109,20 @@ static bool parse_tls(const cJSON *item, char *out) {
   return true;
 }
 
+static void parse_sensor(const cJSON *item, prov_profile_t *out) {
+  out->sensor[0] = '\0';
+  out->sensor_invalid = false;
+  if (item == NULL) return;
+  int setting = SENSOR_SETTING_AUTO;
+  if (!cJSON_IsString(item) || item->valuestring == NULL ||
+      !sensor_logic_parse_setting(item->valuestring, &setting)) {
+    out->sensor_invalid = true;
+    return;
+  }
+  snprintf(out->sensor, sizeof(out->sensor), "%s",
+           sensor_logic_setting_key(setting));
+}
+
 bool prov_parse_profile(const char *json, prov_profile_t *out) {
   if (json == NULL || out == NULL) return false;
   cJSON *root = cJSON_Parse(json);
@@ -122,6 +137,7 @@ bool prov_parse_profile(const char *json, prov_profile_t *out) {
       parse_port(cJSON_GetObjectItemCaseSensitive(root, "mqtt_port"), parsed.port,
                  sizeof(parsed.port)) &&
       parse_tls(cJSON_GetObjectItemCaseSensitive(root, "mqtt_use_tls"), parsed.use_tls);
+  if (ok) parse_sensor(cJSON_GetObjectItemCaseSensitive(root, "sensor"), &parsed);
   cJSON_Delete(root);
   if (ok) *out = parsed;
   return ok;

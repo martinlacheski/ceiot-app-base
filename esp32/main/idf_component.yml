@@ -5,6 +5,6 @@ dependencies:
   espressif/mqtt: "*"
   espressif/mdns: "*"
   joltwallet/littlefs: "*"
-  # Sensor drivers (DHT11/DHT22 and BMP280/BME280); only the configured one is linked.
+  # Sensor drivers (DHT11/DHT22 and BMP280/BME280): all linked, the model is chosen at runtime.
   esp-idf-lib/dht: "*"
   esp-idf-lib/bmp280: "*"
