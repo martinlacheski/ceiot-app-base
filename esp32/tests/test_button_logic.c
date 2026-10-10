@@ -16,7 +16,12 @@ static button_action_t press_for(button_state_t *s, uint32_t ms,
     if (a != BUTTON_ACTION_NONE && *during == BUTTON_ACTION_NONE) *during = a;
   }
   if (last_held_feedback) *last_held_feedback = fb;
-  return button_logic_update(s, false, TICK, &fb);
+  button_action_t on_release = BUTTON_ACTION_NONE;
+  for (uint32_t t = 0; t < BUTTON_RELEASE_DEBOUNCE_MS; t += TICK) {
+    button_action_t a = button_logic_update(s, false, TICK, &fb);
+    if (a != BUTTON_ACTION_NONE && on_release == BUTTON_ACTION_NONE) on_release = a;
+  }
+  return on_release;
 }
 
 static void test_short_press_does_nothing(void) {
@@ -105,6 +110,37 @@ static void test_two_holds_toggle_twice(void) {
   CHECK(press_for(&s, 4000, &during, NULL) == BUTTON_ACTION_TOGGLE_AP);
 }
 
+static void test_bouncy_hold_still_toggles_once(void) {
+  /* Recorded on a real board: a ~3.6 s hold dropped for one 50 ms sample
+   * every 50-500 ms. The drops must not restart the count. */
+  button_state_t s;
+  button_logic_init(&s);
+  int toggles = 0;
+  for (uint32_t t = 0; t < 3600; t += TICK) {
+    bool pressed = (t / TICK) % 4 != 3; /* released one sample in four */
+    if (button_logic_update(&s, pressed, TICK, NULL) == BUTTON_ACTION_TOGGLE_AP) toggles++;
+  }
+  CHECK(toggles == 0); /* nothing while held */
+  for (uint32_t t = 0; t < BUTTON_RELEASE_DEBOUNCE_MS; t += TICK) {
+    if (button_logic_update(&s, false, TICK, NULL) == BUTTON_ACTION_TOGGLE_AP) toggles++;
+  }
+  CHECK(toggles == 1);
+  CHECK(s.held_ms == 0);
+}
+
+static void test_short_bouncy_press_does_nothing(void) {
+  button_state_t s;
+  button_logic_init(&s);
+  int actions = 0;
+  for (uint32_t t = 0; t < 1000; t += TICK) {
+    if (button_logic_update(&s, (t / TICK) % 3 != 2, TICK, NULL) != BUTTON_ACTION_NONE) actions++;
+  }
+  for (uint32_t t = 0; t < 1000; t += TICK) {
+    if (button_logic_update(&s, false, TICK, NULL) != BUTTON_ACTION_NONE) actions++;
+  }
+  CHECK(actions == 0);
+}
+
 static void test_hold_time_saturates(void) {
   button_state_t s;
   button_logic_init(&s);
@@ -122,6 +158,8 @@ int main(void) {
   RUN(test_state_resets_after_release_and_null_is_safe);
   RUN(test_toggle_starts_a_stopped_ap_and_stops_a_running_one);
   RUN(test_two_holds_toggle_twice);
+  RUN(test_bouncy_hold_still_toggles_once);
+  RUN(test_short_bouncy_press_does_nothing);
   RUN(test_hold_time_saturates);
   TEST_MAIN_END();
 }

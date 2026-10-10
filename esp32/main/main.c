@@ -69,9 +69,21 @@ static void button_task(void *arg) {
   (void)arg;
   button_state_t state;
   button_logic_init(&state);
+  bool was_pressed = false;
+  ESP_LOGI(TAG, "BOOT button task running (GPIO%d level %d)", BUTTON_BOOT_GPIO,
+           gpio_get_level(BUTTON_BOOT_GPIO));
 
   while (1) {
     bool pressed = gpio_get_level(BUTTON_BOOT_GPIO) == 0;
+    if (pressed != was_pressed) {
+      // Edges only: makes a dead button or a wrong pin obvious in the log.
+      if (pressed) {
+        ESP_LOGD(TAG, "BOOT pressed");
+      } else {
+        ESP_LOGD(TAG, "BOOT released after %u ms", (unsigned)state.held_ms);
+      }
+      was_pressed = pressed;
+    }
     button_feedback_t feedback = BUTTON_FEEDBACK_NONE;
     button_action_t action =
         button_logic_update(&state, pressed, BUTTON_POLL_MS, &feedback);

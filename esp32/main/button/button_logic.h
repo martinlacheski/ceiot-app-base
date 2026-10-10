@@ -7,6 +7,10 @@
  *   hold >= 3 s, release   -> toggle the configuration AP (start it when
  *                             it is off, stop it when it is on)
  *   hold reaches 10 s      -> factory reset (fires while still held)
+ *
+ * A release only counts after BUTTON_RELEASE_DEBOUNCE_MS: the tactile
+ * switches on these boards drop for one 50 ms sample now and then while
+ * held, which used to restart the count so a 3 s hold never registered.
  */
 
 #ifndef BUTTON_LOGIC_H
@@ -17,6 +21,7 @@
 
 #define BUTTON_AP_HOLD_MS 3000
 #define BUTTON_RESET_HOLD_MS 10000
+#define BUTTON_RELEASE_DEBOUNCE_MS 300
 
 typedef enum {
   BUTTON_ACTION_NONE = 0,
@@ -38,8 +43,9 @@ typedef enum {
 } button_ap_command_t;
 
 typedef struct {
-  uint32_t held_ms;  // continuous time the button has been down
-  bool reset_fired;  // reset already reported for this press
+  uint32_t held_ms;     // time the button has been down in this press
+  uint32_t released_ms; // time released since the last down sample (bounce)
+  bool reset_fired;     // reset already reported for this press
 } button_state_t;
 
 void button_logic_init(button_state_t *state);
