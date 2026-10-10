@@ -14,7 +14,7 @@ Cada imagen publicada necesita una versión **nueva y única**. Se define en
 `esp32/CMakeLists.txt`:
 
 ```cmake
-set(PROJECT_VER "0.2.0")
+set(PROJECT_VER "0.3.0")
 ```
 
 El equipo compara esa cadena exacta: si la versión pedida es la que ya corre,
