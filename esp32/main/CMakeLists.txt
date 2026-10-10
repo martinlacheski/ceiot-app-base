@@ -18,6 +18,8 @@ idf_component_register(
         "sensor/sensor_logic.c"
         "telemetry/telemetry.c"
         "telemetry/telemetry_payload.c"
+        "timesync/time_sync.c"
+        "timesync/time_sync_logic.c"
     INCLUDE_DIRS
         "."
         "button"
@@ -30,9 +32,11 @@ idf_component_register(
         "mqtt"
         "sensor"
         "telemetry"
+        "timesync"
     REQUIRES
         "esp_event"
         "esp_http_server"
+        "esp_http_client"
         "esp_netif"
         "esp_wifi"
         "esp_timer"

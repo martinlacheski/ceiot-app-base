@@ -6,7 +6,6 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_mac.h"
-#include "esp_sntp.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
@@ -62,7 +61,6 @@ static int s_last_disconnect_reason = 0;
 
 // --- Forward Declarations ---
 static void initialise_mdns(void);
-static void initialise_sntp(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data);
 static void reconnect_timer_callback(TimerHandle_t xTimer);
@@ -137,18 +135,6 @@ static void initialise_mdns(void) {
   ESP_ERROR_CHECK(
       mdns_service_add("IOT-Web", "_http", "_tcp", 80, serviceTxtData, 2));
   ESP_LOGI(TAG, "mDNS inicializado: %s.local", hostname);
-}
-
-static void initialise_sntp(void) {
-  if (esp_sntp_enabled()) {
-    return;
-  }
-
-  ESP_LOGI(TAG, "Inicializando SNTP");
-  esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "time.google.com");
-  esp_sntp_setservername(1, "pool.ntp.org");
-  esp_sntp_init();
 }
 
 static void reconnect_timer_callback(TimerHandle_t xTimer) {
@@ -243,7 +229,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
     xTimerStop(s_reconnect_timer, 0);
     xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    initialise_sntp();
   }
 }
 

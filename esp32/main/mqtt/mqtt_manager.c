@@ -12,6 +12,7 @@
 #include "led_manager.h"
 #include "telemetry.h"
 #include "telemetry_payload.h"
+#include "time_sync.h"
 #include "mqtt_client.h"
 #include "network_manager.h"
 #include "nvs.h"
@@ -41,6 +42,8 @@ static char s_lwt_msg[128] = "{\"serial\":\"\",\"status\":\"offline\"}";
 static char s_topic_telemetry[80];
 static char s_topic_ota[72];
 static char s_topic_status[72];
+static char s_topic_time[72];
+static char s_topic_time_request[80];
 static TaskHandle_t s_start_task = NULL;
 static SemaphoreHandle_t s_status_lock = NULL;
 static bool s_test_pending = false;
@@ -180,6 +183,10 @@ static void build_topics(const char *serial) {
   snprintf(s_topic_ota, sizeof(s_topic_ota), "iot/devices/%s/ota", identity);
   snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/status",
            identity);
+  snprintf(s_topic_time, sizeof(s_topic_time), "iot/devices/%s/time",
+           identity);
+  snprintf(s_topic_time_request, sizeof(s_topic_time_request),
+           "iot/devices/%s/time/request", identity);
 }
 
 static void build_lwt(void) {
@@ -218,6 +225,7 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
     clear_error();
     led_set_mqtt_connected(true);
     esp_mqtt_client_subscribe(event->client, s_topic_ota, MQTT_QOS);
+    esp_mqtt_client_subscribe(event->client, s_topic_time, MQTT_QOS);
     if (publish_online() != ESP_OK) {
       ESP_LOGW(TAG, "Could not publish the online status");
     }
@@ -238,6 +246,12 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
     set_event("data");
     ESP_LOGI(TAG, "MQTT message received on %.*s", event->topic_len,
              event->topic);
+    if (event->topic_len == (int)strlen(s_topic_time) &&
+        strncmp(event->topic, s_topic_time, event->topic_len) == 0 &&
+        event->current_data_offset == 0 &&
+        event->data_len == event->total_data_len) {
+      time_sync_on_mqtt_time(event->data, event->data_len);
+    }
     break;
   case MQTT_EVENT_ERROR:
     set_event("error");
@@ -255,14 +269,17 @@ static void mqtt_event_handler(void *args, esp_event_base_t base,
   }
 }
 
+// Waits for an IP and for the time fallback to allow it: a valid clock, or NTP
+// timed out and the HTTP bootstrap was tried (time_sync_logic.h). Never
+// blocks forever on NTP.
 static bool data_path_ready(void) {
-  return network_manager_has_data_path() && network_manager_is_time_synced();
+  return network_manager_has_data_path() && time_sync_mqtt_ready();
 }
 
 static void start_task(void *arg) {
   (void)arg;
   while (!data_path_ready()) {
-    set_event("waiting_network");
+    set_event(network_manager_has_data_path() ? "waiting_time" : "waiting_network");
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 
@@ -437,6 +454,10 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos,
 
 esp_err_t mqtt_manager_publish_telemetry(const char *json) {
   return mqtt_manager_publish(s_topic_telemetry, json, MQTT_QOS, false);
+}
+
+esp_err_t mqtt_manager_publish_time_request(const char *json) {
+  return mqtt_manager_publish(s_topic_time_request, json, MQTT_QOS, false);
 }
 
 const char *mqtt_manager_get_serial(void) { return s_cached_serial; }

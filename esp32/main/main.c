@@ -18,11 +18,11 @@
 #include "button_logic.h"
 #include "led_manager.h"
 #include "mqtt_manager.h"
-#include "network_manager.h"
 #include "nvs_manager.h"
 #include "pins_config.h"
 #include "sensor.h"
 #include "telemetry.h"
+#include "time_sync.h"
 #include "watchdog.h"
 #include "web_server.h"
 #include "wifi_manager.h"
@@ -113,7 +113,7 @@ void app_main(void) {
 
   // 4. Connectivity (starts the AP by itself when no Wi-Fi is saved)
   ESP_ERROR_CHECK(wifi_manager_init());
-  ESP_ERROR_CHECK(network_manager_init());
+  ESP_ERROR_CHECK(time_sync_init()); // NTP -> HTTP -> MQTT time fallback
 
   // 5. Configuration web server (station IP and AP 192.168.4.1)
   ESP_ERROR_CHECK(web_server_start());

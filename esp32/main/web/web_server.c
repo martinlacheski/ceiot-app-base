@@ -12,6 +12,7 @@
 #include "mqtt_manager.h"
 #include "nvs_manager.h"
 #include "sensor.h"
+#include "time_sync.h"
 #include "network_manager.h"
 #include "wifi_manager.h"
 #include <ctype.h>
@@ -89,6 +90,13 @@ static esp_err_t save_nvs_str(const char *key, const char *val) {
   }
   nvs_close(my_handle);
   return err;
+}
+
+static void erase_nvs_key(const char *key) {
+  nvs_handle_t handle;
+  if (nvs_open("storage", NVS_READWRITE, &handle) != ESP_OK) return;
+  if (nvs_erase_key(handle, key) == ESP_OK) nvs_commit(handle);
+  nvs_close(handle);
 }
 
 static bool is_authenticated(httpd_req_t *req) {
@@ -296,11 +304,11 @@ static void add_time_status(cJSON *root) {
   time(&now);
   gmtime_r(&now, &utc);
   strftime(iso, sizeof(iso), "%Y-%m-%dT%H:%M:%S", &utc);
-  bool synced = network_manager_is_time_synced();
   cJSON *time_obj = cJSON_AddObjectToObject(root, "time");
-  cJSON_AddBoolToObject(time_obj, "synced", synced);
+  cJSON_AddBoolToObject(time_obj, "synced", network_manager_is_time_synced());
   cJSON_AddStringToObject(time_obj, "iso", iso);
-  cJSON_AddStringToObject(time_obj, "source", synced ? "ntp" : "none");
+  cJSON_AddStringToObject(time_obj, "source",
+                          time_sync_source_name(time_sync_get_source()));
 }
 
 // GET /api/status (JSON)
@@ -353,6 +361,13 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
   cJSON_AddStringToObject(mqtt, "host", mqtt_snapshot.host);
   cJSON_AddNumberToObject(mqtt, "port", mqtt_snapshot.port);
   cJSON_AddBoolToObject(mqtt, "use_tls", mqtt_snapshot.use_tls);
+  char backend_url[128];
+  time_sync_get_backend_url(backend_url, sizeof(backend_url));
+  cJSON_AddStringToObject(mqtt, "backend_url", backend_url);
+  char configured_backend[128];
+  read_nvs_str("backend_url", configured_backend, sizeof(configured_backend),
+               "");
+  cJSON_AddStringToObject(mqtt, "backend_url_configured", configured_backend);
   cJSON_AddBoolToObject(mqtt, "network_ready", mqtt_snapshot.network_ready);
   cJSON_AddStringToObject(mqtt, "last_event", mqtt_snapshot.last_event);
   cJSON_AddStringToObject(mqtt, "last_error", mqtt_snapshot.last_error);
@@ -620,6 +635,21 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
   cJSON *uri = cJSON_GetObjectItem(root, "uri");
   cJSON *port = cJSON_GetObjectItem(root, "port");
   cJSON *use_tls = cJSON_GetObjectItem(root, "use_tls");
+  cJSON *backend_url = cJSON_GetObjectItem(root, "backend_url");
+
+  // Optional backend base URL for the HTTP time bootstrap; "" = default
+  // (http://<broker host>:18000).
+  if (backend_url != NULL &&
+      (!cJSON_IsString(backend_url) ||
+       strlen(backend_url->valuestring) >= 128 ||
+       (backend_url->valuestring[0] != '\0' &&
+        strncmp(backend_url->valuestring, "http://", 7) != 0 &&
+        strncmp(backend_url->valuestring, "https://", 8) != 0))) {
+    cJSON_Delete(root);
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                        "backend_url must start with http:// or https://");
+    return ESP_OK;
+  }
 
   int port_number = cJSON_IsString(port) ? atoi(port->valuestring) : 0;
   if (!cJSON_IsString(uri) || uri->valuestring[0] == '\0' ||
@@ -634,6 +664,13 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
   save_nvs_str("mqtt_port", port->valuestring);
   save_nvs_str("mqtt_use_tls",
                cJSON_IsBool(use_tls) && cJSON_IsTrue(use_tls) ? "1" : "0");
+  if (cJSON_IsString(backend_url)) {
+    if (backend_url->valuestring[0] != '\0') {
+      save_nvs_str("backend_url", backend_url->valuestring);
+    } else {
+      erase_nvs_key("backend_url");
+    }
+  }
 
   cJSON_Delete(root);
   httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);

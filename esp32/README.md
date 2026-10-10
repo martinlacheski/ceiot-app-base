@@ -94,6 +94,36 @@ Telemetry is published every `TELEMETRY_INTERVAL_SEC` (60 s by default) and
 right after each connection. `firmware_version` is `PROJECT_VER` from
 `esp32/CMakeLists.txt`.
 
+## Time synchronization
+
+Implemented in `main/timesync/` (rules in `time_sync_logic.c`, host-tested),
+following `backend/docs/mqtt-time-sync.md`:
+
+1. **NTP**: SNTP (`time.google.com`, `pool.ntp.org`, plus the DHCP-provided
+   server) runs from boot; it gets the first 15 s after the station gets an
+   IP.
+2. **HTTP**: if the clock is still unset, `GET {backend}/api/public/time`
+   over plain HTTP (5 s timeout), retried every 60 s while unsynchronized.
+   `{backend}` is the "URL del backend" of the MQTT page (NVS `storage` /
+   `backend_url`); empty means `http://<MQTT broker host>:18000`, the port
+   docker compose publishes for the backend (`LAN_BIND_IP` must expose it to
+   the LAN, as for the firmware downloads).
+3. **MQTT**: the client starts once the clock is valid, **or** once NTP timed
+   out and HTTP was tried, so it is never blocked forever. While the clock is
+   still unset it publishes `{"req_id":"t-N"}` to
+   `iot/devices/{serial}/time/request` (QoS 1, retried every 30 s) and sets
+   the clock from the matching reply on `iot/devices/{serial}/time`
+   (`epoch_ms` + half the round trip).
+
+Why MQTT can connect without a valid clock: `CONFIG_MBEDTLS_HAVE_TIME_DATE`
+stays disabled (ESP-IDF default), so the mTLS handshake verifies the broker
+certificate chain and signatures but not the validity dates. Enabling it would
+make step 3 impossible without NTP or HTTP, and an expired certificate would
+then also stop the device. Telemetry carries no timestamp (the backend stamps
+reception time), so a device without time still reports. The status page
+shows the time source (`ntp`, `http`, `mqtt`, or `rtc` when a valid clock
+survived a software restart).
+
 ## Configuration AP, BOOT button and status LED
 
 | BOOT button (GPIO0) | Effect |

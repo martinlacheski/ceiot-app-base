@@ -49,3 +49,11 @@ target_include_directories(button_logic PUBLIC ${FW}/button)
 add_executable(test_button_logic test_button_logic.c)
 target_link_libraries(test_button_logic button_logic)
 add_test(NAME button_logic COMMAND test_button_logic)
+
+add_library(time_sync_logic STATIC ${FW}/timesync/time_sync_logic.c)
+target_include_directories(time_sync_logic PUBLIC ${FW}/timesync)
+target_link_libraries(time_sync_logic PUBLIC cjson m)
+
+add_executable(test_time_sync_logic test_time_sync_logic.c)
+target_link_libraries(test_time_sync_logic time_sync_logic)
+add_test(NAME time_sync_logic COMMAND test_time_sync_logic)

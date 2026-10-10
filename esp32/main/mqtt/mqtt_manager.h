@@ -33,6 +33,8 @@ esp_err_t mqtt_manager_publish(const char *topic, const char *data, int qos,
                                bool retain);
 // QoS 1 on iot/devices/{serial}/telemetry.
 esp_err_t mqtt_manager_publish_telemetry(const char *json);
+// QoS 1 on iot/devices/{serial}/time/request (reply on .../time).
+esp_err_t mqtt_manager_publish_time_request(const char *json);
 // Device serial (MQTT client id and topic identity), "" when not assigned.
 const char *mqtt_manager_get_serial(void);
 bool mqtt_manager_start_test(void);
