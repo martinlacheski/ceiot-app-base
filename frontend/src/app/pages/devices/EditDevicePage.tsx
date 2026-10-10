@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FormPageLayout } from "@/components/custom/FormPageLayout";
 import { DeviceForm } from "@/app/components/devices/DeviceForm";
 import { DeviceSensorsSection } from "@/app/components/devices/DeviceSensorsSection";
+import { DeviceFirmwareSection } from "@/app/components/devices/DeviceFirmwareSection";
 import { DeviceGuestManagementCard } from "@/app/components/access/DeviceGuestManagementCard";
 import { useDevice } from "@/app/hooks/useDevices";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -97,6 +98,7 @@ export default function EditDevicePage({
         isLoading={saveMutation.isPending}
         extraContent={<div className="space-y-4">
           {id && (user?.isAdmin || user?.permissions?.includes("device_sensor:write")) && <DeviceSensorsSection deviceId={id} canManage={Boolean(canManageGuests)} deviceTypeId={device?.deviceTypeId} />}
+          {user?.isAdmin && <DeviceFirmwareSection device={device} />}
           {id && canManageGuests ? (
             <DeviceGuestManagementCard
               deviceId={id}

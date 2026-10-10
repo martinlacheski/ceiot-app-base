@@ -66,6 +66,8 @@ export interface Device {
   model?: string;
   batch?: string;
   manufactureDate?: string; // ISO date string
+  /** Version the device last reported (`DeviceRead.firmware_version`). */
+  firmwareVersion?: string | null;
   macAddress?: string | null;
   gpsLatitude?: number | null;
   gpsLongitude?: number | null;

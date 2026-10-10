@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import EditDevicePage from "./EditDevicePage";
 
@@ -14,6 +14,8 @@ class ResizeObserverMock {
 
 vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 
+const authState = vi.hoisted(() => ({ isAdmin: false }));
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: { canManageGuests: true } }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -22,6 +24,14 @@ vi.mock("@tanstack/react-query", () => ({
 
 vi.mock("@/app/components/access/DeviceGuestManagementCard", () => ({
   DeviceGuestManagementCard: () => <div>Gestión de invitados por dispositivo</div>,
+}));
+
+vi.mock("@/app/components/devices/DeviceSensorsSection", () => ({
+  DeviceSensorsSection: () => <div>Sensores del dispositivo</div>,
+}));
+
+vi.mock("@/app/components/devices/DeviceFirmwareSection", () => ({
+  DeviceFirmwareSection: ({ device }: { device: { id: string } }) => <div>Firmware de {device.id}</div>,
 }));
 
 vi.mock("@/app/hooks/useDevices", () => ({
@@ -73,10 +83,40 @@ vi.mock("@/app/hooks/useDevices", () => ({
 
 vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: (selector: (state: { user: { id: string; isAdmin: boolean } }) => unknown) =>
-    selector({ user: { id: "owner-1", isAdmin: false } }),
+    selector({ user: { id: "owner-1", isAdmin: authState.isAdmin } }),
 }));
 
+function renderPage(mode: "admin" | "user", path: string, route: string) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <Routes>
+        <Route path={route} element={<EditDevicePage mode={mode} />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("EditDevicePage", () => {
+  beforeEach(() => {
+    authState.isAdmin = false;
+  });
+
+  it("shows the firmware (OTA) section to administrators", () => {
+    authState.isAdmin = true;
+    renderPage("admin", "/admin/devices/edit/device-1", "/admin/devices/edit/:id");
+
+    expect(screen.getByText("Firmware de device-1")).toBeInTheDocument();
+    // The section doesn't replace the form actions.
+    expect(screen.getByRole("button", { name: /guardar|actualizar dispositivo/i })).toHaveAttribute("type", "submit");
+  });
+
+  it("hides the firmware (OTA) section from non-administrators", () => {
+    renderPage("user", "/app/devices/device-1/edit", "/app/devices/:id/edit");
+
+    expect(screen.getByRole("heading", { name: /editar dispositivo/i })).toBeInTheDocument();
+    expect(screen.queryByText("Firmware de device-1")).not.toBeInTheDocument();
+  });
+
   it("shows the user edit flow with the requested fields and without temperature fields", () => {
     render(
       <MemoryRouter initialEntries={["/app/devices/device-1/edit"]}>
