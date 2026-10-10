@@ -38,16 +38,26 @@ def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat()
 
 
-def _pulse(device_id, serial: str, environment_id, kind: PulseKind, time: datetime) -> str:
-    return json.dumps(
-        {
-            "device_id": str(device_id),
-            "serial": serial,
-            "environment_id": str(environment_id) if environment_id else None,
-            "kind": kind,
-            "time": _iso(time),
-        }
-    )
+def _pulse(
+    device_id,
+    serial: str,
+    environment_id,
+    kind: PulseKind,
+    time: datetime,
+    values: dict | None = None,
+) -> str:
+    """Pulse JSON. A telemetry pulse carries the stored reading ``values`` so
+    browsers can append it without refetching; other pulses never do."""
+    message = {
+        "device_id": str(device_id),
+        "serial": serial,
+        "environment_id": str(environment_id) if environment_id else None,
+        "kind": kind,
+        "time": _iso(time),
+    }
+    if values:
+        message["values"] = values
+    return json.dumps(message)
 
 
 async def _write(redis: Redis | None, device_id, mapping: dict[str, str], pulse: str) -> None:
@@ -87,7 +97,8 @@ async def record_telemetry(
     if values:
         mapping["values"] = json.dumps(values)
         mapping["telemetry_at"] = _iso(time)
-    await _write(redis, device_id, mapping, _pulse(device_id, serial, environment_id, "telemetry", time))
+    pulse = _pulse(device_id, serial, environment_id, "telemetry", time, values=values or None)
+    await _write(redis, device_id, mapping, pulse)
 
 
 async def record_presence(

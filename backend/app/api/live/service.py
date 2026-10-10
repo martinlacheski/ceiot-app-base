@@ -6,7 +6,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from fastapi import HTTPException, status
@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.auth.repository import UserRepository
 from app.api.device.models import Device
+from app.api.sensor_catalog.permissions import SensorCatalogPermissions
 from app.core.live import PULSE_CHANNEL
 from app.core.security import decode_token
 
@@ -35,13 +36,16 @@ class PulseScope:
     ``device_ids`` is the set of devices the user can read (RLS) at the last
     refresh; admins see every device and carry no list. ``expires_at`` is the
     epoch second the access token expires: the stream ends then so a session
-    never outlives its credentials.
+    never outlives its credentials. ``can_read_telemetry`` (admin or
+    ``telemetry:read``) decides whether reading ``values`` reach the browser;
+    it fails closed when unset.
     """
 
     user_id: uuid.UUID
     is_admin: bool
     device_ids: frozenset[uuid.UUID]
     expires_at: float | None = None
+    can_read_telemetry: bool = False
 
     def allows(self, device_id: uuid.UUID) -> bool:
         return self.is_admin or device_id in self.device_ids
@@ -84,6 +88,8 @@ class DbPulseScopeResolver:
             is_admin=bool(user.is_admin),
             device_ids=frozenset(),
             expires_at=float(payload["exp"]) if payload.get("exp") is not None else None,
+            can_read_telemetry=bool(user.is_admin)
+            or SensorCatalogPermissions.TELEMETRY_READ in (user.permissions or []),
         )
         return await self.refresh(scope)
 
@@ -99,12 +105,7 @@ class DbPulseScopeResolver:
                     {"uid": str(scope.user_id)},
                 )
                 rows = (await session.exec(select(Device.id))).all()
-        return PulseScope(
-            user_id=scope.user_id,
-            is_admin=False,
-            device_ids=frozenset(rows),
-            expires_at=scope.expires_at,
-        )
+        return replace(scope, device_ids=frozenset(rows))
 
 
 def _frame(event: str, data: dict | None = None) -> str:
@@ -116,15 +117,26 @@ def _parse_pulse(raw) -> tuple[uuid.UUID, dict] | None:
     try:
         message = json.loads(raw)
         device_id = uuid.UUID(message["device_id"])
-        return device_id, {
+        event = {
             "deviceId": str(device_id),
             "serial": message.get("serial"),
             "environmentId": message.get("environment_id"),
             "kind": message.get("kind"),
             "time": message.get("time"),
         }
+        values = message.get("values")
+        if isinstance(values, dict):
+            event["values"] = values
+        return device_id, event
     except (ValueError, TypeError, KeyError, AttributeError):
         return None
+
+
+def _visible_event(event: dict, scope: PulseScope) -> dict:
+    """Drop reading values for users who may not read telemetry."""
+    if "values" in event and not scope.can_read_telemetry:
+        return {key: value for key, value in event.items() if key != "values"}
+    return event
 
 
 async def pulse_stream(
@@ -157,7 +169,7 @@ async def pulse_stream(
             if message is not None:
                 parsed = _parse_pulse(message.get("data"))
                 if parsed is not None and scope.allows(parsed[0]):
-                    yield _frame("pulse", parsed[1])
+                    yield _frame("pulse", _visible_event(parsed[1], scope))
             now = time.monotonic()
             if now - last_refresh >= refresh_seconds:
                 last_refresh = now

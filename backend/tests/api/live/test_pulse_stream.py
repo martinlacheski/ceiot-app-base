@@ -4,12 +4,14 @@ import asyncio
 import json
 import time
 import uuid
+from types import SimpleNamespace
 
 import fakeredis
 import pytest
 from fastapi import HTTPException
 
-from app.api.live.service import PulseScope, pulse_stream
+from app.api.live import service
+from app.api.live.service import PulseScope, _parse_pulse, pulse_stream
 from app.core import live
 from app.core.redis import get_live_redis
 from app.main import app
@@ -20,11 +22,17 @@ OWN_DEVICE = uuid.uuid4()
 OTHER_DEVICE = uuid.uuid4()
 
 
-def _pulse(device_id, kind="telemetry"):
-    return json.dumps({
+def _pulse(device_id, kind="telemetry", values=None):
+    message = {
         "device_id": str(device_id), "serial": "IOT-0001", "environment_id": str(uuid.uuid4()),
         "kind": kind, "time": "2026-05-01T12:00:00+00:00",
-    })
+    }
+    if values is not None:
+        message["values"] = values
+    return json.dumps(message)
+
+
+READING = {"dht22": {"temperature": 21.5, "humidity": None}}
 
 
 class FakeResolver:
@@ -43,10 +51,11 @@ class FakeResolver:
         return self.refreshed or scope
 
 
-def _scope(*device_ids, admin=False, expires_in=None):
+def _scope(*device_ids, admin=False, expires_in=None, telemetry=True):
     return PulseScope(
         user_id=uuid.uuid4(), is_admin=admin, device_ids=frozenset(device_ids),
         expires_at=None if expires_in is None else time.time() + expires_in,
+        can_read_telemetry=telemetry,
     )
 
 
@@ -189,3 +198,98 @@ async def test_redis_failure_mid_stream_ends_the_stream_cleanly():
     frames = [frame async for frame in stream]
     assert frames[0].startswith(": connected")
     assert frames[-1].startswith("event: unavailable")
+
+
+async def test_parse_pulse_forwards_reading_values():
+    parsed = _parse_pulse(_pulse(OWN_DEVICE, values=READING))
+
+    assert parsed is not None
+    assert parsed[1]["values"] == READING
+    assert parsed[1]["time"] == "2026-05-01T12:00:00+00:00"
+
+
+async def test_parse_pulse_without_values_keeps_the_original_shape():
+    parsed = _parse_pulse(_pulse(OWN_DEVICE, "presence"))
+
+    assert parsed is not None
+    assert set(parsed[1]) == {"deviceId", "serial", "environmentId", "kind", "time"}
+
+
+async def test_parse_pulse_ignores_values_that_are_not_an_object():
+    parsed = _parse_pulse(_pulse(OWN_DEVICE, values=["bogus"]))
+
+    assert parsed is not None
+    assert "values" not in parsed[1]
+
+
+async def test_user_with_telemetry_read_receives_reading_values():
+    redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+    stream = pulse_stream(redis, _scope(OWN_DEVICE), FakeResolver(), heartbeat_seconds=0.2, poll_seconds=0.05)
+
+    frames = await _collect(stream, 1, redis, publishes=[_pulse(OWN_DEVICE, values=READING)])
+
+    pulses = [_data(f) for f in frames if f.startswith("event: pulse")]
+    assert pulses[0]["values"] == READING
+
+
+async def test_values_are_stripped_for_users_without_telemetry_read():
+    redis = fakeredis.FakeAsyncRedis(decode_responses=True)
+    scope = _scope(OWN_DEVICE, telemetry=False)
+    stream = pulse_stream(redis, scope, FakeResolver(), heartbeat_seconds=0.2, poll_seconds=0.05)
+
+    frames = await _collect(stream, 1, redis, publishes=[_pulse(OWN_DEVICE, values=READING)])
+
+    pulses = [_data(f) for f in frames if f.startswith("event: pulse")]
+    assert pulses[0]["kind"] == "telemetry"
+    assert "values" not in pulses[0]
+    assert "temperature" not in "".join(frames)
+
+
+async def test_scope_without_telemetry_flag_fails_closed():
+    scope = PulseScope(user_id=uuid.uuid4(), is_admin=False, device_ids=frozenset())
+
+    assert scope.can_read_telemetry is False
+
+
+@pytest.mark.parametrize(
+    ("is_admin", "permissions", "expected"),
+    [
+        (True, [], True),
+        (False, ["telemetry:read"], True),
+        (False, ["devices:read"], False),
+        (False, None, False),
+    ],
+)
+async def test_authenticate_resolves_telemetry_read(monkeypatch, is_admin, permissions, expected):
+    user = SimpleNamespace(id=uuid.uuid4(), is_admin=is_admin, permissions=permissions)
+
+    class FakeRepository:
+        def __init__(self, session):
+            pass
+
+        async def get_by_id(self, user_id):
+            return user
+
+    class FakeSession:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(service, "decode_token", lambda token: {"data": {"id": str(user.id)}, "exp": None})
+    monkeypatch.setattr(service, "UserRepository", FakeRepository)
+    monkeypatch.setattr(service, "AsyncSession", FakeSession)
+    resolver = service.DbPulseScopeResolver(engine=None)
+
+    async def keep(scope):
+        return scope
+
+    monkeypatch.setattr(resolver, "refresh", keep)
+
+    scope = await resolver.authenticate("token")
+
+    assert scope.can_read_telemetry is expected

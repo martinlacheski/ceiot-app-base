@@ -78,7 +78,21 @@ async def test_record_telemetry_stores_state_with_ttl_and_publishes_pulse(redis)
         "environment_id": str(ENV_ID),
         "kind": "telemetry",
         "time": "2026-05-01T12:00:00+00:00",
+        "values": {"dht22": {"temperature": 21.5}},
     }
+
+
+async def test_health_only_telemetry_pulse_carries_no_values(redis):
+    pubsub = await _subscribe(redis)
+
+    await live.record_telemetry(
+        redis, device_id=DEVICE_ID, serial="IOT-0001", environment_id=None, time=WHEN,
+        values=None, health={"uptime": 1},
+    )
+
+    pulse = await _next_pulse(pubsub)
+    assert pulse["kind"] == "telemetry"
+    assert "values" not in pulse
 
 
 async def test_health_only_message_keeps_previous_values_and_updates_health(redis):
@@ -121,8 +135,13 @@ async def test_record_presence_updates_state_and_publishes_presence_pulse(redis)
     assert state["presence"] == "offline"
     assert state["presence_at"] == "2026-05-01T12:00:00+00:00"
     pulse = await _next_pulse(pubsub)
-    assert pulse["kind"] == "presence"
-    assert pulse["device_id"] == str(DEVICE_ID)
+    assert pulse == {
+        "device_id": str(DEVICE_ID),
+        "serial": "IOT-0001",
+        "environment_id": str(ENV_ID),
+        "kind": "presence",
+        "time": "2026-05-01T12:00:00+00:00",
+    }
 
 
 async def test_read_device_state_parses_hash_and_returns_none_when_absent(redis):
