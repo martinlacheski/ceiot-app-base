@@ -1,0 +1,37 @@
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export type InventoryLabel = "establecimientos" | "dispositivos";
+
+export function LoadingState({ label, rows = 2 }: { label: InventoryLabel; rows?: number }) {
+  return (
+    <div role="status" aria-label={`Cargando ${label}`} className="space-y-3">
+      {Array.from({ length: rows }, (_, index) => <Skeleton key={index} className="h-12 w-full" />)}
+    </div>
+  );
+}
+
+export function ErrorState({ label, onRetry }: { label: InventoryLabel; onRetry: () => void }) {
+  return (
+    <div role="alert" className="flex min-h-32 flex-col items-center justify-center gap-3 text-center">
+      <p className="text-sm text-destructive">No pudimos cargar los {label}.</p>
+      <Button variant="outline" onClick={onRetry} aria-label={`Reintentar ${label}`}>
+        Reintentar
+      </Button>
+    </div>
+  );
+}
+
+export function RefreshNotice({ hasError, isFetching }: { hasError: boolean; isFetching: boolean }) {
+  if (hasError) {
+    return (
+      <p role="status" className="text-xs text-destructive">
+        No se pudo actualizar el inventario. Se muestran los últimos datos disponibles.
+      </p>
+    );
+  }
+  if (isFetching) {
+    return <p role="status" className="text-xs text-muted-foreground">Actualizando inventario...</p>;
+  }
+  return null;
+}
