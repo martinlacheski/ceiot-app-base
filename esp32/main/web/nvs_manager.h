@@ -24,4 +24,9 @@ bool factory_has_serial(void);
 esp_err_t factory_store_serial_if_missing(const char *serial);
 esp_err_t factory_store_certs_if_missing(void);
 esp_err_t factory_store_tls_snapshot(void);
+// Reads /littlefs/serial.txt and /littlefs/provisioning.json (staged by
+// provisioning/provision.py) into the NVS "factory" namespace when it does not
+// have those values yet. Call after mounting LittleFS and before
+// restore_factory_defaults(), which copies them into "storage".
+esp_err_t provisioning_bootstrap_from_littlefs(void);
 esp_err_t restore_factory_defaults(void);

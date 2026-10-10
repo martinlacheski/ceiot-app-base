@@ -10,6 +10,7 @@
 #include "esp_timer.h"
 #include "esp_vfs.h"
 #include "mqtt_manager.h"
+#include "provisioning_logic.h"
 #include "nvs_manager.h"
 #include "sensor.h"
 #include "time_sync.h"
@@ -381,6 +382,9 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
                         file_exists("/littlefs/client.crt"));
   cJSON_AddBoolToObject(certs, "client_key",
                         file_exists("/littlefs/client.key"));
+  // Client certificate CN vs serial: "mismatch"/"unreadable" keep MQTT off.
+  cJSON_AddStringToObject(certs, "identity", mqtt_snapshot.identity);
+  cJSON_AddStringToObject(certs, "client_cn", mqtt_snapshot.cert_cn);
 
   char *resp_str = cJSON_PrintUnformatted(root);
   cJSON_Delete(root);
@@ -585,14 +589,7 @@ static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
   cJSON *root = cJSON_Parse(buf);
   cJSON *code = root ? cJSON_GetObjectItem(root, "serial") : NULL;
   const char *serial = cJSON_IsString(code) ? code->valuestring : NULL;
-  bool valid_serial = serial != NULL && strlen(serial) == 13 &&
-                      strncmp(serial, "IOT-", 4) == 0 && serial[8] == '-';
-  for (size_t i = 4; valid_serial && i < 13; i++) {
-    if (i != 8 && !isalnum((unsigned char)serial[i])) {
-      valid_serial = false;
-    }
-  }
-  if (valid_serial) {
+  if (prov_serial_is_valid(serial)) {
     if (factory_has_serial()) {
       httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
                           "El serial ya está registrado");
@@ -600,6 +597,7 @@ static esp_err_t api_config_sensor_post_handler(httpd_req_t *req) {
       save_nvs_str("serial", serial);
       factory_store_serial_if_missing(serial);
       httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
+      mqtt_manager_request_reload(); // MQTT starts with the new identity
     }
   } else {
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
@@ -674,6 +672,7 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
 
   cJSON_Delete(root);
   httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
+  mqtt_manager_request_reload(); // reconnect with the new broker settings
   return ESP_OK;
 }
 

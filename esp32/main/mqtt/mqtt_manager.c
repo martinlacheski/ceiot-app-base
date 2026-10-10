@@ -15,6 +15,9 @@
 #include "time_sync.h"
 #include "mqtt_client.h"
 #include "mqtt_config_logic.h"
+#include "mbedtls/x509_crt.h"
+#include "provisioning_logic.h"
+#include "psa/crypto.h"
 #include "network_manager.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -62,6 +65,12 @@ static bool s_use_tls = false;
 // several MQTT_EVENT_DATA chunks, only the first one carrying the topic.
 static char *s_ota_rx = NULL;
 static int s_ota_rx_total = 0;
+// Client certificate CN vs serial (provisioning_logic.h), shown by the web UI.
+static prov_identity_t s_identity = PROV_IDENTITY_NO_CERT;
+static char s_cert_cn[64] = "";
+// Serializes client creation/destruction (boot, reload) with start_task.
+static SemaphoreHandle_t s_client_lock = NULL;
+static TaskHandle_t s_reload_task = NULL;
 
 static esp_err_t open_nvs(const char *ns, nvs_open_mode_t mode,
                           nvs_handle_t *handle) {
@@ -285,13 +294,18 @@ static void start_task(void *arg) {
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 
-  esp_err_t err = esp_mqtt_client_start(s_client);
-  if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
-    set_event("start_requested");
-  } else {
-    set_error(esp_err_to_name(err), err, 0, 0, 0);
+  xSemaphoreTake(s_client_lock, portMAX_DELAY);
+  // A reload may have replaced (or dropped) the client while this task waited.
+  if (s_client != NULL) {
+    esp_err_t err = esp_mqtt_client_start(s_client);
+    if (err == ESP_OK || err == ESP_ERR_INVALID_STATE) {
+      set_event("start_requested");
+    } else {
+      set_error(esp_err_to_name(err), err, 0, 0, 0);
+    }
   }
   s_start_task = NULL;
+  xSemaphoreGive(s_client_lock);
   vTaskDelete(NULL);
 }
 
@@ -305,6 +319,42 @@ static bool read_str(const char *ns, const char *key, char *out, size_t size) {
   nvs_close(handle);
   if (!ok) out[0] = '\0';
   return ok;
+}
+
+// CN of a PEM client certificate; false when it cannot be parsed.
+static bool read_cert_cn(const char *pem, char *cn, size_t size) {
+  cn[0] = '\0';
+  if (psa_crypto_init() != PSA_SUCCESS) return false;
+  mbedtls_x509_crt *crt = calloc(1, sizeof(*crt));
+  if (crt == NULL) return false;
+  mbedtls_x509_crt_init(crt);
+  bool ok = false;
+  if (mbedtls_x509_crt_parse(crt, (const unsigned char *)pem, strlen(pem) + 1) == 0) {
+    char dn[160];
+    ok = mbedtls_x509_dn_gets(dn, sizeof(dn), &crt->subject) > 0 &&
+         prov_cn_from_dn(dn, cn, size);
+  }
+  mbedtls_x509_crt_free(crt);
+  free(crt);
+  return ok;
+}
+
+// Compares /littlefs/client.crt (already loaded in `cert_pem`, or read here)
+// with the serial: the broker maps the CN to the MQTT username and its ACL
+// only allows iot/devices/<CN>/#.
+static void evaluate_identity(const char *serial, const char *cert_pem) {
+  char *owned = NULL;
+  if (cert_pem == NULL) cert_pem = owned = read_file("/littlefs/client.crt");
+  bool readable = cert_pem != NULL && read_cert_cn(cert_pem, s_cert_cn, sizeof(s_cert_cn));
+  if (!readable) s_cert_cn[0] = '\0';
+  s_identity = prov_identity_check(serial, cert_pem != NULL, readable ? s_cert_cn : NULL);
+  free(owned);
+  if (s_identity == PROV_IDENTITY_MISMATCH) {
+    ESP_LOGE(TAG, "Client certificate CN %s does not match the serial %s", s_cert_cn,
+             serial);
+  } else if (s_identity == PROV_IDENTITY_UNREADABLE) {
+    ESP_LOGE(TAG, "Client certificate /littlefs/client.crt has no readable CN");
+  }
 }
 
 // A brand-new device has no "storage" namespace (ESP_ERR_NVS_NOT_FOUND): the
@@ -333,6 +383,12 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   strlcpy(s_broker_host, resolved.host, sizeof(s_broker_host));
   s_broker_port = resolved.port;
   s_use_tls = resolved.use_tls;
+  if (resolved.use_tls) {
+    s_root_ca = read_file("/littlefs/root.crt");
+    s_client_cert = read_file("/littlefs/client.crt");
+    s_client_key = read_file("/littlefs/client.key");
+  }
+  evaluate_identity(resolved.client_id, resolved.use_tls ? s_client_cert : NULL);
   if (!resolved.has_serial) {
     ESP_LOGE(TAG, "No device serial in NVS (storage/factory): MQTT not "
                   "started. Set it from the web UI (AP %s).",
@@ -340,6 +396,12 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
     return ESP_ERR_INVALID_STATE;
   }
   strlcpy(s_cached_serial, resolved.client_id, sizeof(s_cached_serial));
+  if (prov_identity_blocks_connect(s_identity, resolved.use_tls)) {
+    ESP_LOGE(TAG, "MQTT not started: the mTLS identity must be the serial %s. "
+                  "Flash the certificates issued for it or fix the serial.",
+             resolved.client_id);
+    return ESP_ERR_NOT_ALLOWED;
+  }
   config->credentials.client_id = resolved.client_id;
   strlcpy(uri, resolved.uri, uri_size);
   config->broker.address.uri = uri;
@@ -355,9 +417,6 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   config->session.last_will.retain = true;
 
   if (resolved.use_tls) {
-    s_root_ca = read_file("/littlefs/root.crt");
-    s_client_cert = read_file("/littlefs/client.crt");
-    s_client_key = read_file("/littlefs/client.key");
     if (s_root_ca == NULL || s_client_cert == NULL || s_client_key == NULL) {
       ESP_LOGW(TAG, "mTLS material incomplete in /littlefs (root.crt %s, "
                     "client.crt %s, client.key %s)",
@@ -373,36 +432,119 @@ static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
   return ESP_OK;
 }
 
-esp_err_t mqtt_manager_init(void) {
+static void free_tls_material(void) {
+  free(s_root_ca);
+  free(s_client_cert);
+  free(s_client_key);
+  s_root_ca = s_client_cert = s_client_key = NULL;
+}
+
+static esp_err_t create_client(void) {
   if (s_client != NULL) return ESP_OK;
-  s_status_lock = xSemaphoreCreateMutex();
-  if (s_status_lock == NULL) return ESP_ERR_NO_MEM;
+  free_tls_material();
 
   static char uri[160];
   esp_mqtt_client_config_t config = {.broker.address.uri = NULL};
   config.task.stack_size = 8192;
   esp_err_t err = load_config(&config, uri, sizeof(uri));
   if (err != ESP_OK) {
-    set_error(err == ESP_ERR_INVALID_STATE ? "Device serial not set"
-                                           : "MQTT configuration unavailable",
-              err, 0, 0, 0);
+    if (err == ESP_ERR_NOT_ALLOWED) {
+      char message[96];
+      snprintf(message, sizeof(message), "Certificate CN %.40s is not the serial",
+               s_cert_cn);
+      set_error(message, err, 0, 0, 0);
+    } else {
+      set_error(err == ESP_ERR_INVALID_STATE ? "Device serial not set"
+                                             : "MQTT configuration unavailable",
+                err, 0, 0, 0);
+    }
+    set_event("not_started");
+    free_tls_material();
     return err;
   }
 
   s_client = esp_mqtt_client_init(&config);
-  if (s_client == NULL) return ESP_FAIL;
+  if (s_client == NULL) {
+    free_tls_material();
+    return ESP_FAIL;
+  }
   esp_mqtt_client_register_event(s_client, ESP_EVENT_ANY_ID, mqtt_event_handler,
                                  NULL);
   set_event("initialized");
   return ESP_OK;
 }
 
-esp_err_t mqtt_manager_start(void) {
-  if (s_client == NULL) return ESP_ERR_INVALID_STATE;
-  if (s_start_task == NULL) {
+esp_err_t mqtt_manager_init(void) {
+  if (s_status_lock == NULL) s_status_lock = xSemaphoreCreateMutex();
+  if (s_client_lock == NULL) s_client_lock = xSemaphoreCreateMutex();
+  if (s_status_lock == NULL || s_client_lock == NULL) return ESP_ERR_NO_MEM;
+  xSemaphoreTake(s_client_lock, portMAX_DELAY);
+  esp_err_t err = create_client();
+  xSemaphoreGive(s_client_lock);
+  return err;
+}
+
+// Caller holds s_client_lock.
+static void start_locked(void) {
+  if (s_client != NULL && s_start_task == NULL) {
     xTaskCreate(start_task, "mqtt_start_task", 3072, NULL, 5, &s_start_task);
   }
-  return ESP_OK;
+}
+
+esp_err_t mqtt_manager_start(void) {
+  if (s_client_lock == NULL) return ESP_ERR_INVALID_STATE;
+  xSemaphoreTake(s_client_lock, portMAX_DELAY);
+  esp_err_t err = s_client != NULL ? ESP_OK : ESP_ERR_INVALID_STATE;
+  start_locked();
+  xSemaphoreGive(s_client_lock);
+  return err;
+}
+
+// Drops the current client (if any) and builds a new one from NVS, so a
+// serial or broker saved from the web UI applies without a restart.
+static esp_err_t reload(void) {
+  if (s_client_lock == NULL) return mqtt_manager_init();
+  xSemaphoreTake(s_client_lock, portMAX_DELAY);
+  if (s_client != NULL) {
+    if (s_connected) {
+      // A clean disconnect does not fire the Last Will: retire the retained
+      // "online" presence of the current identity explicitly.
+      char *offline = telemetry_presence_build(s_cached_serial, false);
+      if (offline != NULL) {
+        esp_mqtt_client_publish(s_client, s_topic_status, offline, 0, MQTT_QOS, 1);
+        free(offline);
+      }
+    }
+    // Stops the MQTT task and frees the client; create_client() releases the
+    // TLS buffers it used only afterwards.
+    esp_mqtt_client_destroy(s_client);
+    s_client = NULL;
+  }
+  s_connected = false;
+  led_set_mqtt_connected(false);
+  esp_err_t err = create_client();
+  if (err == ESP_OK) {
+    ota_manager_set_serial(s_cached_serial);
+    start_locked(); // or the pending start_task picks the new client up
+  }
+  xSemaphoreGive(s_client_lock);
+  ESP_LOGI(TAG, "MQTT settings reloaded (%s)", esp_err_to_name(err));
+  return err;
+}
+
+static void reload_task(void *arg) {
+  (void)arg;
+  vTaskDelay(pdMS_TO_TICKS(300)); // let the HTTP reply go out first
+  reload();
+  s_reload_task = NULL;
+  vTaskDelete(NULL);
+}
+
+esp_err_t mqtt_manager_request_reload(void) {
+  if (s_reload_task != NULL) return ESP_OK; // one already queued
+  return xTaskCreate(reload_task, "mqtt_reload", 6144, NULL, 5, &s_reload_task) == pdPASS
+             ? ESP_OK
+             : ESP_ERR_NO_MEM;
 }
 
 esp_err_t mqtt_manager_stop(void) {
@@ -430,6 +572,8 @@ esp_err_t mqtt_manager_get_status_snapshot(mqtt_status_snapshot_t *snapshot) {
   strlcpy(snapshot->host, s_broker_host, sizeof(snapshot->host));
   snapshot->port = s_broker_port;
   snapshot->use_tls = s_use_tls;
+  strlcpy(snapshot->identity, prov_identity_name(s_identity), sizeof(snapshot->identity));
+  strlcpy(snapshot->cert_cn, s_cert_cn, sizeof(snapshot->cert_cn));
 
   if (s_status_lock != NULL) {
     xSemaphoreTake(s_status_lock, portMAX_DELAY);

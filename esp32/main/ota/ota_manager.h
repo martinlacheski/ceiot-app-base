@@ -44,6 +44,9 @@
  */
 esp_err_t ota_manager_init(const char *serial);
 
+/* Status topic identity after the serial changes at runtime (MQTT reload). */
+void ota_manager_set_serial(const char *serial);
+
 /** One complete ota/command payload (NUL terminated). MQTT task only. */
 void ota_manager_handle_command(const char *payload);
 

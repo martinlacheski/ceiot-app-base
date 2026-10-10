@@ -16,6 +16,9 @@
 #define SENSOR_BMP280 3 // temperature, pressure
 #define SENSOR_BME280 4 // temperature, relative_humidity, pressure
 
+// Default variant. A build can override it without editing this file:
+//   idf.py -B build-dht11 -DCEIOT_SENSOR=dht11 build   (dht11|dht22|bmp280|bme280)
+// main/CMakeLists.txt maps it to -DSENSOR_MODEL=SENSOR_<VARIANT>.
 #ifndef SENSOR_MODEL
 #define SENSOR_MODEL SENSOR_DHT22
 #endif

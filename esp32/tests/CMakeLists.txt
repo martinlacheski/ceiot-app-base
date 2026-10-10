@@ -72,3 +72,11 @@ target_include_directories(mqtt_config_logic PUBLIC ${FW}/mqtt)
 add_executable(test_mqtt_config_logic test_mqtt_config_logic.c)
 target_link_libraries(test_mqtt_config_logic mqtt_config_logic)
 add_test(NAME mqtt_config_logic COMMAND test_mqtt_config_logic)
+
+add_library(provisioning_logic STATIC ${FW}/provisioning/provisioning_logic.c)
+target_include_directories(provisioning_logic PUBLIC ${FW}/provisioning)
+target_link_libraries(provisioning_logic PUBLIC cjson m)
+
+add_executable(test_provisioning_logic test_provisioning_logic.c)
+target_link_libraries(test_provisioning_logic provisioning_logic)
+add_test(NAME provisioning_logic COMMAND test_provisioning_logic)

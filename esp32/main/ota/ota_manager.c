@@ -543,13 +543,18 @@ static void validate_task(void *arg) {
   vTaskDelete(NULL);
 }
 
+void ota_manager_set_serial(const char *serial) {
+  if (serial != NULL && serial[0] != '\0') {
+    snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/ota/status", serial);
+  } else {
+    s_topic_status[0] = '\0';
+  }
+}
+
 esp_err_t ota_manager_init(const char *serial) {
   if (s_initialized) return ESP_OK;
 
-  s_topic_status[0] = '\0';
-  if (serial != NULL && serial[0] != '\0') {
-    snprintf(s_topic_status, sizeof(s_topic_status), "iot/devices/%s/ota/status", serial);
-  }
+  ota_manager_set_serial(serial);
   const esp_app_desc_t *desc = esp_app_get_description();
   strlcpy(s_running_version, (desc != NULL && desc->version[0] != '\0') ? desc->version : "unknown",
           sizeof(s_running_version));

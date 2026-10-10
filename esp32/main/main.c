@@ -97,7 +97,8 @@ void app_main(void) {
   // 1. Storage: NVS, LittleFS (certificates) and the factory snapshot
   ESP_ERROR_CHECK(nvs_manager_init());
   init_littlefs();
-  restore_factory_defaults();       // serial / certs / TLS flag if missing
+  provisioning_bootstrap_from_littlefs(); // serial.txt + provisioning.json
+  restore_factory_defaults();       // serial / certs / broker if missing
   factory_store_certs_if_missing(); // keep flashed certs for a factory reset
 
   // 2. Watchdog (reconfigures the TWDT that ESP-IDF already started)
@@ -131,6 +132,10 @@ void app_main(void) {
     mqtt_manager_start();
   } else if (mqtt_ret == ESP_ERR_INVALID_STATE) {
     ESP_LOGW(TAG, "No device serial: starting the configuration AP to set it");
+    wifi_manager_start_ap();
+  } else if (mqtt_ret == ESP_ERR_NOT_ALLOWED) {
+    ESP_LOGE(TAG, "Client certificate does not match the serial: MQTT not "
+                  "started, starting the configuration AP");
     wifi_manager_start_ap();
   } else {
     ESP_LOGE(TAG, "MQTT init failed (%s)", esp_err_to_name(mqtt_ret));

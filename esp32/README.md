@@ -20,6 +20,10 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash monitor
 ```
 
+To provision a device (backend record, certificate, serial and broker profile
+in LittleFS, build and flash commands) use `provisioning/provision.py`; the
+step-by-step guide is `provisioning/README.md`.
+
 The application image is `build/iot_device.bin`: the project name must stay
 `iot_device`, the only firmware the backend and the web app accept for OTA
 (`FIRMWARE_PROJECT` in `backend/app/api/device/firmware/rules.py`). Bump
@@ -40,7 +44,19 @@ See `mqtt/README.md` for how to issue them with the project PKI scripts.
 
 - With the three files present, the build generates `build/storage.bin`
   (LittleFS) and `idf.py flash` writes it to the `storage` partition.
-  Only those three files are copied into the image.
+  `serial.txt` and `provisioning.json` (written there by
+  `provisioning/provision.py`) are packed too when present; the configure
+  step logs `LittleFS image files: ...`. The list is fixed when CMake runs:
+  `idf.py reconfigure` after staging another device.
+- At boot, `serial.txt` and `provisioning.json` (`mqtt_uri`, `mqtt_port`,
+  `mqtt_use_tls`) fill the NVS `factory` namespace when it does not have those
+  values yet (DVEM approach, `main/web/nvs_manager.c`), and from there the
+  active `storage` settings: a freshly flashed board connects with no web
+  visit. Reprovisioning a used board needs `idf.py erase-flash`.
+- Identity check: the client certificate CN must equal the serial (the broker
+  maps the CN to the MQTT username). On a mismatch, or an unreadable CN, the
+  firmware logs an error, does not start MQTT over TLS, starts the
+  configuration AP and the status page shows it (`Identidad`).
 - Without them (fresh clone) the build still succeeds and prints a CMake
   warning; the certificates can then be uploaded from the web UI.
 - On the first boot with certificates, a copy is kept in the NVS `factory`
@@ -66,11 +82,24 @@ exceed **1966080 bytes** (0x1E0000): the backend rejects larger uploads
 
 ## Sensor variant
 
-Each image supports exactly one sensor, chosen in `main/config/config.h`:
+Each image supports exactly one sensor. The default is set in
+`main/config/config.h`:
 
 ```c
 #define SENSOR_MODEL SENSOR_DHT22   // SENSOR_DHT11, SENSOR_DHT22, SENSOR_BMP280, SENSOR_BME280
 ```
+
+A build can override it without editing files (`main/CMakeLists.txt` maps
+`CEIOT_SENSOR` to `-DSENSOR_MODEL=SENSOR_<VARIANT>`):
+
+```sh
+idf.py -B build-dht11 -DCEIOT_SENSOR=dht11 build    # dht11 | dht22 | bmp280 | bme280
+```
+
+`CEIOT_SENSOR` is a CMake cache variable, so it sticks to its build
+directory: use one directory per variant (`build-<variant>` is gitignored) so
+variants never mix, or pass `-DCEIOT_SENSOR=` to return to the `config.h`
+default in the same directory.
 
 | Variant | Wiring (defaults, editable in `config.h`) | Telemetry key | Variables |
 | --- | --- | --- | --- |
@@ -109,7 +138,9 @@ those defaults, so with its certificates in `esp32/cert/` and a serial it
 connects without visiting the web UI. The serial comes from `storage`, else
 from the `factory` snapshot. Without a serial there is no client id nor topic
 identity: the log says so (`No device serial in NVS`), MQTT does not start and
-the configuration AP starts so the serial can be set.
+the configuration AP starts so the serial can be set. Saving the serial or the
+broker settings from the web UI rebuilds and restarts the MQTT client
+(`mqtt_manager_request_reload()`): no restart needed.
 
 The default port matches the development stack, which publishes the broker
 TLS listener on `MQTT_LISTENER_TLS` (`18883`) on `LAN_BIND_IP`. For a broker on

@@ -21,10 +21,15 @@ typedef struct {
   char host[128]; // broker host as configured (normalized)
   int port;
   bool use_tls;
+  char identity[16]; // client certificate CN vs serial: ok, mismatch, ...
+  char cert_cn[64];  // CN of /littlefs/client.crt, "" when unreadable
 } mqtt_status_snapshot_t;
 
 esp_err_t mqtt_manager_init(void);
 esp_err_t mqtt_manager_start(void);
+// Rebuilds the client from NVS in the background (serial/broker saved from the
+// web UI) and starts it: no restart needed.
+esp_err_t mqtt_manager_request_reload(void);
 esp_err_t mqtt_manager_stop(void);
 bool mqtt_manager_is_connected(void);
 esp_err_t mqtt_manager_get_status_snapshot(mqtt_status_snapshot_t *snapshot);

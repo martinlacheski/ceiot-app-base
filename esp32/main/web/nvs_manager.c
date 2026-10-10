@@ -4,10 +4,12 @@
 
 #include "nvs_manager.h"
 #include "esp_log.h"
+#include "provisioning_logic.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -241,6 +243,89 @@ esp_err_t factory_store_tls_snapshot(void) {
   return ESP_OK;
 }
 
+#define SERIAL_FILE_PATH "/littlefs/serial.txt"
+#define PROVISIONING_FILE_PATH "/littlefs/provisioning.json"
+
+static void set_str_if_missing(nvs_handle_t h, const char *key,
+                               const char *value, bool *changed) {
+  if (!nvs_str_exists(h, key) && nvs_set_str(h, key, value) == ESP_OK) {
+    *changed = true;
+  }
+}
+
+// Factory provisioning (provisioning/provision.py stages serial.txt and
+// provisioning.json next to the certificates in the LittleFS image). Same
+// approach as DVEM: the files only fill what the "factory" namespace does not
+// have yet, so a later web UI change or a factory reset keeps the identity;
+// reprovisioning a board means `idf.py erase-flash flash`.
+esp_err_t provisioning_bootstrap_from_littlefs(void) {
+  nvs_handle_t h_factory;
+  esp_err_t err = nvs_open("factory", NVS_READWRITE, &h_factory);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Provisioning: cannot open NVS factory (%s)",
+             esp_err_to_name(err));
+    return err;
+  }
+  bool changed = false;
+
+  size_t len = 0;
+  char *text = read_file_to_buf(SERIAL_FILE_PATH, &len);
+  if (text != NULL) {
+    char serial[PROV_SERIAL_MAX];
+    if (!prov_parse_serial_text(text, len, serial, sizeof(serial))) {
+      ESP_LOGE(TAG, "Provisioning: %s does not hold a valid IOT-XXXX-XXXX serial",
+               SERIAL_FILE_PATH);
+    } else if (!nvs_str_exists(h_factory, "serial")) {
+      if (nvs_set_str(h_factory, "serial", serial) == ESP_OK) changed = true;
+      ESP_LOGI(TAG, "Provisioning: factory serial %s from %s", serial,
+               SERIAL_FILE_PATH);
+    } else {
+      char current[PROV_SERIAL_MAX] = "";
+      size_t current_len = sizeof(current);
+      nvs_get_str(h_factory, "serial", current, &current_len);
+      if (strcmp(current, serial) != 0) {
+        ESP_LOGW(TAG, "Provisioning: factory serial %s kept, %s says %s "
+                      "(erase the flash to reprovision)",
+                 current, SERIAL_FILE_PATH, serial);
+      }
+    }
+    free(text);
+  }
+
+  len = 0;
+  char *raw = read_file_to_buf(PROVISIONING_FILE_PATH, &len);
+  if (raw != NULL) {
+    char *json = malloc(len + 1);
+    prov_profile_t profile;
+    if (json != NULL) {
+      memcpy(json, raw, len);
+      json[len] = '\0';
+    }
+    if (json != NULL && prov_parse_profile(json, &profile)) {
+      bool before = changed;
+      set_str_if_missing(h_factory, "mqtt_uri", profile.host, &changed);
+      set_str_if_missing(h_factory, "mqtt_port", profile.port, &changed);
+      set_str_if_missing(h_factory, "mqtt_use_tls", profile.use_tls, &changed);
+      if (changed != before) {
+        ESP_LOGI(TAG, "Provisioning: broker %s:%s (TLS %s) from %s",
+                 profile.host, profile.port,
+                 profile.use_tls[0] == '1' ? "on" : "off",
+                 PROVISIONING_FILE_PATH);
+      }
+    } else {
+      ESP_LOGE(TAG, "Provisioning: %s invalid; it needs mqtt_uri, mqtt_port "
+                    "(1-65535) and mqtt_use_tls",
+               PROVISIONING_FILE_PATH);
+    }
+    free(json);
+    free(raw);
+  }
+
+  if (changed) nvs_commit(h_factory);
+  nvs_close(h_factory);
+  return ESP_OK;
+}
+
 esp_err_t restore_factory_defaults(void) {
   nvs_handle_t h_factory;
   esp_err_t err = nvs_open("factory", NVS_READONLY, &h_factory);
@@ -283,16 +368,22 @@ esp_err_t restore_factory_defaults(void) {
     restore_file_from_nvs(h_factory, "cl_key", "/littlefs/client.key");
   }
 
-  // Restore TLS flag if missing in storage
-  if (nvs_str_exists(h_factory, "mqtt_use_tls")) {
-    nvs_handle_t h_storage;
-    if (nvs_open("storage", NVS_READWRITE, &h_storage) == ESP_OK) {
-      if (!nvs_str_exists(h_storage, "mqtt_use_tls")) {
-        copy_string_nvs(h_factory, h_storage, "mqtt_use_tls");
-        nvs_commit(h_storage);
+  // Restore the broker settings (provisioning profile / TLS flag) that the
+  // active "storage" namespace does not have.
+  static const char *const MQTT_KEYS[] = {"mqtt_uri", "mqtt_port",
+                                          "mqtt_use_tls"};
+  nvs_handle_t h_storage;
+  if (nvs_open("storage", NVS_READWRITE, &h_storage) == ESP_OK) {
+    bool copied = false;
+    for (size_t i = 0; i < sizeof(MQTT_KEYS) / sizeof(MQTT_KEYS[0]); i++) {
+      if (nvs_str_exists(h_factory, MQTT_KEYS[i]) &&
+          !nvs_str_exists(h_storage, MQTT_KEYS[i])) {
+        copy_string_nvs(h_factory, h_storage, MQTT_KEYS[i]);
+        copied = true;
       }
-      nvs_close(h_storage);
     }
+    if (copied) nvs_commit(h_storage);
+    nvs_close(h_storage);
   }
 
   nvs_close(h_factory);
