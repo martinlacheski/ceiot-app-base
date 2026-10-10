@@ -10,7 +10,6 @@
 #include "esp_vfs.h"
 #include "mqtt_manager.h"
 #include "nvs_manager.h"
-#include "cellular_manager.h"
 #include "network_manager.h"
 #include "wifi_manager.h"
 #include <ctype.h>
@@ -289,7 +288,7 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
 
   cJSON *root = cJSON_CreateObject();
   cJSON_AddStringToObject(root, "status", "ok");
-  cJSON_AddStringToObject(root, "device", "IOT-ESP32S3");
+  cJSON_AddStringToObject(root, "device", "IOT-ESP32");
   cJSON_AddNumberToObject(root, "uptime",
                           (double)esp_timer_get_time() / 1000000.0);
   cJSON_AddNumberToObject(root, "heap_free", esp_get_free_heap_size());
@@ -355,26 +354,6 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
   cJSON_AddBoolToObject(mqtt, "use_tls", mqtt_use_tls[0] == '1');
   cJSON_AddItemToObject(root, "mqtt", mqtt);
 
-  // Cellular Status
-  char *cell_json = cellular_manager_get_status_json();
-  if (cell_json) {
-    cJSON *cell_obj = cJSON_Parse(cell_json);
-    if (cell_obj) {
-      cJSON_AddItemToObject(root, "cellular", cell_obj);
-    }
-    free(cell_json);
-  }
-
-  // Network Manager Status
-  char *net_json = network_manager_get_status_json();
-  if (net_json) {
-    cJSON *net_obj = cJSON_Parse(net_json);
-    if (net_obj) {
-      cJSON_AddItemToObject(root, "network", net_obj);
-    }
-    free(net_json);
-  }
-
   bool mqtt_test_pending = false;
   bool mqtt_test_success = false;
   int mqtt_test_elapsed_ms = 0;
@@ -395,35 +374,9 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
   cJSON_AddStringToObject(root, "serial", serial);
   cJSON_AddStringToObject(root, "mqtt_uri", mqtt_uri);
   cJSON_AddStringToObject(root, "mqtt_port", mqtt_port);
-  network_status_snapshot_t network_snapshot;
-  if (network_manager_get_status_snapshot(&network_snapshot) == ESP_OK) {
-    cJSON_AddStringToObject(root, "network_mode",
-                            network_manager_mode_to_str(network_snapshot.mode));
-    cJSON_AddStringToObject(
-        root, "network_preferred",
-        network_manager_link_to_str(network_snapshot.preferred_link));
-    cJSON_AddStringToObject(root, "network_active",
-                            network_manager_link_to_str(
-                                network_snapshot.active_link));
-    cJSON_AddBoolToObject(root, "network_fallback",
-                          network_snapshot.fallback_in_use);
-    cJSON_AddStringToObject(root, "network_reason",
-                            network_snapshot.decision_reason);
-    cJSON_AddBoolToObject(root, "time_synced", network_snapshot.time_synced);
-  } else {
-    cJSON_AddStringToObject(root, "network_mode",
-                            network_manager_mode_to_str(
-                                network_manager_get_mode()));
-    cJSON_AddStringToObject(root, "network_active",
-                            network_manager_link_to_str(
-                                network_manager_get_active_link()));
-  }
   cJSON_AddBoolToObject(root, "mqtt_use_tls", mqtt_use_tls[0] == '1');
 
   cJSON *diagnostics = cJSON_CreateObject();
-  cJSON_AddStringToObject(diagnostics, "active_link",
-                          network_manager_link_to_str(
-                              network_manager_get_active_link()));
   cJSON_AddBoolToObject(diagnostics, "time_synced",
                         network_manager_is_time_synced());
   cJSON_AddStringToObject(diagnostics, "wifi_last_error",
@@ -433,13 +386,6 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
   cJSON_AddStringToObject(diagnostics, "wifi_reason_name",
                           wifi_manager_disconnect_reason_to_str(
                               wifi_manager_get_last_disconnect_reason()));
-  cJSON_AddStringToObject(diagnostics, "cellular_last_error",
-                          cellular_manager_get_last_error());
-  cJSON_AddStringToObject(diagnostics, "cellular_ppp_phase",
-                          cellular_manager_ppp_phase_to_str(
-                              cellular_manager_get_ppp_phase()));
-  cJSON_AddBoolToObject(diagnostics, "cellular_ppp_up",
-                        cellular_manager_is_ppp_up());
   cJSON_AddBoolToObject(diagnostics, "mqtt_connected",
                         mqtt_manager_is_connected());
   if (mqtt_manager_get_status_snapshot(&mqtt_snapshot) == ESP_OK) {
@@ -632,58 +578,6 @@ static esp_err_t api_config_post_handler(httpd_req_t *req) {
   }
 
   cJSON_Delete(root);
-  return ESP_OK;
-}
-
-// POST /api/config/network
-static esp_err_t api_config_network_post_handler(httpd_req_t *req) {
-  if (!is_authenticated(req)) {
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Unauthorized");
-    return ESP_OK;
-  }
-
-  char buf[384];
-  int ret, remaining = req->content_len;
-  if (remaining <= 0 || remaining >= sizeof(buf)) {
-    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Payload too large");
-    return ESP_OK;
-  }
-
-  if ((ret = httpd_req_recv(req, buf, remaining)) <= 0) {
-    return ESP_FAIL;
-  }
-  buf[remaining] = '\0';
-
-  cJSON *root = cJSON_Parse(buf);
-  if (root == NULL) {
-    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-    return ESP_OK;
-  }
-
-  cJSON *mode = cJSON_GetObjectItem(root, "mode");
-  cJSON *apn = cJSON_GetObjectItem(root, "apn");
-  cJSON *user = cJSON_GetObjectItem(root, "user");
-  cJSON *pass = cJSON_GetObjectItem(root, "pass");
-
-  if (cJSON_IsString(mode) && mode->valuestring != NULL) {
-    network_mode_t m = network_manager_mode_from_str(mode->valuestring);
-    network_manager_set_mode(m);
-  }
-
-  if (cJSON_IsString(apn) && apn->valuestring != NULL) {
-    const char *u = (cJSON_IsString(user) && user->valuestring) ? user->valuestring : "";
-    const char *p = (cJSON_IsString(pass) && pass->valuestring) ? pass->valuestring : "";
-    esp_err_t err = cellular_manager_set_apn_config(apn->valuestring, u, p);
-    if (err != ESP_OK) {
-      cJSON_Delete(root);
-      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
-                          "Failed to save APN config");
-      return ESP_OK;
-    }
-  }
-
-  cJSON_Delete(root);
-  httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -1084,12 +978,6 @@ static const httpd_uri_t api_config_mqtt = {.uri = "/api/config/mqtt",
                                             .handler =
                                                 api_config_mqtt_post_handler,
                                             .user_ctx = NULL};
-static const httpd_uri_t api_config_network = {
-    .uri = "/api/config/network",
-    .method = HTTP_POST,
-    .handler = api_config_network_post_handler,
-    .user_ctx = NULL};
-
 static const httpd_uri_t api_certs_status = {.uri = "/api/certs/status",
                                              .method = HTTP_GET,
                                              .handler =
@@ -1129,7 +1017,6 @@ esp_err_t web_server_start(void) {
     httpd_register_uri_handler(server, &api_config_post);
     httpd_register_uri_handler(server, &api_config_sensor);
     httpd_register_uri_handler(server, &api_config_mqtt);
-    httpd_register_uri_handler(server, &api_config_network);
 
     // New endpoints
     static const httpd_uri_t api_wifi_forget = {

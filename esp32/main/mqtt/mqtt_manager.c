@@ -14,7 +14,6 @@
 #include "network_manager.h"
 #include "nvs.h"
 #include "nvs_flash.h"
-#include "temp_manager.h"
 #include "wifi_manager.h"
 #include <ctype.h>
 #include <stdio.h>
@@ -217,11 +216,6 @@ static void send_telemetry(void) {
   cJSON_AddNumberToObject(root, "wifi_rssi", wifi_manager_get_rssi());
   cJSON_AddStringToObject(root, "wifi_ssid", wifi_manager_get_ssid());
   cJSON_AddStringToObject(root, "wifi_ip", wifi_manager_get_ip());
-
-  float temp_c = 0.0f;
-  if (temp_manager_get_last_temp(&temp_c)) {
-    cJSON_AddNumberToObject(root, "temp_water", temp_c);
-  }
 
   char *json = cJSON_PrintUnformatted(root);
   if (json != NULL) {

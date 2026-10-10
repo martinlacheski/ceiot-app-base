@@ -1,53 +1,62 @@
-# CMakeLists.txt para main component
+# Main component. Registry dependencies (cJSON, MQTT, mDNS, LittleFS) come
+# from idf_component.yml and are added to the requirements automatically.
 
 idf_component_register(
-    SRCS 
+    SRCS
         "main.c"
         "config/pins_config.c"
-        "display/display_manager.c"
-        "logging/log_manager.c"
         "led/led_manager.c"
         "utils/watchdog.c"
         "wifi/wifi_manager.c"
-        "cellular/cellular_manager.c"
-        "cellular/cellular_ppp_stability.c"
         "network/network_manager.c"
         "web/web_server.c"
         "web/nvs_manager.c"
         "mqtt/mqtt_manager.c"
-        "temp/temp_manager.c"
-    INCLUDE_DIRS 
+    INCLUDE_DIRS
         "."
         "config"
-        "display"
-        "logging"
         "led"
         "utils"
         "wifi"
-        "cellular"
         "network"
         "web"
         "mqtt"
-        "temp"
     REQUIRES
-        "mdns"
         "esp_event"
         "esp_http_server"
         "esp_netif"
         "esp_wifi"
-        "esp_lcd"
-        "mqtt"
+        "esp_timer"
+        "esp_driver_gpio"
+        "esp_app_format"
         "nvs_flash"
         "lwip"
-        "esp_timer"
-        "driver"
-        "json"
-        "esp_littlefs"
-        "led_strip"
 )
 
-littlefs_create_partition_image(
-    storage
-    "${CMAKE_CURRENT_LIST_DIR}/../cert"
-    FLASH_IN_PROJECT
-)
+# LittleFS image for the `storage` partition with the device mTLS material.
+# The certificates are never committed (esp32/cert/ is gitignored): copy
+# root.crt, client.crt and client.key into esp32/cert/ before building to
+# flash them with `idf.py flash`. Without them the image is skipped and the
+# certificates can be uploaded later from the web UI (MQTT page).
+set(CERT_SRC_DIR "${CMAKE_CURRENT_LIST_DIR}/../cert")
+set(CERT_FILES root.crt client.crt client.key)
+set(CERT_IMAGE_DIR "${CMAKE_BINARY_DIR}/littlefs_image")
+set(CERTS_PRESENT TRUE)
+foreach(cert_file ${CERT_FILES})
+    if(NOT EXISTS "${CERT_SRC_DIR}/${cert_file}")
+        set(CERTS_PRESENT FALSE)
+    endif()
+endforeach()
+
+if(CERTS_PRESENT)
+    file(REMOVE_RECURSE "${CERT_IMAGE_DIR}")
+    foreach(cert_file ${CERT_FILES})
+        configure_file("${CERT_SRC_DIR}/${cert_file}"
+                       "${CERT_IMAGE_DIR}/${cert_file}" COPYONLY)
+    endforeach()
+    littlefs_create_partition_image(storage "${CERT_IMAGE_DIR}" FLASH_IN_PROJECT)
+else()
+    message(WARNING "esp32/cert/{root.crt,client.crt,client.key} not found: "
+                    "building without the LittleFS certificate image. Upload "
+                    "the certificates from the web UI or add them and rebuild.")
+endif()

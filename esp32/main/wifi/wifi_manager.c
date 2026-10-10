@@ -78,14 +78,14 @@ const char *wifi_manager_disconnect_reason_to_str(int reason) {
     return "WIFI_REASON_AUTH_EXPIRE";
   case WIFI_REASON_AUTH_LEAVE:
     return "WIFI_REASON_AUTH_LEAVE";
-  case WIFI_REASON_ASSOC_EXPIRE:
-    return "WIFI_REASON_ASSOC_EXPIRE";
+  case WIFI_REASON_DISASSOC_DUE_TO_INACTIVITY:
+    return "WIFI_REASON_DISASSOC_DUE_TO_INACTIVITY";
   case WIFI_REASON_ASSOC_TOOMANY:
     return "WIFI_REASON_ASSOC_TOOMANY";
-  case WIFI_REASON_NOT_AUTHED:
-    return "WIFI_REASON_NOT_AUTHED";
-  case WIFI_REASON_NOT_ASSOCED:
-    return "WIFI_REASON_NOT_ASSOCED";
+  case WIFI_REASON_CLASS2_FRAME_FROM_NONAUTH_STA:
+    return "WIFI_REASON_CLASS2_FRAME_FROM_NONAUTH_STA";
+  case WIFI_REASON_CLASS3_FRAME_FROM_NONASSOC_STA:
+    return "WIFI_REASON_CLASS3_FRAME_FROM_NONASSOC_STA";
   case WIFI_REASON_ASSOC_LEAVE:
     return "WIFI_REASON_ASSOC_LEAVE";
   case WIFI_REASON_ASSOC_NOT_AUTHED:
@@ -131,7 +131,7 @@ static void initialise_mdns(void) {
   ESP_ERROR_CHECK(mdns_hostname_set(hostname));
   ESP_ERROR_CHECK(mdns_instance_name_set(instance));
 
-  mdns_txt_item_t serviceTxtData[] = {{"board", "esp32s3"}, {"u", "admin"}};
+  mdns_txt_item_t serviceTxtData[] = {{"board", "esp32"}, {"u", "admin"}};
 
   ESP_ERROR_CHECK(
       mdns_service_add("IOT-Web", "_http", "_tcp", 80, serviceTxtData, 2));
