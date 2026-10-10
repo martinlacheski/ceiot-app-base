@@ -44,12 +44,15 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
 
 /**
  * Queries a reading-carrying telemetry pulse still refreshes: server-side
- * aggregates and the device's own detail. Lists and the history/latest pages
- * are not here: lists only change on presence/health pulses, and the pages are
- * patched in place by `applyReading`.
+ * aggregates, the device's own detail and the device lists (the same report
+ * persists last connection, rssi and GPS on the device row). The history/latest
+ * pages are not here: `applyReading` patches them in place.
  */
 function queryKeysAfterReading(deviceId: string): QueryKey[] {
   return [
+    ["devices", "list"],
+    ["devices", "map"],
+    ["devices", "operational-overview"],
     ["devices", "detail", deviceId],
     ["device", "detail", deviceId],
     ["telemetry", "daily", deviceId],

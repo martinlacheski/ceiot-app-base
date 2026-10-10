@@ -164,18 +164,19 @@ describe("useLivePulse", () => {
       expect(keys.some((key) => key[0] === "telemetry" && (key[1] === "history" || key[1] === "latest"))).toBe(false);
     });
 
-    it("does not refetch the device and establishment lists for a reading", () => {
+    it("refreshes the device lists (the report updates the device row) but not the establishments", () => {
       pulse(withValues());
 
       const keys = invalidatedKeys();
+      // The same MQTT report persists last connection, rssi and GPS before the pulse is sent.
       for (const listKey of [
         ["devices", "list"],
         ["devices", "map"],
         ["devices", "operational-overview"],
-        ["environments", "operational-overview"],
       ]) {
-        expect(keys).not.toContainEqual(listKey);
+        expect(keys).toContainEqual(listKey);
       }
+      expect(keys).not.toContainEqual(["environments", "operational-overview"]);
       // Aggregates are still recomputed on demand by the server.
       expect(keys).toContainEqual(["telemetry", "daily", "dev-1"]);
       expect(keys).toContainEqual(["telemetry", "detailed", "dev-1"]);
