@@ -7,6 +7,7 @@
 #include "watchdog.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "WATCHDOG";
 
@@ -28,21 +29,16 @@ esp_err_t watchdog_init(void) {
       .trigger_panic = true // Panic on timeout
   };
 
+  // With CONFIG_ESP_TASK_WDT_INIT (sdkconfig.defaults) ESP-IDF starts the TWDT
+  // before app_main: calling esp_task_wdt_init() again only logs
+  // "E task_wdt: ... TWDT already initialized". Reconfigure it instead.
+#if CONFIG_ESP_TASK_WDT_INIT
+  esp_err_t ret = esp_task_wdt_reconfigure(&wdt_config);
+#else
   esp_err_t ret = esp_task_wdt_init(&wdt_config);
-  if (ret == ESP_ERR_INVALID_STATE) {
-    ESP_LOGW(TAG, "Task Watchdog Timer ya estaba inicializado por el sistema. "
-                  "Reconfigurando...");
-    // Intentar reconfigurar con nuestros parámetros
-    ret = esp_task_wdt_reconfigure(&wdt_config);
-    if (ret != ESP_OK) {
-      ESP_LOGW(TAG,
-               "No se pudo reconfigurar el TWDT: %s. Se usará configuración "
-               "existente.",
-               esp_err_to_name(ret));
-      // No retornamos error fatal y continuamos para intentar agregar la tarea
-    }
-  } else if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Error inicializando watchdog: %s", esp_err_to_name(ret));
+#endif
+  if (ret != ESP_OK) {
+    ESP_LOGE(TAG, "Error configurando el watchdog: %s", esp_err_to_name(ret));
     return ret;
   }
 

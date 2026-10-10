@@ -100,10 +100,9 @@ void app_main(void) {
   restore_factory_defaults();       // serial / certs / TLS flag if missing
   factory_store_certs_if_missing(); // keep flashed certs for a factory reset
 
-  // 2. Watchdog
-  esp_err_t wdt_ret = watchdog_init();
-  if (wdt_ret != ESP_OK && wdt_ret != ESP_ERR_INVALID_STATE) {
-    ESP_ERROR_CHECK(wdt_ret);
+  // 2. Watchdog (reconfigures the TWDT that ESP-IDF already started)
+  if (watchdog_init() != ESP_OK) {
+    ESP_LOGE(TAG, "Task watchdog setup failed");
   }
 
   // 3. Board I/O
