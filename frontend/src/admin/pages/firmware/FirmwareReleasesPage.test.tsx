@@ -35,7 +35,7 @@ beforeEach(() => {
 describe("FirmwareReleasesPage", () => {
   it("follows the list standard: title, primary create button, columns and footer", async () => {
     renderPage();
-    expect(screen.getByRole("heading", { name: "Firmware" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Firmwares" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nuevo firmware" })).toHaveAttribute("href", "/admin/firmware/create");
     expect(screen.getByRole("link", { name: "Nuevo firmware" })).toHaveClass("h-11");
     const table = await screen.findByTestId("firmware-table");

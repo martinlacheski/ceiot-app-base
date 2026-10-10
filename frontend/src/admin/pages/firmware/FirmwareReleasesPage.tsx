@@ -33,7 +33,7 @@ import { formatDateTime } from "@/utils/date.utils";
 import { getExportGeneratedBy } from "@/utils/export-user.utils";
 
 const PATH = "/admin/firmware";
-const TITLE = "Firmware";
+const TITLE = "Firmwares";
 // Column ids equal the sort keys the backend accepts (`createdAt`, `version`).
 const sortFields = ["version", "createdAt"] as const;
 type SortField = typeof sortFields[number];
@@ -130,7 +130,7 @@ export function FirmwareReleasesPage() {
   };
 
   return <div className="space-y-4">
-    <PageHeader title={TITLE} subtitle="Imágenes de firmware para actualizar los dispositivos (OTA)" />
+    <PageHeader title={TITLE} subtitle="Versiones de firmware para actualizar los equipos de forma remota (OTA)" />
     <ListToolbarLayout
       search={<ListSearchInput value={searchBox.value} onChange={(value) => { searchBox.setValue(value.slice(0, 64)); changePage(1); }} onClear={() => { searchBox.clear(); changePage(1); }} />}
       primaryActions={<><ListFiltersTrigger open={filters.open} onOpenChange={filters.setOpen} hasActiveFilters={hasActiveFilters} /><Button asChild className="h-11"><Link to={`${PATH}/create`}><Plus data-icon="inline-start" />Nuevo firmware</Link></Button></>}
