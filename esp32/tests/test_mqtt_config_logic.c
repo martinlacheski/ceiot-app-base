@@ -15,7 +15,8 @@ static void test_first_boot_defaults_with_factory_serial(void) {
   CHECK(c.use_tls);
   CHECK(strcmp(c.host, MQTT_DEFAULT_HOST) == 0);
   CHECK(strcmp(c.host, "192.168.1.100") == 0);
-  CHECK(c.port == 8883);
+  CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
+  CHECK(MQTT_DEFAULT_TLS_PORT == 18883);
   CHECK(strcmp(c.uri, "mqtts://192.168.1.100") == 0);
 }
 
@@ -26,7 +27,7 @@ static void test_no_serial_anywhere(void) {
   CHECK(!c.has_serial);
   CHECK(c.client_id[0] == '\0');
   /* the rest still resolves, so the web UI can show what would be used */
-  CHECK(c.use_tls && c.port == 8883);
+  CHECK(c.use_tls && c.port == MQTT_DEFAULT_TLS_PORT);
   in.serial = "";
   in.factory_serial = "";
   mqtt_config_resolve(&in, &c);
@@ -58,7 +59,7 @@ static void test_saved_settings(void) {
   CHECK(c.port == 1883);
   in.use_tls = "1";
   mqtt_config_resolve(&in, &c);
-  CHECK(c.use_tls && c.port == 8883);
+  CHECK(c.use_tls && c.port == MQTT_DEFAULT_TLS_PORT);
 }
 
 static void test_bad_values_fall_back_to_defaults(void) {
@@ -66,16 +67,16 @@ static void test_bad_values_fall_back_to_defaults(void) {
   mqtt_config_t c;
   mqtt_config_resolve(&in, &c);
   CHECK(strcmp(c.host, MQTT_DEFAULT_HOST) == 0);
-  CHECK(c.port == 8883);
+  CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
   in.port = "0";
   mqtt_config_resolve(&in, &c);
-  CHECK(c.port == 8883);
+  CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
   in.port = "70000";
   mqtt_config_resolve(&in, &c);
-  CHECK(c.port == 8883);
+  CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
   in.port = "";
   mqtt_config_resolve(&in, &c);
-  CHECK(c.port == 8883);
+  CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
   in.port = "65535";
   mqtt_config_resolve(&in, &c);
   CHECK(c.port == 65535);

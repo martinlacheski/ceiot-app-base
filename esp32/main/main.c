@@ -120,7 +120,7 @@ void app_main(void) {
   ESP_ERROR_CHECK(web_server_start());
 
   // 6. MQTT + OTA + telemetry. A brand-new device (no "storage" namespace)
-  // uses the defaults: mTLS on 8883 to the default broker, serial from the
+  // uses the defaults: mTLS on MQTT_DEFAULT_TLS_PORT to the default broker, serial from the
   // factory snapshot. Without a serial there is no MQTT identity: stay in AP
   // mode so it can be set from the web UI.
   esp_err_t mqtt_ret = mqtt_manager_init();

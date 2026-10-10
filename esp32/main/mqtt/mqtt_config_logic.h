@@ -3,7 +3,7 @@
  *
  * Pure resolution of the broker settings from what NVS holds. A brand-new
  * device has no "storage" namespace at all: every value is then missing and
- * the defaults apply (mTLS on 8883 to MQTT_DEFAULT_HOST), so a freshly flashed
+ * the defaults apply (mTLS on MQTT_DEFAULT_TLS_PORT to MQTT_DEFAULT_HOST), so a freshly flashed
  * board with its certificates and a factory serial connects without visiting
  * the web UI. No ESP-IDF: host-tested (esp32/tests/test_mqtt_config_logic.c).
  */
@@ -14,7 +14,7 @@
 #include <stddef.h>
 
 #define MQTT_DEFAULT_HOST "192.168.1.100"
-#define MQTT_DEFAULT_TLS_PORT 8883
+#define MQTT_DEFAULT_TLS_PORT 18883  /* dev stack: MQTT_LISTENER_TLS on LAN_BIND_IP */
 #define MQTT_DEFAULT_TCP_PORT 1883
 #define MQTT_SERIAL_MAX 32
 #define MQTT_HOST_MAX 128

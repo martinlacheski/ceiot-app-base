@@ -308,7 +308,7 @@ static bool read_str(const char *ns, const char *key, char *out, size_t size) {
 }
 
 // A brand-new device has no "storage" namespace (ESP_ERR_NVS_NOT_FOUND): the
-// defaults of mqtt_config_logic.h apply (mTLS on 8883 to MQTT_DEFAULT_HOST)
+// defaults of mqtt_config_logic.h apply (mTLS on MQTT_DEFAULT_TLS_PORT to MQTT_DEFAULT_HOST)
 // and the serial comes from "storage" or the "factory" snapshot. Without a
 // serial there is no client id nor topic identity: ESP_ERR_INVALID_STATE.
 static esp_err_t load_config(esp_mqtt_client_config_t *config, char *uri,
