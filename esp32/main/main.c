@@ -63,8 +63,9 @@ static led_override_t led_feedback(button_feedback_t feedback) {
   }
 }
 
-// BOOT button (GPIO0): hold >= 3 s and release to start the configuration AP,
-// hold >= 10 s for a factory reset. Short presses are ignored.
+// BOOT button (GPIO0): hold >= 3 s and release to toggle the configuration AP
+// (start it when off, stop it when on), hold >= 10 s for a factory reset.
+// Short presses are ignored.
 static void button_task(void *arg) {
   (void)arg;
   button_state_t state;
@@ -77,9 +78,15 @@ static void button_task(void *arg) {
         button_logic_update(&state, pressed, BUTTON_POLL_MS, &feedback);
     led_set_override(led_feedback(feedback));
 
-    if (action == BUTTON_ACTION_START_AP) {
-      ESP_LOGI(TAG, "BOOT held >= 3 s: starting the configuration AP");
-      wifi_manager_start_ap();
+    if (action == BUTTON_ACTION_TOGGLE_AP) {
+      if (button_logic_ap_command(wifi_manager_is_ap_active()) ==
+          BUTTON_AP_START) {
+        ESP_LOGI(TAG, "BOOT held >= 3 s: starting the configuration AP");
+        wifi_manager_start_ap();
+      } else {
+        ESP_LOGI(TAG, "BOOT held >= 3 s: stopping the configuration AP");
+        wifi_manager_stop_ap();
+      }
     } else if (action == BUTTON_ACTION_FACTORY_RESET) {
       ESP_LOGW(TAG, "BOOT held >= 10 s: factory reset");
       factory_reset_device(NULL); // restarts the device

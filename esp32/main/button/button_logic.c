@@ -38,12 +38,16 @@ button_action_t button_logic_update(button_state_t *state, bool pressed,
     return action;
   }
 
-  // Released: a 3-10 s hold starts the AP; shorter presses (and contact
+  // Released: a 3-10 s hold toggles the AP; shorter presses (and contact
   // bounces) and an already-fired reset do nothing.
   if (!state->reset_fired && state->held_ms >= BUTTON_AP_HOLD_MS) {
-    action = BUTTON_ACTION_START_AP;
+    action = BUTTON_ACTION_TOGGLE_AP;
   }
   button_logic_init(state);
   if (feedback) *feedback = BUTTON_FEEDBACK_NONE;
   return action;
+}
+
+button_ap_command_t button_logic_ap_command(bool ap_active) {
+  return ap_active ? BUTTON_AP_STOP : BUTTON_AP_START;
 }

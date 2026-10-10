@@ -30,15 +30,15 @@ static void test_short_press_does_nothing(void) {
   CHECK(during == BUTTON_ACTION_NONE && fb == BUTTON_FEEDBACK_NONE);
 }
 
-static void test_three_second_hold_starts_ap_on_release(void) {
+static void test_three_second_hold_toggles_ap_on_release(void) {
   button_state_t s;
   button_logic_init(&s);
   button_action_t during;
   button_feedback_t fb;
-  CHECK(press_for(&s, 3000, &during, &fb) == BUTTON_ACTION_START_AP);
+  CHECK(press_for(&s, 3000, &during, &fb) == BUTTON_ACTION_TOGGLE_AP);
   CHECK(during == BUTTON_ACTION_NONE);
   CHECK(fb == BUTTON_FEEDBACK_AP_ARMED);
-  CHECK(press_for(&s, 9950, &during, &fb) == BUTTON_ACTION_START_AP);
+  CHECK(press_for(&s, 9950, &during, &fb) == BUTTON_ACTION_TOGGLE_AP);
   CHECK(during == BUTTON_ACTION_NONE);
 }
 
@@ -85,6 +85,26 @@ static void test_state_resets_after_release_and_null_is_safe(void) {
   CHECK(fb == BUTTON_FEEDBACK_NONE);
 }
 
+static void test_toggle_starts_a_stopped_ap_and_stops_a_running_one(void) {
+  CHECK(button_logic_ap_command(false) == BUTTON_AP_START);
+  CHECK(button_logic_ap_command(true) == BUTTON_AP_STOP);
+}
+
+static void test_two_holds_toggle_twice(void) {
+  /* each 3-10 s hold reports one toggle; the caller flips the AP state */
+  button_state_t s;
+  button_logic_init(&s);
+  button_action_t during;
+  bool ap_active = false;
+  for (int i = 0; i < 2; i++) {
+    if (press_for(&s, 4000, &during, NULL) == BUTTON_ACTION_TOGGLE_AP) {
+      ap_active = button_logic_ap_command(ap_active) == BUTTON_AP_START;
+    }
+  }
+  CHECK(!ap_active);
+  CHECK(press_for(&s, 4000, &during, NULL) == BUTTON_ACTION_TOGGLE_AP);
+}
+
 static void test_hold_time_saturates(void) {
   button_state_t s;
   button_logic_init(&s);
@@ -96,10 +116,12 @@ static void test_hold_time_saturates(void) {
 
 int main(void) {
   RUN(test_short_press_does_nothing);
-  RUN(test_three_second_hold_starts_ap_on_release);
+  RUN(test_three_second_hold_toggles_ap_on_release);
   RUN(test_ten_second_hold_resets_while_held_once);
   RUN(test_feedback_follows_hold_time);
   RUN(test_state_resets_after_release_and_null_is_safe);
+  RUN(test_toggle_starts_a_stopped_ap_and_stops_a_running_one);
+  RUN(test_two_holds_toggle_twice);
   RUN(test_hold_time_saturates);
   TEST_MAIN_END();
 }

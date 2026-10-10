@@ -243,14 +243,14 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
 | BOOT button (GPIO0) | Effect |
 | --- | --- |
 | short press (< 3 s) | nothing |
-| hold ≥ 3 s, then release | starts the configuration AP |
+| hold ≥ 3 s, then release | toggles the configuration AP: starts it when it is off, stops it when it is on |
 | hold ≥ 10 s | factory reset (fires while still held), then reboot |
 
 - AP: SSID `WiFi_CEIoT_APP`, password `ceiotapp` (WPA2), web UI at
   <http://192.168.4.1>. It runs as AP+STA, so the device keeps its Wi-Fi
   connection (and telemetry) while the AP is up. It also starts by itself
-  when no Wi-Fi network is saved. It stays up until restart or until
-  "Desactivar punto de acceso" on the status page.
+  when no Wi-Fi network is saved. It stays up until restart, another
+  3 s hold of BOOT, or "Desactivar punto de acceso" on the status page.
 - Web login: `admin` / `admin` by default (change it under "Seguridad").
   Pages: status (serial, firmware, sensor and last reading, Wi-Fi, AP, MQTT,
   certificates, time), Wi-Fi scan/connect/forget, MQTT broker + certificate
@@ -260,7 +260,7 @@ stack high-water mark; the main loop prints the free heap every 5 minutes.
   and the TLS flag from the NVS `factory` snapshot.
 - Status LED (GPIO2): fast blink = AP active; solid = MQTT connected; slow
   blink = Wi-Fi connected, MQTT not yet; short flash every 2 s = offline.
-  While BOOT is held: solid from 3 s (release to start the AP), very fast
+  While BOOT is held: solid from 3 s (release to toggle the AP), very fast
   blink once the factory reset fires.
 
 ## Host tests
