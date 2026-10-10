@@ -436,6 +436,7 @@ export function DevicesTable({ actions, mode = "admin" }: DevicesTableProps) {
       sortOrder,
     }, {
       generatedBy: getExportGeneratedBy(user),
+      mode,
     });
 
   // Handlers

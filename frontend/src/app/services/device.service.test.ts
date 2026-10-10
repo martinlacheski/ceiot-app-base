@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appApi } from "@/api/appApi";
-import { datetimeCell, type ExportCell } from "@/lib/export.utils";
+import { dateCell, datetimeCell, type ExportCell } from "@/lib/export.utils";
 import { formatDateTime } from "@/utils/date.utils";
 
 import {
@@ -121,10 +121,98 @@ describe("deviceService.getAll", () => {
     );
     const report = downloadReportMock.mock.calls[0][1] as { columns: string[]; data: string[][] };
     const situationIndex = report.columns.indexOf("Situación");
-    const stateIndex = report.columns.indexOf("Estado");
+    const activeIndex = report.columns.indexOf("Activo");
     expect(situationIndex).toBeGreaterThan(-1);
     expect(report.data.map((row) => row[situationIndex])).toEqual(["VINCULADO", "MANTENIMIENTO"]);
-    expect(report.data.map((row) => row[stateIndex])).toEqual(["Activo", "Inactivo"]);
+    expect(report.data.map((row) => row[activeIndex])).toEqual(["Activo", "Inactivo"]);
+  });
+
+  const exportedDevice = {
+    id: "dev-1",
+    serial: "IOT-0001",
+    name: "Sensor Norte",
+    model: "ESP32-ENV",
+    batch: "L-07",
+    manufactureDate: "2026-09-23",
+    status: "active",
+    isActive: true,
+    enabled: true,
+    brokerConnected: true,
+    lastConnection: "2026-10-01T12:00:00Z",
+    type: { id: "type-1", name: "Ambiental", isActive: true },
+    environment: { id: "env-1", name: "Campo Sur", ownerId: "owner-1", ownerName: "Ana Pérez" },
+  };
+
+  const exportOne = async (mode?: "admin" | "user", device: Record<string, unknown> = exportedDevice) => {
+    vi.mocked(appApi.get).mockResolvedValueOnce({
+      data: { items: [device], total: 1, pages: 1, page: 1, perPage: 10000 },
+    });
+    await deviceService.export("excel", { page: 1, perPage: 10, sortBy: "serial", sortOrder: "asc" }, { generatedBy: "Tester", mode });
+    return downloadReportMock.mock.calls[0][1] as { columns: string[]; data: ExportCell[][] };
+  };
+
+  it("exports the admin table columns plus model, batch and typed manufacture date", async () => {
+    const report = await exportOne("admin");
+
+    expect(report.columns).toEqual([
+      "Número de Serie",
+      "Propietario",
+      "Establecimiento",
+      "Tipo",
+      "Dispositivo",
+      "Ubicación",
+      "Estado",
+      "Última conexión",
+      "Situación",
+      "Habilitado",
+      "Activo",
+      "Modelo",
+      "Lote",
+      "Fecha de fabricación",
+    ]);
+    expect(report.data[0]).toEqual([
+      "IOT-0001",
+      "Ana Pérez",
+      "Campo Sur",
+      "Ambiental",
+      "Sensor Norte",
+      "-",
+      "En línea",
+      datetimeCell("2026-10-01T12:00:00Z", formatDateTime("2026-10-01T12:00:00Z")),
+      "ACTIVO",
+      "Sí",
+      "Activo",
+      "ESP32-ENV",
+      "L-07",
+      dateCell("2026-09-23", "23/09/2026"),
+    ]);
+  });
+
+  it("exports the user table columns without the admin-only status columns", async () => {
+    const report = await exportOne("user", {
+      ...exportedDevice,
+      brokerConnected: null,
+      lastConnection: undefined,
+      manufactureDate: undefined,
+    });
+
+    expect(report.columns).toEqual([
+      "Número de Serie",
+      "Propietario",
+      "Establecimiento",
+      "Tipo",
+      "Dispositivo",
+      "Ubicación",
+      "Estado",
+      "Última conexión",
+      "Modelo",
+      "Lote",
+      "Fecha de fabricación",
+    ]);
+    const row = report.data[0];
+    expect(row[6]).toBe("No disponible");
+    expect(row[7]).toEqual(datetimeCell(null, "Nunca"));
+    expect(row[10]).toEqual(dateCell(null, "-"));
   });
 });
 

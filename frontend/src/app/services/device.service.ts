@@ -20,11 +20,16 @@ import {
   formatDeviceLocation,
   getDeviceLocationSourceLabel,
 } from "../components/devices/deviceMap";
-import { datetimeCell } from "@/lib/export.cells";
-import { formatDateTime } from "@/utils/date.utils";
+import { dateCell, datetimeCell, type ExportCell } from "@/lib/export.cells";
+import { formatDate, formatDateTime } from "@/utils/date.utils";
 import { fetchAllPages } from "@/lib/fetchAllPages";
 import { downloadReport, toFilenamePart } from "@/lib/downloadReport";
-import { getDeviceStatusLabel, getOperationStatusLabel, getOperationTypeLabel } from "@/utils/status-labels";
+import {
+  getConnectionStatusLabel,
+  getDeviceStatusLabel,
+  getOperationStatusLabel,
+  getOperationTypeLabel,
+} from "@/utils/status-labels";
 
 const BASE_URL = "/devices";
 
@@ -336,44 +341,60 @@ export const deviceService = {
     return data;
   },
 
+  /** Exports the same columns the devices table shows in `mode` (admin adds the status columns). */
   export: async (
     format: "excel" | "pdf",
     filters: DeviceFilters,
-    options?: { generatedBy?: string },
+    options?: { generatedBy?: string; mode?: "admin" | "user" },
   ): Promise<void> => {
     const params = { ...filters, perPage: 10000, page: 1 };
     const items = await fetchAllPages((page, perPage) =>
       deviceService.getAll({ ...params, page, perPage }),
     );
+    const isAdmin = (options?.mode ?? "admin") === "admin";
 
     const columns = [
-      "Serial",
-      "Dispositivo",
-      "Tipo",
-      "Modelo",
-      "Ubicación",
-      "Situación",
-      "Habilitado",
-      "Estado",
+      "Número de Serie",
+      "Propietario",
       "Establecimiento",
+      "Tipo",
+      "Dispositivo",
+      "Ubicación",
+      "Estado",
+      "Última conexión",
+      ...(isAdmin ? ["Situación", "Habilitado", "Activo"] : []),
+      "Modelo",
+      "Lote",
+      "Fecha de fabricación",
     ];
 
-    const data = items.map((dev) => [
-      dev.serial,
-      dev.name,
-      dev.type?.name || "-",
-      dev.model || "-",
-      (() => {
-        const location = formatDeviceLocation(dev);
-        const sourceLabel = getDeviceLocationSourceLabel(dev);
-        if (location === "-") return location;
-        return sourceLabel ? `${location} (${sourceLabel})` : location;
-      })(),
-      getDeviceStatusLabel(dev.status),
-      dev.enabled ? "Sí" : "No",
-      dev.isActive ? "Activo" : "Inactivo",
-      dev.environment?.name || "-",
-    ]);
+    const data: ExportCell[][] = items.map((dev) => {
+      const location = formatDeviceLocation(dev);
+      const sourceLabel = getDeviceLocationSourceLabel(dev);
+      const manufactureDate = dev.manufactureDate?.split("T")[0] ?? null;
+      return [
+        dev.serial,
+        dev.environment ? dev.environment.ownerName || "Desconocido" : "-",
+        dev.environment?.name || "-",
+        dev.type?.name || "-",
+        dev.name,
+        location !== "-" && sourceLabel ? `${location} (${sourceLabel})` : location,
+        dev.brokerConnected == null
+          ? "No disponible"
+          : getConnectionStatusLabel(dev.brokerConnected ? "online" : "offline"),
+        datetimeCell(dev.lastConnection, dev.lastConnection ? formatDateTime(dev.lastConnection) : "Nunca"),
+        ...(isAdmin
+          ? [
+              getDeviceStatusLabel(dev.status),
+              dev.enabled ? "Sí" : "No",
+              dev.isActive ? "Activo" : "Inactivo",
+            ]
+          : []),
+        dev.model || "-",
+        dev.batch || "-",
+        dateCell(manufactureDate, formatDate(dev.manufactureDate)),
+      ];
+    });
 
     const generatedBy = options?.generatedBy || "Usuario";
 

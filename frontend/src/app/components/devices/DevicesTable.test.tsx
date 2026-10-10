@@ -542,7 +542,7 @@ describe("DevicesTable responsive contract", () => {
     expect(exportDevicesMock).toHaveBeenCalledWith(
       "excel",
       expect.objectContaining({ page: 1, sortBy: "name", sortOrder: "asc" }),
-      expect.anything(),
+      expect.objectContaining({ mode: "admin" }),
     );
   });
 
