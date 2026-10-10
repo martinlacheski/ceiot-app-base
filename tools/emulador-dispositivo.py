@@ -230,8 +230,9 @@ def request_time(client: "mqtt.Client", serial: str) -> None:
 # status.py): `ota/command` (backend -> device) carries request_id, version, url, sha256, size
 # and an optional force; the device answers every step on `ota/status` echoing the request_id.
 
-# `ota_0`/`ota_1` in esp32/partitions.csv (backend `MAX_IMAGE_BYTES`).
-OTA_PARTITION_BYTES = 0x400000
+# `ota_0`/`ota_1` in esp32/partitions.csv (backend `MAX_IMAGE_BYTES`): 0x1E0000 bytes (1920 KB).
+# A larger image is rejected with `image_too_large`, as the firmware does.
+OTA_PARTITION_BYTES = 0x1E0000
 OTA_MAX_URL_LENGTH = 1024
 OTA_FAIL_POINTS = ("downloading", "verifying")
 OTA_DISCONNECT_POINTS = ("downloading",)
@@ -246,6 +247,7 @@ OTA_ERROR_MESSAGES = {
     "busy": "El equipo ya está instalando otra actualización.",
     "same_version": "El equipo ya tiene esta versión.",
     "invalid_command": "La orden de actualización es inválida.",
+    "image_too_large": "La imagen es más grande que la partición OTA del equipo.",
     "download_failed": "No se pudo descargar la imagen.",
     "size_mismatch": "El tamaño de la imagen descargada no coincide.",
     "sha256_mismatch": "El SHA-256 de la imagen descargada no coincide.",
@@ -311,7 +313,7 @@ def parse_ota_command(raw: str | bytes) -> tuple[OtaCommand, bool] | None:
     if not isinstance(sha256, str) or _SHA256_HEX.fullmatch(sha256) is None:
         valid = False
         sha256 = ""
-    if isinstance(size, bool) or not isinstance(size, int) or not 1 <= size <= OTA_PARTITION_BYTES:
+    if isinstance(size, bool) or not isinstance(size, int) or size < 1:
         valid = False
         size = 0
     if force is not None and not isinstance(force, bool):
@@ -334,6 +336,8 @@ def decide_ota(command: OtaCommand, valid: bool, *, running_version: str, busy: 
         return "busy"
     if not valid:
         return "invalid_command"
+    if command.size > OTA_PARTITION_BYTES:
+        return "image_too_large"
     if not command.force and command.version == running_version:
         return "same_version"
     return None

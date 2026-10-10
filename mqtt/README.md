@@ -373,7 +373,8 @@ publica telemetría cada `--interval` segundos (con su `firmware_version`) y
 atiende `iot/devices/<serial>/ota/command`:
 
 1. Publica `accepted` en `iot/devices/<serial>/ota/status` (o `rejected` con
-   `busy`, `same_version` o `invalid_command`, como el firmware).
+   `busy`, `same_version`, `invalid_command` o `image_too_large` si `size`
+   supera la partición OTA de 0x1E0000 bytes, como el firmware).
 2. Descarga la imagen de la `url` del comando (HTTP plano permitido,
    redirecciones rechazadas) informando `downloading` con `progress` cada 10 %.
 3. `verifying`: compara tamaño y SHA-256 con los del comando. Si no coinciden

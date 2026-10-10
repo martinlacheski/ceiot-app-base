@@ -4,9 +4,10 @@ import re
 import struct
 from dataclasses import dataclass
 
-# The OTA app partitions in esp32/partitions.csv (`ota_0`/`ota_1`) are 0x400000 bytes each: an
-# image larger than that cannot be written by the device. Keep both in sync.
-MAX_IMAGE_BYTES = 0x400000
+# The OTA app partitions in esp32/partitions.csv (`ota_0`/`ota_1`) are 0x1E0000 bytes (1920 KB)
+# each: an image larger than that cannot be written by the device, which answers
+# `image_too_large`. Keep both in sync (also `OTA_PARTITION_BYTES` in tools/emulador-dispositivo.py).
+MAX_IMAGE_BYTES = 0x1E0000
 # First byte of every ESP app image (`ESP_IMAGE_HEADER_MAGIC`).
 ESP_IMAGE_MAGIC = 0xE9
 # Magic byte + segment count + SPI mode/speed + entry point + extended header: a real image is

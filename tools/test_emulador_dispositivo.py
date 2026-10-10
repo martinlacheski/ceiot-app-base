@@ -65,7 +65,6 @@ def test_parse_command_unreadable_without_request_id(raw):
         {"size": 0},
         {"size": True},
         {"size": 1.5},
-        {"size": emu.OTA_PARTITION_BYTES + 1},
         {"url": "ftp://host/x"},
         {"url": ...},
         {"version": ...},
@@ -91,6 +90,21 @@ def test_decide_rejects_same_version_unless_forced():
     assert emu.decide_ota(command, valid, running_version="emulador", busy=False) == "same_version"
     forced, valid = emu.parse_ota_command(command_json(version="emulador", force=True))
     assert emu.decide_ota(forced, valid, running_version="emulador", busy=False) is None
+
+
+def test_partition_size_matches_the_firmware_slot():
+    # esp32/partitions.csv: ota_0 and ota_1 are 0x1E0000 bytes (backend MAX_IMAGE_BYTES).
+    assert emu.OTA_PARTITION_BYTES == 0x1E0000
+
+
+def test_decide_rejects_an_image_larger_than_the_slot():
+    command, valid = emu.parse_ota_command(command_json(size=emu.OTA_PARTITION_BYTES + 1))
+    assert valid is True
+    assert emu.decide_ota(command, valid, running_version="x", busy=False) == "image_too_large"
+    forced, valid = emu.parse_ota_command(command_json(size=emu.OTA_PARTITION_BYTES + 1, force=True))
+    assert emu.decide_ota(forced, valid, running_version="x", busy=False) == "image_too_large"
+    fits, valid = emu.parse_ota_command(command_json(size=emu.OTA_PARTITION_BYTES))
+    assert emu.decide_ota(fits, valid, running_version="x", busy=False) is None
 
 
 def test_decide_rejects_busy_and_invalid():

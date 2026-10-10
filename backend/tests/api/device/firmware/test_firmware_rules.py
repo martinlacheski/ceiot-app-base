@@ -18,8 +18,8 @@ def test_an_esp_app_image_is_accepted():
 
 
 def test_the_largest_image_that_fits_the_ota_partition_is_accepted():
-    # esp32/partitions.csv: ota_0 and ota_1 are 0x400000 bytes each.
-    assert MAX_IMAGE_BYTES == 0x400000
+    # esp32/partitions.csv: ota_0 and ota_1 are 0x1E0000 bytes each.
+    assert MAX_IMAGE_BYTES == 0x1E0000
     validate_image(esp_image(MAX_IMAGE_BYTES))
 
 
