@@ -9,7 +9,7 @@ import type { Device } from "@/app/types/device.types";
 import type { Environment } from "@/app/types/environment.types";
 import { Button } from "@/components/ui/button";
 import { deviceLabel } from "./overviewModel";
-import { LoadingState, RefreshNotice, type InventoryLabel } from "./OverviewStates";
+import { LoadingState, RefreshErrorNotice, type InventoryLabel } from "./OverviewStates";
 
 /** Rows listed in a KPI card; the rest are one "Ver todos" away. */
 export const KPI_DETAIL_ROWS = 8;
@@ -18,7 +18,6 @@ export interface InventoryState {
   isPending: boolean;
   isError: boolean;
   hasData: boolean;
-  isFetching: boolean;
   onRetry: () => void;
 }
 
@@ -54,7 +53,7 @@ function DetailsFrame({ title, description, label, state, shown, total, emptyTex
   } else {
     body = (
       <>
-        <RefreshNotice hasError={state.isError} isFetching={state.isFetching} />
+        <RefreshErrorNotice hasError={state.isError} />
         {shown === 0 ? <p className="py-4 text-center text-sm text-muted-foreground">{emptyText}</p> : children}
       </>
     );

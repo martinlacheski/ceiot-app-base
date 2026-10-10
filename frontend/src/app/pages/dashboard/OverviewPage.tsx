@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 
 import { PageHeader } from "@/app/components/PageHeader";
+import { useLivePulseStatus } from "@/app/live/livePulse.store";
 import { deviceService } from "@/app/services/device.service";
 import { environmentService } from "@/app/services/environment.service";
 import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
@@ -29,7 +30,7 @@ import {
 import type { ReadingsDisplay, ReadingsView } from "./overview/ReadingsControls";
 import { ReadingsPanel } from "./overview/ReadingsPanel";
 import type { SeriesReadingsState } from "./overview/SeriesReadingsBody";
-import { historyQueryOptions, TELEMETRY_REFETCH_MS } from "./overview/telemetryQueries";
+import { historyQueryOptions, liveRefreshOptions } from "./overview/telemetryQueries";
 
 const INVENTORY_PAGE_SIZE = 100;
 
@@ -42,6 +43,9 @@ export default function OverviewPage() {
   const [display, setDisplay] = useState<ReadingsDisplay>("chart");
   const [requestedEnvironmentId, setRequestedEnvironmentId] = useState<string | null>(null);
   const [requestedVariableCode, setRequestedVariableCode] = useState<string | null>(null);
+  // The live pulse updates the caches in place; poll slowly only while it is down.
+  const liveConnected = useLivePulseStatus((status) => status.connected);
+  const refreshOptions = liveRefreshOptions(liveConnected);
 
   const environmentsQuery = useQuery({
     queryKey: ["environments", "operational-overview"],
@@ -51,6 +55,7 @@ export default function OverviewPage() {
       sortBy: ENVIRONMENT_SORT_BY.NAME,
       sortOrder: "asc",
     }),
+    ...refreshOptions,
   });
 
   const devicesQuery = useQuery({
@@ -61,6 +66,7 @@ export default function OverviewPage() {
       sortBy: DEVICE_SORT_BY.NAME,
       sortOrder: "asc",
     }),
+    ...refreshOptions,
   });
 
   const environments = environmentsQuery.data?.items ?? [];
@@ -74,14 +80,15 @@ export default function OverviewPage() {
   }
   const telemetryEnabled = Boolean(deviceId && canReadTelemetry);
 
-  // Same key prefixes as the device detail page so the live pulse refreshes the dashboard too.
+  // Same key prefixes as the device detail page so the live pulse patches the dashboard too.
   const latestQuery = useQuery({
     queryKey: ["telemetry", "latest", deviceId, RECENT_READINGS_LIMIT],
     queryFn: () => environmentalSensorService.getLatest(deviceId!, RECENT_READINGS_LIMIT),
     enabled: telemetryEnabled,
-    refetchInterval: TELEMETRY_REFETCH_MS,
+    placeholderData: keepPreviousData,
+    ...refreshOptions,
   });
-  const historyQuery = useQuery(historyQueryOptions(deviceId, range, canReadTelemetry));
+  const historyQuery = useQuery(historyQueryOptions(deviceId, range, canReadTelemetry, liveConnected));
 
   // Establishment view: one history query per device, with the per-device keys so the cache is shared.
   const environmentOptions = listDeviceEnvironments(devices);
@@ -93,7 +100,7 @@ export default function OverviewPage() {
     : [];
   const environmentEnabled = view === "environment" && canReadTelemetry;
   const environmentHistory = useQueries({
-    queries: environmentDevices.map((device) => historyQueryOptions(device.id, range, environmentEnabled)),
+    queries: environmentDevices.map((device) => historyQueryOptions(device.id, range, environmentEnabled, liveConnected)),
   });
   const environmentHistories: DeviceHistory[] = environmentDevices.map((device, index) => ({
     deviceId: device.id,
@@ -158,7 +165,6 @@ export default function OverviewPage() {
             isPending: environmentsQuery.isPending,
             isError: environmentsQuery.isError,
             hasData: Boolean(environmentsQuery.data),
-            isFetching: environmentsQuery.isFetching,
             onRetry: () => void environmentsQuery.refetch(),
           }}
           devices={devices}
@@ -167,7 +173,6 @@ export default function OverviewPage() {
             isPending: devicesQuery.isPending,
             isError: devicesQuery.isError,
             hasData: Boolean(devicesQuery.data),
-            isFetching: devicesQuery.isFetching,
             onRetry: () => void devicesQuery.refetch(),
           }}
           presence={presence}

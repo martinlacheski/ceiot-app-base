@@ -119,6 +119,114 @@ describe("useLivePulse", () => {
     expect(keys.filter((key) => key.join("/") === "devices/list")).toHaveLength(1);
   });
 
+  describe("telemetry pulses carrying the reading", () => {
+    const sensors = [{
+      key: "dht22",
+      sensorCode: "DHT22",
+      sensorName: "DHT22",
+      variables: [{ code: "temperature", name: "Temperatura", unit: "°C" }],
+    }];
+    const cachedPage = () => ({
+      items: [{ time: "2026-05-01T11:59:00+00:00", values: { dht22: { temperature: 20 } } }],
+      total: 1,
+      sensors,
+    });
+    const withValues = (overrides: Partial<PulseEvent> = {}) =>
+      event({ values: { dht22: { temperature: 21.5 } }, ...overrides });
+    const historyKey = ["telemetry", "history", "dev-1", "24h"];
+    const latestKey = ["telemetry", "latest", "dev-1", 10];
+    const singleLatestKey = ["telemetry", "latest", "dev-1"];
+    const times = (key: unknown[]) =>
+      (queryClient.getQueryData(key) as { items: { time: string }[] }).items.map((entry) => entry.time);
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date("2026-05-01T12:00:30Z"));
+      queryClient.setQueryData(historyKey, cachedPage());
+      queryClient.setQueryData(latestKey, cachedPage());
+      queryClient.setQueryData(singleLatestKey, cachedPage());
+    });
+
+    const pulse = (pulseEvent: PulseEvent) => {
+      renderHook(() => useLivePulse(), { wrapper });
+      act(() => created[0].options.onPulse(pulseEvent));
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+    };
+
+    it("appends the reading to the cached history and latest pages instead of refetching them", () => {
+      pulse(withValues());
+
+      expect(times(historyKey)).toEqual(["2026-05-01T12:00:00+00:00", "2026-05-01T11:59:00+00:00"]);
+      expect(times(latestKey)).toEqual(["2026-05-01T12:00:00+00:00", "2026-05-01T11:59:00+00:00"]);
+      expect(times(singleLatestKey)).toEqual(["2026-05-01T12:00:00+00:00"]);
+      const keys = invalidatedKeys();
+      expect(keys.some((key) => key[0] === "telemetry" && (key[1] === "history" || key[1] === "latest"))).toBe(false);
+    });
+
+    it("does not refetch the device and establishment lists for a reading", () => {
+      pulse(withValues());
+
+      const keys = invalidatedKeys();
+      for (const listKey of [
+        ["devices", "list"],
+        ["devices", "map"],
+        ["devices", "operational-overview"],
+        ["environments", "operational-overview"],
+      ]) {
+        expect(keys).not.toContainEqual(listKey);
+      }
+      // Aggregates are still recomputed on demand by the server.
+      expect(keys).toContainEqual(["telemetry", "daily", "dev-1"]);
+      expect(keys).toContainEqual(["telemetry", "detailed", "dev-1"]);
+    });
+
+    it("keeps refetching everything for a telemetry pulse without values", () => {
+      pulse(event());
+
+      const keys = invalidatedKeys();
+      expect(keys).toContainEqual(["telemetry", "history", "dev-1"]);
+      expect(keys).toContainEqual(["telemetry", "latest", "dev-1"]);
+      expect(keys).toContainEqual(["devices", "operational-overview"]);
+      expect(times(historyKey)).toEqual(["2026-05-01T11:59:00+00:00"]);
+    });
+
+    it("refetches a cached page that does not describe the reading's sensor", () => {
+      pulse(withValues({ values: { bme280: { pressure: 1013 } } }));
+
+      const keys = invalidatedKeys();
+      expect(keys).toContainEqual(historyKey);
+      expect(keys).toContainEqual(latestKey);
+      expect(times(historyKey)).toEqual(["2026-05-01T11:59:00+00:00"]);
+    });
+
+    it("refetches a history with a custom period instead of patching it", () => {
+      const customKey = ["telemetry", "history", "dev-1", "custom", "Fri May 01 2026", "Fri May 01 2026"];
+      queryClient.setQueryData(customKey, cachedPage());
+
+      pulse(withValues());
+
+      expect(invalidatedKeys()).toContainEqual(customKey);
+      expect(times(customKey)).toEqual(["2026-05-01T11:59:00+00:00"]);
+      expect(times(historyKey)).toEqual(["2026-05-01T12:00:00+00:00", "2026-05-01T11:59:00+00:00"]);
+    });
+
+    it("refetches a page whose response is still in flight, since it may predate the reading", () => {
+      void queryClient.prefetchQuery({ queryKey: historyKey, queryFn: () => new Promise(() => {}) });
+
+      pulse(withValues());
+
+      expect(invalidatedKeys()).toContainEqual(historyKey);
+      expect(times(latestKey)).toEqual(["2026-05-01T12:00:00+00:00", "2026-05-01T11:59:00+00:00"]);
+    });
+
+    it("leaves other devices' caches alone", () => {
+      pulse(withValues({ deviceId: "dev-2" }));
+
+      expect(times(historyKey)).toEqual(["2026-05-01T11:59:00+00:00"]);
+    });
+  });
+
   it("resyncs broadly after a reconnection", () => {
     renderHook(() => useLivePulse(), { wrapper });
     act(() => created[0].options.onResync?.());

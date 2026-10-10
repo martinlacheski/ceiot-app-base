@@ -18,6 +18,8 @@ export interface PulseEvent {
   environmentId: string | null;
   kind: PulseKind;
   time: string;
+  /** Reading of a telemetry pulse (`{ sensorKey: { variableCode: value } }`); absent without telemetry permission. */
+  values?: Record<string, Record<string, number | null>> | null;
 }
 
 export interface SseFrame {

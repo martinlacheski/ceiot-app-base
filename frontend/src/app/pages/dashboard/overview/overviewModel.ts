@@ -1,21 +1,22 @@
+import { ROLLING_RANGE_MS } from "@/app/live/telemetryCachePatch";
 import type { Device } from "@/app/types/device.types";
 
 export type ReadingsRange = "1h" | "24h" | "7d";
 
-export const READINGS_RANGES: Array<{ id: ReadingsRange; label: string; description: string; hours: number }> = [
-  { id: "1h", label: "1h", description: "Última hora", hours: 1 },
-  { id: "24h", label: "24h", description: "Últimas 24 horas", hours: 24 },
-  { id: "7d", label: "7d", description: "Últimos 7 días", hours: 24 * 7 },
+export const READINGS_RANGES: Array<{ id: ReadingsRange; label: string; description: string }> = [
+  { id: "1h", label: "1h", description: "Última hora" },
+  { id: "24h", label: "24h", description: "Últimas 24 horas" },
+  { id: "7d", label: "7d", description: "Últimos 7 días" },
 ];
 
 /** Recent readings fetched for the records table and the current-values strip. */
 export const RECENT_READINGS_LIMIT = 10;
 
-/** ISO bounds of a rolling window that ends at `now`. */
+/** ISO bounds of a rolling window that ends at `now` (same windows the live pulse trims to). */
 export function resolveReadingsPeriod(range: ReadingsRange, now: number) {
-  const hours = READINGS_RANGES.find((option) => option.id === range)?.hours ?? 24;
+  const duration = ROLLING_RANGE_MS[range] ?? ROLLING_RANGE_MS["24h"];
   return {
-    start: new Date(now - hours * 60 * 60 * 1000).toISOString(),
+    start: new Date(now - duration).toISOString(),
     end: new Date(now).toISOString(),
   };
 }

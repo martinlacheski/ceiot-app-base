@@ -23,16 +23,15 @@ export function ErrorState({ label, onRetry }: { label: InventoryLabel; onRetry:
   );
 }
 
-export function RefreshNotice({ hasError, isFetching }: { hasError: boolean; isFetching: boolean }) {
-  if (hasError) {
-    return (
-      <p role="status" className="text-xs text-destructive">
-        No se pudo actualizar el inventario. Se muestran los últimos datos disponibles.
-      </p>
-    );
-  }
-  if (isFetching) {
-    return <p role="status" className="text-xs text-muted-foreground">Actualizando inventario...</p>;
-  }
-  return null;
+/**
+ * Shown only when a background refresh failed. Successful background refreshes
+ * stay silent: the data simply updates in place.
+ */
+export function RefreshErrorNotice({ hasError }: { hasError: boolean }) {
+  if (!hasError) return null;
+  return (
+    <p role="status" className="text-xs text-destructive">
+      No se pudo actualizar el inventario. Se muestran los últimos datos disponibles.
+    </p>
+  );
 }

@@ -1,11 +1,21 @@
 import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { appApi } from "@/api/appApi";
+import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { API_BASE_URL } from "@/lib/apiBaseUrl";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useLivePulseStatus } from "./livePulse.store";
 import { createPulseClient, type PulseEvent } from "./pulseClient";
+import {
+  isReadingValues,
+  latestLimit,
+  patchHistoryPage,
+  patchLatestPage,
+  rollingRangeOf,
+  type PatchOutcome,
+  type ReadingValues,
+} from "./telemetryCachePatch";
 
 /** A burst of pulses (several devices, several messages) collapses into one refetch round. */
 const FLUSH_DELAY_MS = 300;
@@ -30,6 +40,47 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
     );
   }
   return keys;
+}
+
+/**
+ * Queries a reading-carrying telemetry pulse still refreshes: server-side
+ * aggregates and the device's own detail. Lists and the history/latest pages
+ * are not here: lists only change on presence/health pulses, and the pages are
+ * patched in place by `applyReading`.
+ */
+function queryKeysAfterReading(deviceId: string): QueryKey[] {
+  return [
+    ["devices", "detail", deviceId],
+    ["device", "detail", deviceId],
+    ["telemetry", "daily", deviceId],
+    ["telemetry", "detailed", deviceId],
+  ];
+}
+
+/**
+ * Fold the reading into every cached history/latest page of the device and
+ * return the keys that could not be patched and must be refetched instead.
+ */
+export function applyReading(queryClient: QueryClient, deviceId: string, time: string, values: ReadingValues): QueryKey[] {
+  const reading = { time, values };
+  const now = Date.now();
+  const refetch: QueryKey[] = [];
+  const patchAll = (prefix: QueryKey, patch: (key: QueryKey, page: TelemetryPage | undefined) => PatchOutcome) => {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: prefix })) {
+      const key = query.queryKey;
+      // A response already in flight may predate the reading and would overwrite the patch.
+      if (query.state.fetchStatus === "fetching") {
+        refetch.push(key);
+        continue;
+      }
+      const outcome = patch(key, query.state.data as TelemetryPage | undefined);
+      if (outcome.status === "patched") queryClient.setQueryData(key, outcome.page);
+      else if (outcome.status === "invalidate") refetch.push(key);
+    }
+  };
+  patchAll(["telemetry", "history", deviceId], (key, page) => patchHistoryPage(page, reading, rollingRangeOf(key), now));
+  patchAll(["telemetry", "latest", deviceId], (key, page) => patchLatestPage(page, reading, latestLimit(key)));
+  return refetch;
 }
 
 const keyId = (key: QueryKey) => JSON.stringify(key);
@@ -70,8 +121,9 @@ async function refreshAccessToken(): Promise<string | null> {
 
 /**
  * Keeps the live pulse connection open for the authenticated app and refreshes
- * only the queries of the devices that reported something. Mount it once, in
- * the authenticated layout.
+ * only the queries of the devices that reported something. A telemetry pulse
+ * that carries its reading is appended to the cached pages without a refetch,
+ * so charts move in place. Mount it once, in the authenticated layout.
  */
 export function useLivePulse() {
   const queryClient = useQueryClient();
@@ -82,7 +134,14 @@ export function useLivePulse() {
       baseUrl: API_BASE_URL,
       getToken: () => useAuthStore.getState().token,
       refreshToken: refreshAccessToken,
-      onPulse: (event) => invalidator.add(queryKeysForPulse(event)),
+      onPulse: (event) => {
+        if (event.kind === "telemetry" && isReadingValues(event.values)) {
+          const refetch = applyReading(queryClient, event.deviceId, event.time, event.values);
+          invalidator.add([...refetch, ...queryKeysAfterReading(event.deviceId)]);
+        } else {
+          invalidator.add(queryKeysForPulse(event));
+        }
+      },
       onResync: () =>
         invalidator.add([["devices"], ["device"], ["telemetry"], ["environments", "operational-overview"]]),
       onStatusChange: (connected) => useLivePulseStatus.getState().setConnected(connected),

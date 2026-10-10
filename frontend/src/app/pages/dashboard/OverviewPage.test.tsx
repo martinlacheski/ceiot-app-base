@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { keepPreviousData } from "@tanstack/react-query";
+
+import { useLivePulseStatus } from "@/app/live/livePulse.store";
 import OverviewPage from "./OverviewPage";
 
 const {
@@ -58,6 +61,10 @@ type QueryState = {
 
 type QueryConfig = {
   queryKey: unknown[];
+  refetchInterval?: number | false;
+  refetchOnWindowFocus?: boolean;
+  staleTime?: number;
+  placeholderData?: unknown;
   enabled?: boolean;
   queryFn: () => unknown;
 };
@@ -163,7 +170,7 @@ const queryConfigs = () => useQueryMock.mock.calls.map(([config]) => config as Q
 const lastTelemetryQuery = (kind: "latest" | "history") =>
   queryConfigs().filter((config) => config.queryKey[0] === "telemetry" && config.queryKey[1] === kind).at(-1)!;
 const lastEnvironmentQueries = () =>
-  (useQueriesMock.mock.calls.at(-1)![0] as { queries: Array<QueryConfig & { refetchInterval?: number }> }).queries;
+  (useQueriesMock.mock.calls.at(-1)![0] as { queries: QueryConfig[] }).queries;
 
 /** Two devices in "Establecimiento Norte", one in "Establecimiento Sur", one unassigned. */
 const establishmentDevices = {
@@ -203,6 +210,7 @@ const chartSeries = () =>
 describe("OverviewPage operational dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useLivePulseStatus.getState().setConnected(true);
     auth.user = { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] };
     telemetry.latest = state(readings);
     telemetry.history = state(readings);
@@ -242,6 +250,54 @@ describe("OverviewPage operational dashboard", () => {
     expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "24h"]);
     expect(keys.some((key) => String(key[0]).includes("revenue"))).toBe(false);
     expect(screen.queryByText(/ingresos|comisi[oó]n|transacciones|excel|pdf/i)).not.toBeInTheDocument();
+  });
+
+  describe("live updates without a visible refresh", () => {
+    const dashboardQueries = () => [
+      queryConfigs().filter((config) => config.queryKey[1] === "operational-overview").at(-1)!,
+      lastTelemetryQuery("latest"),
+      lastTelemetryQuery("history"),
+    ];
+
+    it("does not poll while the live pulse keeps the caches current", () => {
+      renderPage();
+
+      for (const config of [...dashboardQueries(), ...lastEnvironmentQueries()]) {
+        expect(config.refetchInterval).toBe(false);
+        expect(config.refetchOnWindowFocus).toBe(false);
+        expect(config.staleTime).toBeGreaterThanOrEqual(60_000);
+      }
+    });
+
+    it("falls back to slow polling only while the live pulse is disconnected", () => {
+      useLivePulseStatus.getState().setConnected(false);
+      renderPage();
+
+      for (const config of [...dashboardQueries(), ...lastEnvironmentQueries()]) {
+        expect(config.refetchInterval).toBe(60_000);
+      }
+    });
+
+    it("keeps the previous readings on screen while another device or range loads", () => {
+      renderPage();
+
+      expect(lastTelemetryQuery("latest").placeholderData).toBe(keepPreviousData);
+      expect(lastTelemetryQuery("history").placeholderData).toBe(keepPreviousData);
+    });
+
+    it("shows no refresh notice while data refetches in the background", () => {
+      useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
+        if (queryKey[0] === "environments") return state(environments, { isFetching: true });
+        if (queryKey[0] === "devices") return state(devices, { isFetching: true });
+        return state(readings, { isFetching: true });
+      });
+
+      renderPage();
+      openKpi("kpi-devices", "Dispositivos");
+
+      expect(screen.queryByText(/Actualizando/)).not.toBeInTheDocument();
+      expect(screen.getByTestId("environment-chart")).toBeInTheDocument();
+    });
   });
 
   it("shows fleet KPIs with totals and broker presence counts", () => {
@@ -594,7 +650,7 @@ describe("OverviewPage operational dashboard", () => {
       ["telemetry", "history", "device-offline-enabled", "24h"],
       ["telemetry", "history", "device-online", "24h"],
     ]);
-    expect(queries.every((config) => config.enabled === true && config.refetchInterval === 30_000)).toBe(true);
+    expect(queries.every((config) => config.enabled === true && config.refetchInterval === false)).toBe(true);
     expect(typeof queries[0].queryFn).toBe("function");
 
     const chart = screen.getByTestId("environment-chart");
