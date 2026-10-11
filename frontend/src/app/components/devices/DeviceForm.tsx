@@ -11,6 +11,7 @@ import {
   Form,
   FormControl,
   FormField,
+  FormDescription,
   FormItem,
   FormLabel,
   FormMessage,
@@ -205,7 +206,8 @@ export function DeviceForm({
         name: values.name || "",
         description: values.description,
         deviceTypeId: values.deviceTypeId,
-        model: values.model?.trim() || selectedType?.hardwareModel || undefined,
+        // Only a real per-unit override: an empty field follows the type's hardware model.
+        model: values.model?.trim() || undefined,
         batch: values.batch,
         manufactureDate: values.manufactureDate
           ? format(values.manufactureDate, "yyyy-MM-dd")
@@ -453,11 +455,20 @@ export function DeviceForm({
                     <FormLabel>Modelo</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder={selectedType?.hardwareModel || "Modelo del dispositivo"}
+                        placeholder={
+                          selectedType?.hardwareModel
+                            ? `Por defecto: ${selectedType.hardwareModel}`
+                            : "Modelo del dispositivo"
+                        }
                         {...field}
                         disabled={isEditing}
                       />
                     </FormControl>
+                    {!isEditing && selectedType?.hardwareModel && (
+                      <FormDescription>
+                        Modelo de placa (por defecto: {selectedType.hardwareModel})
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

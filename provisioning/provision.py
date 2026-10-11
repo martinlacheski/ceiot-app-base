@@ -479,7 +479,8 @@ def build_parser() -> argparse.ArgumentParser:
     environment.add_argument("--environment-id", help="Pair the device to this environment (UUID).")
     environment.add_argument("--environment-of", type=normalize_serial, metavar="SERIAL",
                              help="Pair the device to the environment of this other device.")
-    prepare.add_argument("--model", help="Hardware model (generated serial only).")
+    prepare.add_argument("--model", help="Hardware model override (generated serial only; "
+                         "default: the device type's hardware model).")
     prepare.add_argument("--batch", help="Production batch (generated serial only).")
     prepare.add_argument("--manufacture-date", help="YYYY-MM-DD (generated serial only).")
     prepare.add_argument("--profile", type=Path, default=DEFAULT_PROFILE,

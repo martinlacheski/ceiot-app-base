@@ -63,6 +63,7 @@ export interface Device {
   name: string;
   description?: string;
   deviceTypeId: string;
+  /** Effective model: the unit's override, else the device type's hardware model. */
   model?: string;
   batch?: string;
   manufactureDate?: string; // ISO date string
@@ -95,6 +96,7 @@ export interface DeviceCreate {
   name: string;
   description?: string;
   deviceTypeId?: string;
+  /** Per-unit override only; omit it to follow the device type's hardware model. */
   model?: string;
   batch?: string;
   manufactureDate?: string;

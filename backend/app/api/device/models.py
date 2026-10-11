@@ -3,6 +3,7 @@ import uuid
 from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
+from pydantic import AliasChoices, Field as PydanticField
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.api.device.device_type.constants import (
@@ -35,6 +36,8 @@ class DeviceBase(SQLModel):
     serial: str = Field(index=True, unique=True)
     name: str
     description: Optional[str] = Field(default=None)
+    # Per-unit override of the type's ``hardware_model``; NULL means "use the type's model".
+    # Read it through ``effective_model`` (or ``effective_model_expression()`` in SQL).
     model: Optional[str] = Field(default=None)
     batch: Optional[str] = Field(default=None)
     firmware_version: Optional[str] = Field(default=None)
@@ -82,6 +85,13 @@ class Device(DeviceBase, table=True):
     )
 
     @property
+    def effective_model(self) -> Optional[str]:
+        """The unit's override, else its type's hardware model (needs ``type`` loaded)."""
+        if self.model is not None:
+            return self.model
+        return self.type.hardware_model if self.type is not None else None
+
+    @property
     def effective_location(self) -> Optional[str]:
         if self.gps_latitude is not None and self.gps_longitude is not None:
             return f"{self.gps_latitude},{self.gps_longitude}"
@@ -100,6 +110,20 @@ class Device(DeviceBase, table=True):
         if self.environment and self.environment.location and self.environment.location.strip():
             return DeviceEffectiveLocationSource.ENVIRONMENT
         return None
+
+
+def normalize_model_override(requested: Optional[str], type_model: Optional[str]) -> Optional[str]:
+    """The value to store in ``device.model``: None when blank or equal to the type's model.
+
+    The comparison (trimmed, case-insensitive) matches migration 0024.
+    """
+    model = (requested or "").strip()
+    if not model:
+        return None
+    if type_model is not None and model.lower() == type_model.strip().lower():
+        return None
+    return model
+
 
 class DeviceLocationReport(SQLModel, table=True):
     __tablename__ = "device_location_report"
@@ -141,7 +165,10 @@ class DeviceRead(CamelModel):
     name: str
     description: Optional[str] = None
     device_type_id: uuid.UUID
-    model: Optional[str] = None
+    # The effective model: the unit's override, else the type's hardware model.
+    model: Optional[str] = PydanticField(
+        default=None, validation_alias=AliasChoices("effective_model", "model")
+    )
     batch: Optional[str] = None
     firmware_version: Optional[str] = None
     ip_address: Optional[str] = None

@@ -2,7 +2,7 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 
 from app.api.device.device_type.models import DeviceTypeRead
 from app.api.device.models import DeviceStatus
@@ -38,7 +38,8 @@ class ProvisioningDevicePrepareResponse(CamelModel):
     name: str
     device_type_id: UUID
     type: Optional[DeviceTypeRead] = None
-    model: Optional[str] = None
+    # The effective model (an explicit --model equal to the type's is not stored).
+    model: Optional[str] = Field(default=None, validation_alias=AliasChoices("effective_model", "model"))
     batch: Optional[str] = None
     manufacture_date: Optional[date] = None
     status: DeviceStatus

@@ -136,20 +136,30 @@ describe("DeviceForm", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it("shows the type's hardware model as the Modelo placeholder and default", async () => {
+  it("shows the type's hardware model as the default and sends a model only as an override", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     render(<MemoryRouter><DeviceForm onSubmit={onSubmit} /></MemoryRouter>);
     await waitFor(() => expect(sensorSelects()).toHaveLength(1));
-    expect(screen.getByLabelText("Modelo")).toHaveAttribute("placeholder", "ESP32-DevKit");
+    expect(screen.getByLabelText("Modelo")).toHaveAttribute("placeholder", "Por defecto: ESP32-DevKit");
+    expect(screen.getByText("Modelo de placa (por defecto: ESP32-DevKit)")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
-    expect(onSubmit.mock.calls[0][0]).toMatchObject({ deviceTypeId: DEVICE_TYPE_ID, model: "ESP32-DevKit" });
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ deviceTypeId: DEVICE_TYPE_ID });
+    expect(onSubmit.mock.calls[0][0].model).toBeUndefined();
     onSubmit.mockClear();
-    await user.type(screen.getByLabelText("Modelo"), "ESP32-S3");
+    await user.type(screen.getByLabelText("Modelo"), "  ESP32-S3 ");
     await user.click(screen.getByRole("button", { name: "Crear Dispositivo" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0][0].model).toBe("ESP32-S3");
+  });
+
+  it("keeps the generic Modelo placeholder for a type without a hardware model", async () => {
+    state.types = [ambiental({ hardwareModel: null })];
+    render(<MemoryRouter><DeviceForm onSubmit={vi.fn()} /></MemoryRouter>);
+    await waitFor(() => expect(sensorSelects()).toHaveLength(1));
+    expect(screen.getByLabelText("Modelo")).toHaveAttribute("placeholder", "Modelo del dispositivo");
+    expect(screen.queryByText(/por defecto:/)).not.toBeInTheDocument();
   });
 
   it("keeps editable device fields and submits no financial keys", async () => {

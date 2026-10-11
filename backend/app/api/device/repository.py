@@ -26,6 +26,7 @@ from app.api.device.models import (
     DeviceLocationReport,
     DeviceUpdate,
     DeviceStatus,
+    normalize_model_override,
 )
 from app.api.device.service import DeviceService
 from app.services.pagination import paginate_query_async
@@ -40,6 +41,21 @@ from app.core.search import (
 )
 from app.core.labels_es import DEVICE_STATUS_LABELS, codes_matching_label
 from app.core.time import utc_now
+
+
+def effective_model_expression():
+    """SQL twin of ``Device.effective_model``: ``COALESCE(device.model, device_type.hardware_model)``.
+
+    A correlated subquery over an alias keeps it independent of the joins a list query adds.
+    """
+    type_alias = aliased(DeviceTypeCatalog)
+    return func.coalesce(
+        Device.model,
+        select(type_alias.hardware_model)
+        .where(type_alias.id == Device.device_type_id)
+        .correlate(Device)
+        .scalar_subquery(),
+    )
 
 
 class DeviceStateChangedError(Exception):
@@ -166,6 +182,7 @@ class DeviceRepository:
         if environment_id:
             query = query.where(Device.environment_id == environment_id)
 
+        effective_model = effective_model_expression()
         search_pattern = ilike_pattern(search)
         if search_pattern is not None:
             query = query.outerjoin(
@@ -314,7 +331,7 @@ class DeviceRepository:
                 Device.name,
                 Device.serial,
                 displayed_description,
-                Device.model,
+                effective_model,
                 Device.batch,
                 DeviceTypeCatalog.name,
                 Environment.name,
@@ -357,7 +374,7 @@ class DeviceRepository:
         model_pattern = ilike_pattern(model)
         if model_pattern is not None:
             query = query.where(
-                Device.model.ilike(model_pattern, escape=ILIKE_ESCAPE)
+                effective_model.ilike(model_pattern, escape=ILIKE_ESCAPE)
             )
 
         batch_pattern = ilike_pattern(batch)
@@ -386,7 +403,7 @@ class DeviceRepository:
         sort_expressions = {
             "name": Device.name,
             "serial": Device.serial,
-            "model": Device.model,
+            "model": effective_model,
             "manufactureDate": Device.manufacture_date,
             "status": Device.status,
             "enabled": Device.enabled,
@@ -505,7 +522,7 @@ class DeviceRepository:
             name=device_in.name,
             description=device_in.description,
             device_type_id=resolved_type.id,
-            model=device_in.model,
+            model=normalize_model_override(device_in.model, resolved_type.hardware_model),
             batch=device_in.batch,
             manufacture_date=device_in.manufacture_date,
             status=DeviceStatus.NEW,
