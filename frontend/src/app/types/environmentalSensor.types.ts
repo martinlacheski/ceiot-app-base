@@ -84,3 +84,31 @@ export interface DailyTelemetry {
   days: DailyTelemetryDay[];
   sensors: TelemetrySensor[];
 }
+
+/** Aggregation levels of `/telemetry/aggregate`, finest first. */
+export type AggregateBucket = "1m" | "5m" | "15m" | "1h" | "6h" | "1d";
+
+/** avg/min/max/count of the numeric readings of one variable in one bucket. */
+export interface AggregateStat {
+  avg: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+export interface AggregateItem {
+  /** Bucket start (UTC). */
+  time: string;
+  values: Record<string, Record<string, AggregateStat>>;
+}
+
+/** Readings of a window grouped in time buckets; items ascending by bucket start. */
+export interface AggregateTelemetry {
+  /** Bucket actually used (the resolved one for `auto`). */
+  bucket: AggregateBucket;
+  bucketSeconds: number;
+  start: string;
+  end: string;
+  items: AggregateItem[];
+  sensors: TelemetrySensor[];
+}

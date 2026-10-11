@@ -48,6 +48,7 @@ describe("queryKeysForPulse", () => {
         ["telemetry", "latest", "dev-1"],
         ["telemetry", "live", "dev-1"],
         ["telemetry", "history", "dev-1"],
+        ["telemetry", "aggregate", "dev-1"],
         ["telemetry", "daily", "dev-1"],
         ["telemetry", "detailed", "dev-1"],
         ["environments", "operational-overview"],
@@ -248,6 +249,52 @@ describe("useLivePulse", () => {
 
       expect(invalidatedKeys()).toContainEqual(historyKey);
       expect(times(latestKey)).toEqual(["2026-05-01T12:00:00+00:00", "2026-05-01T11:59:00+00:00"]);
+    });
+
+    describe("aggregated buckets", () => {
+      const liveAggregateKey = ["telemetry", "aggregate", "dev-1", "24h", "now", "auto"];
+      const pastAggregateKey = ["telemetry", "aggregate", "dev-1", "2026-04-29T00:00:00.000Z", "2026-04-30T00:00:00.000Z", "auto"];
+      const cachedAggregate = () => ({
+        bucket: "5m",
+        bucketSeconds: 300,
+        start: "2026-04-30T12:00:00Z",
+        end: "2026-05-01T11:59:00Z",
+        items: [{ time: "2026-05-01T11:55:00Z", values: { dht22: { temperature: { avg: 20, min: 19, max: 21, count: 2 } } } }],
+        sensors,
+      });
+      const temperatures = (key: unknown[]) =>
+        (queryClient.getQueryData(key) as { items: { time: string; values: { dht22: { temperature: unknown } } }[] }).items
+          .map((entry) => [entry.time, entry.values.dht22.temperature]);
+
+      beforeEach(() => {
+        queryClient.setQueryData(liveAggregateKey, cachedAggregate());
+        queryClient.setQueryData(pastAggregateKey, cachedAggregate());
+      });
+
+      it("folds the reading into the live window's buckets instead of refetching them", () => {
+        // 12:00 starts a new 5-minute bucket after 11:55.
+        pulse(withValues());
+
+        expect(temperatures(liveAggregateKey)).toEqual([
+          ["2026-05-01T11:55:00Z", { avg: 20, min: 19, max: 21, count: 2 }],
+          ["2026-05-01T12:00:00.000Z", { avg: 21.5, min: 21.5, max: 21.5, count: 1 }],
+        ]);
+        expect(invalidatedKeys().some((key) => key[1] === "aggregate")).toBe(false);
+      });
+
+      it("leaves a past window untouched", () => {
+        pulse(withValues());
+
+        expect(queryClient.getQueryData(pastAggregateKey)).toEqual(cachedAggregate());
+        expect(invalidatedKeys()).not.toContainEqual(pastAggregateKey);
+      });
+
+      it("refetches the live window when the reading has a sensor it does not describe", () => {
+        pulse(withValues({ values: { bme280: { pressure: 1013 } } }));
+
+        expect(invalidatedKeys()).toContainEqual(liveAggregateKey);
+        expect(queryClient.getQueryData(liveAggregateKey)).toEqual(cachedAggregate());
+      });
     });
 
     it("leaves other devices' caches alone", () => {

@@ -1,26 +1,12 @@
 import type { Device } from "@/app/types/device.types";
-import type { TelemetryPage, TelemetryVariable } from "@/app/types/environmentalSensor.types";
-import type { ReadingsRange } from "./overviewModel";
+import type { AggregateTelemetry, TelemetrySensor, TelemetryVariable } from "@/app/types/environmentalSensor.types";
+import type { AggregateFunction } from "./overviewModel";
 
-const MINUTE_MS = 60 * 1000;
-
-/** Bucket width used to align readings of different devices on one time axis. */
-export const BUCKET_MS: Record<ReadingsRange, number> = {
-  "1h": MINUTE_MS,
-  "24h": 10 * MINUTE_MS,
-  "7d": 60 * MINUTE_MS,
-};
-
-export const BUCKET_LABEL: Record<ReadingsRange, string> = {
-  "1h": "1 minuto",
-  "24h": "10 minutos",
-  "7d": "1 hora",
-};
-
-export interface DeviceHistory {
+/** Bucketed readings of one device, as last loaded. */
+export interface DeviceAggregate {
   deviceId: string;
   deviceName: string;
-  page?: TelemetryPage;
+  data?: AggregateTelemetry;
 }
 
 export interface EnvironmentSeries {
@@ -31,17 +17,30 @@ export interface EnvironmentSeries {
   sensorKey: string;
 }
 
+/** Bucket min and max of a series, drawn as a band behind its line. */
+export type BandRange = [number, number];
+
 export interface EnvironmentPoint {
   /** Bucket start, epoch milliseconds. */
   time: number;
-  [seriesKey: string]: number | null;
+  /** `<seriesKey>`: the plotted value; `bandKey(seriesKey)`: its bucket min–max. */
+  [seriesKey: string]: number | BandRange | null;
 }
 
+/** Data key of the min–max band of a series. */
+export const bandKey = (seriesKey: string) => `${seriesKey}Band`;
+
+/** The plotted value of a series in a point (never its band). */
+export const pointValue = (point: EnvironmentPoint, seriesKey: string): number | null => {
+  const value = point[seriesKey];
+  return typeof value === "number" ? value : null;
+};
+
 /** Union of the variables reported by every device sensor, first occurrence wins. */
-export function collectVariables(histories: DeviceHistory[]): TelemetryVariable[] {
+export function collectVariables(sources: Array<{ data?: { sensors: TelemetrySensor[] } }>): TelemetryVariable[] {
   const byCode = new Map<string, TelemetryVariable>();
-  for (const { page } of histories) {
-    for (const sensor of page?.sensors ?? []) {
+  for (const { data } of sources) {
+    for (const sensor of data?.sensors ?? []) {
       for (const variable of sensor.variables) {
         if (!byCode.has(variable.code)) byCode.set(variable.code, variable);
       }
@@ -64,56 +63,58 @@ export const sensorLabel: SeriesLabel = (_deviceName, sensorName) => sensorName;
 export interface SeriesOptions {
   /** Names each series; defaults to "device · sensor". */
   label?: SeriesLabel;
+  /** Bucket statistic plotted as the series value; defaults to the average. */
+  fn?: AggregateFunction;
   /**
-   * Epoch milliseconds: readings before it are left out. Keeps a rolling window moving
-   * while a quiet device sends nothing that would trim its cached history.
+   * Epoch milliseconds: buckets that ended before it are left out. Keeps a rolling window
+   * moving while a quiet device sends nothing that would trim its cached aggregate.
    */
   since?: number;
 }
 
 /**
- * One series per device sensor that measures `variableCode`, merged on a shared time axis:
- * readings are grouped in `bucketMs` buckets and averaged per series, ignoring nulls.
- * Buckets without any value are dropped; a series without values in a bucket gets null.
+ * One series per device sensor that measures `variableCode`, merged on the bucket starts
+ * (every device is aggregated with the same bucket and origin). Each point holds the chosen
+ * statistic per series (null when that series has no reading in the bucket) and its min–max
+ * band. Buckets without any value for the variable are dropped.
  */
 export function buildEnvironmentSeries(
-  histories: DeviceHistory[],
+  aggregates: DeviceAggregate[],
   variableCode: string,
-  bucketMs: number,
-  { label = deviceSensorLabel, since = -Infinity }: SeriesOptions = {},
+  { label = deviceSensorLabel, fn = "avg", since = -Infinity }: SeriesOptions = {},
 ): { series: EnvironmentSeries[]; points: EnvironmentPoint[] } {
   const series: EnvironmentSeries[] = [];
-  const buckets = new Map<number, Map<string, { sum: number; count: number }>>();
+  const buckets = new Map<number, EnvironmentPoint>();
 
-  for (const { deviceId, deviceName, page } of histories) {
-    if (!page) continue;
-    for (const sensor of page.sensors) {
+  for (const { deviceId, deviceName, data } of aggregates) {
+    if (!data) continue;
+    const bucketMs = data.bucketSeconds * 1000;
+    for (const sensor of data.sensors) {
       if (!sensor.variables.some((variable) => variable.code === variableCode)) continue;
       const key = `s${series.length}`;
       series.push({ key, label: label(deviceName, sensor.sensorName), deviceId, sensorKey: sensor.key });
 
-      for (const item of page.items) {
-        const value = item.values[sensor.key]?.[variableCode];
+      for (const item of data.items) {
+        const stat = item.values[sensor.key]?.[variableCode];
         const time = Date.parse(item.time);
-        if (value === null || value === undefined || Number.isNaN(time) || time < since) continue;
-        const bucketStart = Math.floor(time / bucketMs) * bucketMs;
-        const bucket = buckets.get(bucketStart) ?? new Map<string, { sum: number; count: number }>();
-        const total = bucket.get(key) ?? { sum: 0, count: 0 };
-        bucket.set(key, { sum: total.sum + value, count: total.count + 1 });
-        buckets.set(bucketStart, bucket);
+        if (!stat || Number.isNaN(time) || time + bucketMs <= since) continue;
+        const point = buckets.get(time) ?? { time };
+        point[key] = stat[fn];
+        point[bandKey(key)] = [stat.min, stat.max];
+        buckets.set(time, point);
       }
     }
   }
 
-  const points = [...buckets.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([time, bucket]) => {
-      const point: EnvironmentPoint = { time };
+  const points = [...buckets.values()]
+    .sort((a, b) => a.time - b.time)
+    .map((point) => {
+      const filled: EnvironmentPoint = { ...point };
       for (const { key } of series) {
-        const total = bucket.get(key);
-        point[key] = total ? total.sum / total.count : null;
+        filled[key] ??= null;
+        filled[bandKey(key)] ??= null;
       }
-      return point;
+      return filled;
     });
 
   return { series, points };

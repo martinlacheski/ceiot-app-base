@@ -8,12 +8,22 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CurrentValuesStrip } from "./CurrentValuesStrip";
 import { LatestRecordsTable } from "./LatestRecordsTable";
-import { deviceLabel, type ReadingsRange } from "./overviewModel";
 import {
+  canShowBand,
+  deviceLabel,
+  periodWindow,
+  type AggregateFunction,
+  type AggregationLevel,
+  type ReadingsPeriod,
+} from "./overviewModel";
+import { PeriodControls } from "./PeriodControls";
+import {
+  AggregationSelect,
+  BandToggle,
   DisplayToggle,
+  FunctionToggle,
   Notice,
   NoticeContent,
-  RangePresets,
   ReadingsViewToggle,
   TelemetryPermissionNotice,
   VariableChips,
@@ -27,6 +37,23 @@ export interface LatestReadingsState {
   page?: TelemetryPage;
   isLoading: boolean;
   isError: boolean;
+}
+
+/** Period, aggregation level, function and band of the readings, with their setters. */
+export interface ReadingsNavigation {
+  period: ReadingsPeriod;
+  /** Current time, refreshed every minute. */
+  now: number;
+  onPeriodChange: (period: ReadingsPeriod) => void;
+  /** Back to the live preset last used. */
+  onLive: () => void;
+  /** Requested level (automatic when the chosen one does not fit the period). */
+  aggregation: AggregationLevel;
+  onAggregationChange: (level: AggregationLevel) => void;
+  fn: AggregateFunction;
+  onFnChange: (fn: AggregateFunction) => void;
+  showBand: boolean;
+  onShowBandChange: (show: boolean) => void;
 }
 
 export interface LiveReadingsState {
@@ -43,8 +70,7 @@ interface ReadingsPanelProps {
   environments: Array<{ id: string; name: string }>;
   selectedEnvironmentId?: string;
   onSelectEnvironment: (environmentId: string) => void;
-  range: ReadingsRange;
-  onRangeChange: (range: ReadingsRange) => void;
+  navigation: ReadingsNavigation;
   view: ReadingsView;
   onViewChange: (view: ReadingsView) => void;
   display: ReadingsDisplay;
@@ -64,8 +90,11 @@ const SELECT_CLASS = "h-9 w-full min-w-0 rounded-md border bg-background px-3 te
 function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device }) {
   const {
     devices, selectedDevice, onSelectDevice, environments, selectedEnvironmentId, onSelectEnvironment,
-    range, onRangeChange, view, onViewChange, display, onDisplayChange, canReadTelemetry,
+    navigation, view, onViewChange, display, onDisplayChange, canReadTelemetry, readings,
   } = props;
+  const { start, end } = periodWindow(navigation.period, navigation.now);
+  // The device records table shows raw readings: the aggregation level does not apply to it.
+  const aggregated = canReadTelemetry && !(view === "device" && display === "table");
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -101,7 +130,20 @@ function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device })
           </select>
         </div>
       )}
-      <RangePresets range={range} onRangeChange={onRangeChange} />
+      <PeriodControls
+        period={navigation.period}
+        now={navigation.now}
+        onPeriodChange={navigation.onPeriodChange}
+        onLive={navigation.onLive}
+      />
+      {aggregated && (
+        <AggregationSelect
+          value={navigation.aggregation}
+          resolved={readings.bucket}
+          spanMs={end - start}
+          onChange={navigation.onAggregationChange}
+        />
+      )}
       {canReadTelemetry && <DisplayToggle display={display} onDisplayChange={onDisplayChange} />}
       {view === "device" && (
         <Button asChild variant="outline" size="sm" className="h-9">
@@ -117,8 +159,9 @@ function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device })
 
 function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidden: HiddenSeries }) {
   const {
-    selectedDevice, environments, view, display, onSelectVariable, canReadTelemetry, readings, latest, current, hidden,
+    selectedDevice, environments, view, display, onSelectVariable, canReadTelemetry, readings, latest, current, hidden, navigation,
   } = props;
+  const bandAvailable = canShowBand(navigation.fn, readings.series.length - hidden.hiddenCount);
 
   if (!canReadTelemetry) return <TelemetryPermissionNotice />;
   if (view === "environment" && environments.length === 0) {
@@ -136,9 +179,19 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidd
 
   return (
     <>
-      {readings.variables.length > 0 && (
-        <VariableChips variables={readings.variables} selected={readings.variable?.code} onSelect={onSelectVariable} />
-      )}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {readings.variables.length > 0 && (
+          <div className="min-w-0 flex-1">
+            <VariableChips variables={readings.variables} selected={readings.variable?.code} onSelect={onSelectVariable} />
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <FunctionToggle value={navigation.fn} onChange={navigation.onFnChange} />
+          {navigation.fn === "avg" && display === "chart" && (
+            <BandToggle checked={navigation.showBand} available={bandAvailable} onChange={navigation.onShowBandChange} />
+          )}
+        </div>
+      </div>
       {view === "device" && (
         <CurrentValuesStrip
           {...current}
@@ -146,7 +199,13 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidd
           onSelectVariable={onSelectVariable}
         />
       )}
-      <SeriesReadingsBody scope={view} display={display} readings={readings} hidden={hidden} />
+      <SeriesReadingsBody
+        scope={view}
+        display={display}
+        readings={readings}
+        hidden={hidden}
+        showBand={navigation.showBand && bandAvailable}
+      />
     </>
   );
 }

@@ -1,24 +1,28 @@
 import { format } from "date-fns";
 
 import { formatTelemetryValue } from "@/app/components/devices/historyTelemetryColumns";
-import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
+import type { AggregateBucket, TelemetryVariable } from "@/app/types/environmentalSensor.types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { latestPoints, type EnvironmentPoint, type EnvironmentSeries } from "./environmentSeries";
-import type { ReadingsRange } from "./overviewModel";
+import { latestPoints, pointValue, type EnvironmentPoint, type EnvironmentSeries } from "./environmentSeries";
 
 /** Rows shown by the table view; older buckets stay in the chart. */
 export const SERIES_TABLE_ROWS = 20;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface SeriesTableProps {
   variable: TelemetryVariable;
   series: EnvironmentSeries[];
   points: EnvironmentPoint[];
-  range: ReadingsRange;
+  /** Bucket of the rows: daily buckets show the date only. */
+  bucket?: AggregateBucket;
+  /** Span of the window: beyond a day, rows show the date too. */
+  spanMs: number;
 }
 
-/** The merged buckets of the chart as rows, newest first, one column per series. */
-export function SeriesTable({ variable, series, points, range }: SeriesTableProps) {
-  const timePattern = range === "7d" ? "dd/MM HH:mm" : "HH:mm";
+/** The aggregated buckets of the chart as rows, newest first, one column per series. */
+export function SeriesTable({ variable, series, points, bucket, spanMs }: SeriesTableProps) {
+  const timePattern = bucket === "1d" ? "dd/MM/yy" : spanMs > DAY_MS ? "dd/MM HH:mm" : "HH:mm";
   const unit = variable.unit ? ` (${variable.unit})` : "";
 
   return (
@@ -37,7 +41,7 @@ export function SeriesTable({ variable, series, points, range }: SeriesTableProp
             </TableCell>
             {series.map((entry) => (
               <TableCell key={entry.key} className="text-right tabular-nums">
-                {formatTelemetryValue(point[entry.key], "")}
+                {formatTelemetryValue(pointValue(point, entry.key), "")}
               </TableCell>
             ))}
           </TableRow>

@@ -1,15 +1,18 @@
 import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { appApi } from "@/api/appApi";
-import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { AggregateTelemetry, LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { API_BASE_URL } from "@/lib/apiBaseUrl";
 import { useMountEffect } from "../hooks/useMountEffect";
 import { useLivePulseStatus } from "./livePulse.store";
 import { createPulseClient, type PulseEvent } from "./pulseClient";
 import {
+  aggregateWindowOf,
   isReadingValues,
   latestLimit,
+  localUtcOffsetMinutes,
+  patchAggregate,
   patchHistoryPage,
   patchLatestPage,
   patchLiveState,
@@ -37,6 +40,7 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
       ["telemetry", "latest", id],
       ["telemetry", "live", id],
       ["telemetry", "history", id],
+      ["telemetry", "aggregate", id],
       ["telemetry", "daily", id],
       ["telemetry", "detailed", id],
     );
@@ -46,9 +50,10 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
 
 /**
  * Queries a reading-carrying telemetry pulse still refreshes: server-side
- * aggregates, the device's own detail and the device lists (the same report
- * persists last connection, rssi and GPS on the device row). The history, latest
- * and live caches are not here: `applyReading` patches them in place.
+ * aggregates without a live bucket patch, the device's own detail and the device lists
+ * (the same report persists last connection, rssi and GPS on the device row). The
+ * history, latest, live and bucketed aggregate caches are not here: `applyReading`
+ * patches them in place.
  */
 function queryKeysAfterReading(deviceId: string): QueryKey[] {
   return [
@@ -63,8 +68,9 @@ function queryKeysAfterReading(deviceId: string): QueryKey[] {
 }
 
 /**
- * Fold the reading into every cached history/latest page and the live state of
- * the device, and return the keys that could not be patched and must be refetched instead.
+ * Fold the reading into every cached history/latest page, the live state and the
+ * live-window aggregates of the device, and return the keys that could not be patched
+ * and must be refetched instead. Aggregates of past windows are left as they are.
  */
 export function applyReading(queryClient: QueryClient, deviceId: string, time: string, values: ReadingValues): QueryKey[] {
   const reading = { time, values };
@@ -86,6 +92,9 @@ export function applyReading(queryClient: QueryClient, deviceId: string, time: s
   patchAll<TelemetryPage>(["telemetry", "history", deviceId], (key, page) => patchHistoryPage(page, reading, rollingRangeOf(key), now));
   patchAll<TelemetryPage>(["telemetry", "latest", deviceId], (key, page) => patchLatestPage(page, reading, latestLimit(key)));
   patchAll<LiveTelemetry>(["telemetry", "live", deviceId], (_key, live) => patchLiveState(live, reading));
+  const utcOffsetMinutes = localUtcOffsetMinutes(now);
+  patchAll<AggregateTelemetry>(["telemetry", "aggregate", deviceId], (key, data) =>
+    patchAggregate(data, reading, { ...aggregateWindowOf(key), now, utcOffsetMinutes }));
   return refetch;
 }
 

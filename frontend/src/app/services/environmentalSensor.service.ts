@@ -1,5 +1,7 @@
 import { appApi } from "@/api/appApi";
 import type {
+  AggregateBucket,
+  AggregateTelemetry,
   DailyTelemetry,
   DeviceSensor,
   LiveTelemetry,
@@ -17,6 +19,16 @@ export interface DeviceSensorUpdate {
   key?: string;
   config?: Record<string, unknown>;
   isActive?: boolean;
+}
+
+export interface AggregateQuery {
+  start: string;
+  end: string;
+  bucket: AggregateBucket | "auto";
+  /** Browser offset from UTC (local = UTC + offset): buckets start at local midnight. */
+  utcOffsetMinutes: number;
+  /** Upper bound of buckets when `bucket` is `auto`. */
+  maxPoints?: number;
 }
 
 export const environmentalSensorService = {
@@ -59,6 +71,18 @@ export const environmentalSensorService = {
   async getDaily(deviceId: string, start: string, end: string, utcOffsetMinutes: number): Promise<DailyTelemetry> {
     const params = new URLSearchParams({ start, end, utc_offset_minutes: String(utcOffsetMinutes) });
     const { data } = await appApi.get<DailyTelemetry>(`/devices/${deviceId}/telemetry/daily`, { params });
+    return data;
+  },
+  /** avg/min/max/count per time bucket, aggregated by the server. */
+  async getAggregate(deviceId: string, query: AggregateQuery): Promise<AggregateTelemetry> {
+    const params = new URLSearchParams({
+      start: query.start,
+      end: query.end,
+      bucket: query.bucket,
+      utc_offset_minutes: String(query.utcOffsetMinutes),
+    });
+    if (query.maxPoints !== undefined) params.set("max_points", String(query.maxPoints));
+    const { data } = await appApi.get<AggregateTelemetry>(`/devices/${deviceId}/telemetry/aggregate`, { params });
     return data;
   },
 };

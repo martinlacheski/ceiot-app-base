@@ -10,52 +10,63 @@ import { DEVICE_SORT_BY } from "@/app/types/device.types";
 import { ENVIRONMENT_SORT_BY } from "@/app/types/environment.types";
 import { useAuthStore } from "@/auth/store/auth.store";
 import {
-  BUCKET_LABEL,
-  BUCKET_MS,
   buildEnvironmentSeries,
   collectVariables,
   defaultVariableCode,
   listDeviceEnvironments,
   sensorLabel,
-  type DeviceHistory,
+  type DeviceAggregate,
 } from "./overview/environmentSeries";
 import { OverviewKpis } from "./overview/OverviewKpis";
 import {
   countPresence,
   deviceLabel,
+  effectiveAggregation,
+  periodQueryKey,
+  periodWindow,
   pickSelectedDevice,
-  readingsWindow,
+  presetPeriod,
   RECENT_READINGS_LIMIT,
+  type AggregateFunction,
+  type AggregationLevel,
+  type ReadingsPeriod,
   type ReadingsRange,
 } from "./overview/overviewModel";
 import type { ReadingsDisplay, ReadingsView } from "./overview/ReadingsControls";
-import { ReadingsPanel } from "./overview/ReadingsPanel";
+import { ReadingsPanel, type ReadingsNavigation } from "./overview/ReadingsPanel";
 import type { SeriesReadingsState } from "./overview/SeriesReadingsBody";
-import { historyQueryOptions, liveRefreshOptions } from "./overview/telemetryQueries";
+import { aggregateQueryOptions, liveRefreshOptions } from "./overview/telemetryQueries";
 import { useNow } from "./overview/useNow";
 
 const INVENTORY_PAGE_SIZE = 100;
 
-/** Histories of the establishment view as last loaded, with the range they were loaded for. */
+/** Aggregates of the establishment view as last loaded, with the period and bucket they were loaded for. */
 interface EnvironmentSnapshot {
-  histories: DeviceHistory[];
-  range: ReadingsRange;
+  aggregates: DeviceAggregate[];
+  period: ReadingsPeriod;
+  /** Period and bucket parts of the query key. */
+  windowKey: string;
 }
 
-/** Same devices, same cached pages (query data is referentially stable) and same range. */
-function isSameSnapshot(snapshot: EnvironmentSnapshot | null, histories: DeviceHistory[], range: ReadingsRange) {
+/** Same devices, same cached data (query data is referentially stable), same period and bucket. */
+function isSameSnapshot(snapshot: EnvironmentSnapshot | null, aggregates: DeviceAggregate[], windowKey: string) {
   return snapshot !== null
-    && snapshot.range === range
-    && snapshot.histories.length === histories.length
-    && snapshot.histories.every((history, index) =>
-      history.deviceId === histories[index].deviceId && history.page === histories[index].page);
+    && snapshot.windowKey === windowKey
+    && snapshot.aggregates.length === aggregates.length
+    && snapshot.aggregates.every((aggregate, index) =>
+      aggregate.deviceId === aggregates[index].deviceId && aggregate.data === aggregates[index].data);
 }
 
 export default function OverviewPage() {
   const { user } = useAuthStore();
   const canReadTelemetry = Boolean(user?.isAdmin || user?.permissions?.includes("telemetry:read"));
   const [requestedDeviceId, setRequestedDeviceId] = useState<string | null>(null);
-  const [range, setRange] = useState<ReadingsRange>("24h");
+  const [period, setPeriod] = useState<ReadingsPeriod>(() => presetPeriod("24h"));
+  // The preset "Ahora" returns to after moving to past windows.
+  const [livePreset, setLivePreset] = useState<ReadingsRange>("24h");
+  const [requestedAggregation, setRequestedAggregation] = useState<AggregationLevel>("auto");
+  const [fn, setFn] = useState<AggregateFunction>("avg");
+  const [showBand, setShowBand] = useState(true);
   const [view, setView] = useState<ReadingsView>("device");
   const [display, setDisplay] = useState<ReadingsDisplay>("chart");
   const [requestedEnvironmentId, setRequestedEnvironmentId] = useState<string | null>(null);
@@ -115,9 +126,13 @@ export default function OverviewPage() {
     placeholderData: keepPreviousData,
     ...refreshOptions,
   });
-  const historyQuery = useQuery(historyQueryOptions(deviceId, range, canReadTelemetry, liveConnected));
+  const timeWindow = periodWindow(period, now);
+  // A level that does not fit the period falls back to automatic; it comes back with a shorter period.
+  const aggregation = effectiveAggregation(requestedAggregation, timeWindow.end - timeWindow.start);
+  const windowKey = JSON.stringify([...periodQueryKey(period), aggregation]);
+  const aggregateQuery = useQuery(aggregateQueryOptions(deviceId, period, aggregation, canReadTelemetry, liveConnected));
 
-  // Establishment view: one history query per device, with the per-device keys so the cache is shared.
+  // Establishment view: one aggregate query per device, with the per-device keys so the cache is shared.
   const environmentOptions = listDeviceEnvironments(devices);
   const selectedEnvironment = environmentOptions.find((environment) => environment.id === requestedEnvironmentId)
     ?? environmentOptions.find((environment) => environment.id === selectedDevice?.environment?.id)
@@ -126,63 +141,83 @@ export default function OverviewPage() {
     ? devices.filter((device) => device.environment?.id === selectedEnvironment.id)
     : [];
   const environmentEnabled = view === "environment" && canReadTelemetry;
-  const environmentHistory = useQueries({
-    queries: environmentDevices.map((device) => historyQueryOptions(device.id, range, environmentEnabled, liveConnected)),
+  const environmentAggregate = useQueries({
+    queries: environmentDevices.map((device) =>
+      aggregateQueryOptions(device.id, period, aggregation, environmentEnabled, liveConnected)),
   });
-  const environmentHistories: DeviceHistory[] = environmentDevices.map((device, index) => ({
+  const environmentAggregates: DeviceAggregate[] = environmentDevices.map((device, index) => ({
     deviceId: device.id,
     deviceName: deviceLabel(device),
-    page: environmentHistory[index]?.data,
+    data: environmentAggregate[index]?.data,
   }));
-  const deviceHistories: DeviceHistory[] = selectedDevice
-    ? [{ deviceId: selectedDevice.id, deviceName: deviceLabel(selectedDevice), page: historyQuery.data }]
+  const deviceAggregates: DeviceAggregate[] = selectedDevice
+    ? [{ deviceId: selectedDevice.id, deviceName: deviceLabel(selectedDevice), data: aggregateQuery.data }]
     : [];
 
   // `keepPreviousData` does nothing inside `useQueries` (each key gets a new observer), so the
-  // establishment view remembers its last loaded histories and keeps them on screen, dimmed,
-  // while another range or establishment has nothing loaded yet.
-  const environmentLoaded = environmentHistories.some((history) => history.page);
+  // establishment view remembers its last loaded aggregates and keeps them on screen, dimmed,
+  // while another period, bucket or establishment has nothing loaded yet.
+  const environmentLoaded = environmentAggregates.some((aggregate) => aggregate.data);
   const [lastEnvironment, setLastEnvironment] = useState<EnvironmentSnapshot | null>(null);
-  if (view === "environment" && environmentLoaded && !isSameSnapshot(lastEnvironment, environmentHistories, range)) {
-    setLastEnvironment({ histories: environmentHistories, range });
+  if (view === "environment" && environmentLoaded && !isSameSnapshot(lastEnvironment, environmentAggregates, windowKey)) {
+    setLastEnvironment({ aggregates: environmentAggregates, period, windowKey });
   }
-  const environmentLoading = environmentHistory.some((query) => query.isLoading);
+  const environmentLoading = environmentAggregate.some((query) => query.isLoading);
   const staleEnvironment = view === "environment" && !environmentLoaded && environmentLoading ? lastEnvironment : null;
 
-  // Both views share the variable chips, the range bucketing and the series model.
+  // Both views share the variable chips, the aggregation controls and the series model.
   const shown: EnvironmentSnapshot = staleEnvironment
-    ?? { histories: view === "environment" ? environmentHistories : deviceHistories, range };
-  const { histories } = shown;
-  // Trim at render time: a quiet device sends nothing that would trim its cached history.
-  const timeWindow = readingsWindow(shown.range, now);
-  const variables = collectVariables(histories);
+    ?? { aggregates: view === "environment" ? environmentAggregates : deviceAggregates, period, windowKey };
+  const { aggregates } = shown;
+  // Trim at render time: a quiet device sends nothing that would trim its cached buckets.
+  const shownWindow = periodWindow(shown.period, now);
+  const variables = collectVariables(aggregates);
   const variable = variables.find((entry) => entry.code === requestedVariableCode)
     ?? variables.find((entry) => entry.code === defaultVariableCode(variables));
   const seriesModel = variable
-    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[shown.range], {
+    ? buildEnvironmentSeries(aggregates, variable.code, {
       label: view === "device" ? sensorLabel : undefined,
-      since: timeWindow.start,
+      fn,
+      since: shownWindow.start,
     })
     : { series: [], points: [] };
   const readings: SeriesReadingsState = {
     ...(view === "environment"
       ? {
         loading: environmentLoading,
-        failedDevices: environmentHistory.filter((query) => query.isError && !query.data).length,
-        deviceCount: histories.length,
+        failedDevices: environmentAggregate.filter((query) => query.isError && !query.data).length,
+        deviceCount: aggregates.length,
       }
       : {
-        loading: historyQuery.isLoading,
-        failedDevices: historyQuery.isError && !historyQuery.data ? 1 : 0,
+        loading: aggregateQuery.isLoading,
+        failedDevices: aggregateQuery.isError && !aggregateQuery.data ? 1 : 0,
         deviceCount: 1,
       }),
     variables,
     variable,
     ...seriesModel,
-    bucketLabel: BUCKET_LABEL[shown.range],
-    range: shown.range,
-    timeWindow,
+    bucket: aggregates.find((aggregate) => aggregate.data)?.data?.bucket,
+    fn,
+    timeWindow: shownWindow,
+    windowKey: JSON.stringify([view, view === "device" ? deviceId : selectedEnvironment?.id, shown.windowKey]),
     stale: staleEnvironment !== null,
+  };
+
+  const changePeriod = (next: ReadingsPeriod) => {
+    setPeriod(next);
+    if (next.kind === "preset") setLivePreset(next.range);
+  };
+  const navigation: ReadingsNavigation = {
+    period,
+    now,
+    onPeriodChange: changePeriod,
+    onLive: () => setPeriod(presetPeriod(livePreset)),
+    aggregation,
+    onAggregationChange: setRequestedAggregation,
+    fn,
+    onFnChange: setFn,
+    showBand,
+    onShowBandChange: setShowBand,
   };
 
   const readingsRef = useRef<HTMLDivElement>(null);
@@ -236,8 +271,7 @@ export default function OverviewPage() {
             environments={environmentOptions}
             selectedEnvironmentId={selectedEnvironment?.id}
             onSelectEnvironment={setRequestedEnvironmentId}
-            range={range}
-            onRangeChange={setRange}
+            navigation={navigation}
             view={view}
             onViewChange={setView}
             display={display}

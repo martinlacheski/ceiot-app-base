@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EnvironmentReadingsChart } from "./EnvironmentReadingsChart";
-import type { EnvironmentSeries } from "./environmentSeries";
+import { bandKey, type EnvironmentPoint, type EnvironmentSeries } from "./environmentSeries";
 
-const mocks = vi.hoisted(() => ({ config: vi.fn(), line: vi.fn(), tooltip: vi.fn(), xAxis: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  area: vi.fn(), brush: vi.fn(), config: vi.fn(), line: vi.fn(), tooltip: vi.fn(), xAxis: vi.fn(),
+}));
 vi.mock("@/components/ui/chart", () => ({
   ChartContainer: ({ children, config, ...props }: { children: ReactNode; config: unknown }) => {
     mocks.config(config);
@@ -20,8 +22,16 @@ vi.mock("@/components/ui/chart", () => ({
   ChartTooltipContent: () => null,
 }));
 vi.mock("recharts", () => ({
+  Area: (props: unknown) => {
+    mocks.area(props);
+    return null;
+  },
+  Brush: (props: unknown) => {
+    mocks.brush(props);
+    return null;
+  },
   CartesianGrid: () => null,
-  LineChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  ComposedChart: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Line: (props: unknown) => {
     mocks.line(props);
     return null;
@@ -45,7 +55,7 @@ beforeEach(() => vi.clearAllMocks());
 
 describe("EnvironmentReadingsChart", () => {
   it("draws one connected line per series with an accessible name and leaves the legend to the panel", () => {
-    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="24h" />);
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} />);
 
     expect(screen.getByRole("img", { name: "Historial de Temperatura por sensor del establecimiento" })).toBeInTheDocument();
     expect(screen.queryByTestId("legend")).not.toBeInTheDocument();
@@ -62,7 +72,7 @@ describe("EnvironmentReadingsChart", () => {
 
   it("skips hidden series without repainting the visible ones", () => {
     render(
-      <EnvironmentReadingsChart variable={variable} series={series} hiddenKeys={new Set(["s0", "s1"])} points={[]} range="24h" />,
+      <EnvironmentReadingsChart variable={variable} series={series} hiddenKeys={new Set(["s0", "s1"])} points={[]} />,
     );
 
     const lines = mocks.line.mock.calls.map(([props]) => props as { dataKey: string; stroke: string });
@@ -79,7 +89,7 @@ describe("EnvironmentReadingsChart", () => {
         variable={variable}
         series={series.slice(0, 1)}
         points={[]}
-        range="24h"
+       
         ariaLabel="Historial de Temperatura por sensor del dispositivo"
       />,
     );
@@ -88,12 +98,12 @@ describe("EnvironmentReadingsChart", () => {
   });
 
   it("formats tooltip values with the es-AR locale and the variable unit", () => {
-    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} />);
 
     const { formatter } = mocks.tooltip.mock.calls[0][0] as {
-      formatter: (value: unknown, name: string, item: { color: string }) => ReactNode;
+      formatter: (value: unknown, name: string, item: { color: string; payload?: EnvironmentPoint }) => ReactNode;
     };
-    render(<>{formatter(23.456, "s1", { color: "red" })}</>);
+    render(<>{formatter(23.456, "s1", { color: "red", payload: { time: 0, s1: 23.456 } })}</>);
 
     expect(screen.getByText("Sensor 1 · DHT22")).toBeInTheDocument();
     expect(screen.getByText("23,46 °C")).toBeInTheDocument();
@@ -101,7 +111,7 @@ describe("EnvironmentReadingsChart", () => {
   });
 
   it("keeps the tooltip time visible when a single series has a value", () => {
-    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} />);
 
     // shadcn nests (and with a custom formatter drops) the label for one-item payloads unless the indicator is "dot".
     const { indicator, labelFormatter } = mocks.tooltip.mock.calls[0][0] as {
@@ -114,14 +124,91 @@ describe("EnvironmentReadingsChart", () => {
 
   it("spans the X axis over the rolling window when given one", () => {
     const timeWindow = { start: Date.parse("2026-10-10T11:30:00Z"), end: Date.parse("2026-10-10T12:30:00Z") };
-    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" timeWindow={timeWindow} />);
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} timeWindow={timeWindow} />);
 
     expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: [timeWindow.start, timeWindow.end] }));
   });
 
   it("fits the X axis to the data without a window", () => {
-    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} />);
 
     expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: ["dataMin", "dataMax"] }));
+  });
+
+  describe("min–max band", () => {
+    const points: EnvironmentPoint[] = [
+      { time: 1, s0: 21, [bandKey("s0")]: [20, 22], s1: 18, [bandKey("s1")]: [17, 19] },
+    ];
+
+    it("shades the min–max range of every visible series behind its line when asked", () => {
+      render(<EnvironmentReadingsChart variable={variable} series={series.slice(0, 3)} hiddenKeys={new Set(["s2"])} points={points} showBand />);
+
+      const areas = mocks.area.mock.calls.map(([props]) => props as { dataKey: string; tooltipType: string; fillOpacity: number; fill: string });
+      expect(areas.map((area) => area.dataKey)).toEqual([bandKey("s0"), bandKey("s1")]);
+      expect(areas[0].fill).toBe("var(--color-s0)");
+      expect(areas.every((area) => area.tooltipType === "none" && area.fillOpacity <= 0.2)).toBe(true);
+    });
+
+    it("draws no band unless asked", () => {
+      render(<EnvironmentReadingsChart variable={variable} series={series.slice(0, 3)} points={points} />);
+
+      expect(mocks.area).not.toHaveBeenCalled();
+    });
+
+    it("adds the bucket min–max to the tooltip value while the band is shown", () => {
+      render(<EnvironmentReadingsChart variable={variable} series={series} points={points} showBand />);
+
+      const { formatter } = mocks.tooltip.mock.calls[0][0] as {
+        formatter: (value: unknown, name: string, item: { color: string; payload?: EnvironmentPoint }) => ReactNode;
+      };
+      render(<>{formatter(21, "s0", { color: "red", payload: points[0] })}</>);
+
+      expect(screen.getByText("21 °C")).toBeInTheDocument();
+      expect(screen.getByText("20 – 22")).toBeInTheDocument();
+    });
+  });
+
+  describe("zoom", () => {
+    const points: EnvironmentPoint[] = [0, 1, 2, 3].map((index) => ({ time: Date.parse("2026-10-10T12:00:00Z") + index * 60_000, s0: index }));
+    const timeWindow = { start: points[0].time - 60_000, end: points[3].time + 60_000 };
+    const lastBrush = () => mocks.brush.mock.lastCall?.[0] as {
+      startIndex: number; endIndex: number; onChange: (range: { startIndex?: number; endIndex?: number }) => void;
+    };
+
+    it("zooms the X axis to the range picked in the brush and resets it", () => {
+      render(<EnvironmentReadingsChart variable={variable} series={series.slice(0, 1)} points={points} timeWindow={timeWindow} />);
+
+      expect(lastBrush()).toMatchObject({ startIndex: 0, endIndex: 3 });
+      expect(screen.queryByRole("button", { name: "Restablecer zoom" })).not.toBeInTheDocument();
+
+      act(() => lastBrush().onChange({ startIndex: 1, endIndex: 2 }));
+
+      expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: [points[1].time, points[2].time] }));
+      expect(lastBrush()).toMatchObject({ startIndex: 1, endIndex: 2 });
+
+      fireEvent.click(screen.getByRole("button", { name: "Restablecer zoom" }));
+
+      expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: [timeWindow.start, timeWindow.end] }));
+      expect(lastBrush()).toMatchObject({ startIndex: 0, endIndex: 3 });
+      expect(screen.queryByRole("button", { name: "Restablecer zoom" })).not.toBeInTheDocument();
+    });
+
+    it("keeps the zoomed time range when a new bucket arrives", () => {
+      const { rerender } = render(
+        <EnvironmentReadingsChart variable={variable} series={series.slice(0, 1)} points={points} timeWindow={timeWindow} />,
+      );
+      act(() => lastBrush().onChange({ startIndex: 1, endIndex: 2 }));
+
+      const next = [...points, { time: points[3].time + 60_000, s0: 4 }];
+      rerender(<EnvironmentReadingsChart variable={variable} series={series.slice(0, 1)} points={next} timeWindow={timeWindow} />);
+
+      expect(lastBrush()).toMatchObject({ startIndex: 1, endIndex: 2 });
+    });
+
+    it("has no brush without at least two points", () => {
+      render(<EnvironmentReadingsChart variable={variable} series={series.slice(0, 1)} points={points.slice(0, 1)} />);
+
+      expect(mocks.brush).not.toHaveBeenCalled();
+    });
   });
 });

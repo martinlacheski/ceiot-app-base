@@ -25,8 +25,8 @@ const {
   telemetry: {
     latest: undefined as unknown,
     live: undefined as unknown,
-    history: undefined as unknown,
-    historyByDevice: {} as Record<string, unknown>,
+    aggregate: undefined as unknown,
+    aggregateByDevice: {} as Record<string, unknown>,
   },
   useQueriesMock: vi.fn(),
   useQueryMock: vi.fn(),
@@ -46,18 +46,31 @@ vi.mock("./overview/useNow", () => ({
   useNow: () => clock.now,
 }));
 
+vi.mock("@/components/custom/DateTimePicker24h", () => ({
+  DateTimePicker24h: ({ id, value, onChange }: { id?: string; value?: Date; onChange: (date: Date | undefined) => void }) => (
+    <input
+      id={id}
+      value={value ? value.toISOString() : ""}
+      onChange={(event) => onChange(event.target.value ? new Date(event.target.value) : undefined)}
+    />
+  ),
+}));
+
 vi.mock("./overview/EnvironmentReadingsChart", () => ({
-  EnvironmentReadingsChart: ({ variable, series, hiddenKeys, points, timeWindow }: {
+  EnvironmentReadingsChart: ({ variable, series, hiddenKeys, points, timeWindow, showBand }: {
     variable: { code: string };
     series: Array<{ key: string; label: string }>;
     hiddenKeys?: ReadonlySet<string>;
-    points: unknown[];
+    points: Array<Record<string, unknown>>;
     timeWindow?: { start: number; end: number };
+    showBand?: boolean;
   }) => (
     <ul
       data-testid="environment-chart"
       data-variable={variable.code}
       data-points={points.length}
+      data-values={JSON.stringify(points.map((point) => point.s0 ?? null))}
+      data-band={String(Boolean(showBand))}
       data-window-start={timeWindow?.start}
       data-window-end={timeWindow?.end}
     >
@@ -166,6 +179,22 @@ const readings = {
   sensors,
 };
 
+const stat = (avg: number, min = avg, max = avg, count = 1) => ({ avg, min, max, count });
+
+/** One-minute buckets of the same readings, as the aggregate endpoint returns them (ascending). */
+const aggregateReadings = {
+  bucket: "1m",
+  bucketSeconds: 60,
+  start: "2026-10-09T12:31:00Z",
+  end: "2026-10-10T12:31:00Z",
+  items: [
+    { time: "2026-10-10T12:29:00Z", values: { dht22: { temperature: stat(23.1, 22.9, 23.3, 3) } } },
+    { time: "2026-10-10T12:30:00Z", values: { dht22: { temperature: stat(23.4, 23, 23.8, 4), relative_humidity: stat(51.25) } } },
+  ],
+  sensors,
+};
+const emptyAggregate = { ...aggregateReadings, items: [], sensors: [] };
+
 /** Live state of the selected device: the newest fixture reading plus its health. */
 const liveState = {
   source: "redis",
@@ -180,7 +209,8 @@ const liveState = {
 const telemetryState = (queryKey: unknown[]) => {
   if (queryKey[1] === "latest") return telemetry.latest;
   if (queryKey[1] === "live") return telemetry.live;
-  return telemetry.history;
+  if (queryKey[1] === "aggregate") return telemetry.aggregate;
+  return undefined;
 };
 
 /** A minute after the newest fixture reading. */
@@ -204,7 +234,7 @@ const renderPage = () => render(
 );
 
 const queryConfigs = () => useQueryMock.mock.calls.map(([config]) => config as QueryConfig);
-const lastTelemetryQuery = (kind: "latest" | "live" | "history") =>
+const lastTelemetryQuery = (kind: "latest" | "live" | "aggregate") =>
   queryConfigs().filter((config) => config.queryKey[0] === "telemetry" && config.queryKey[1] === kind).at(-1)!;
 const lastEnvironmentQueries = () =>
   (useQueriesMock.mock.calls.at(-1)![0] as { queries: QueryConfig[] }).queries;
@@ -252,7 +282,7 @@ describe("OverviewPage operational dashboard", () => {
     auth.user = { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] };
     telemetry.latest = state(readings);
     telemetry.live = state(liveState);
-    telemetry.history = state(readings);
+    telemetry.aggregate = state(aggregateReadings);
     Element.prototype.scrollIntoView = vi.fn();
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
       matches: false,
@@ -272,9 +302,9 @@ describe("OverviewPage operational dashboard", () => {
       }
       return state(undefined);
     });
-    telemetry.historyByDevice = {};
+    telemetry.aggregateByDevice = {};
     useQueriesMock.mockImplementation(({ queries }: { queries: QueryConfig[] }) =>
-      queries.map(({ queryKey }) => telemetry.historyByDevice[String(queryKey[2])] ?? telemetry.history));
+      queries.map(({ queryKey }) => telemetry.aggregateByDevice[String(queryKey[2])] ?? telemetry.aggregate));
   });
 
   it("keeps inventory queries and adds live-refreshable telemetry queries", () => {
@@ -287,7 +317,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(keys).toContainEqual(["devices", "operational-overview"]);
     expect(lastTelemetryQuery("latest").queryKey.slice(0, 3)).toEqual(["telemetry", "latest", "device-online"]);
     expect(lastTelemetryQuery("live").queryKey).toEqual(["telemetry", "live", "device-online"]);
-    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "24h"]);
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
     expect(keys.some((key) => String(key[0]).includes("revenue"))).toBe(false);
     expect(screen.queryByText(/ingresos|comisi[oó]n|transacciones|excel|pdf/i)).not.toBeInTheDocument();
   });
@@ -297,7 +327,7 @@ describe("OverviewPage operational dashboard", () => {
       queryConfigs().filter((config) => config.queryKey[1] === "operational-overview").at(-1)!,
       lastTelemetryQuery("latest"),
       lastTelemetryQuery("live"),
-      lastTelemetryQuery("history"),
+      lastTelemetryQuery("aggregate"),
     ];
 
     it("does not poll while the live pulse keeps the caches current", () => {
@@ -324,14 +354,14 @@ describe("OverviewPage operational dashboard", () => {
 
       expect(lastTelemetryQuery("latest").placeholderData).toBe(keepPreviousData);
       expect(lastTelemetryQuery("live").placeholderData).toBe(keepPreviousData);
-      expect(lastTelemetryQuery("history").placeholderData).toBe(keepPreviousData);
+      expect(lastTelemetryQuery("aggregate").placeholderData).toBe(keepPreviousData);
     });
 
     it("shows no refresh notice while data refetches in the background", () => {
       useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
         if (queryKey[0] === "environments") return state(environments, { isFetching: true });
         if (queryKey[0] === "devices") return state(devices, { isFetching: true });
-        return state(readings, { isFetching: true });
+        return { ...(telemetryState(queryKey) as object), isFetching: true };
       });
 
       renderPage();
@@ -362,8 +392,8 @@ describe("OverviewPage operational dashboard", () => {
       fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
       expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-points", "2");
 
-      // 12:30 is still inside the hour that ends at 13:29:30; 12:29 is not.
-      clock.now = Date.parse("2026-10-10T13:29:30Z");
+      // The 12:30 bucket (until 12:31) is still inside the hour that ends at 13:30:30; the 12:29 one is not.
+      clock.now = Date.parse("2026-10-10T13:30:30Z");
       rerenderPage(rerender);
       expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-points", "1");
       expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-window-end", String(clock.now));
@@ -386,16 +416,16 @@ describe("OverviewPage operational dashboard", () => {
       openEstablishmentView();
       expect(busyChart()).toBeNull();
 
-      telemetry.history = loading();
+      telemetry.aggregate = loading();
       fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
 
       expect(within(readingsCard()).queryByRole("status")).not.toBeInTheDocument();
       expect(chartSeries()).toEqual(["Sensor Sur · DHT22", "Sensor Norte · DHT22"]);
       expect(busyChart()).not.toBeNull();
-      // Still the data (and bucketing) of the previous range.
-      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 10 minutos")).toBeInTheDocument();
+      // Still the data (and bucket) of the previous range.
+      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 1 min")).toBeInTheDocument();
 
-      telemetry.history = state(readings);
+      telemetry.aggregate = state({ ...aggregateReadings, bucket: "15m", bucketSeconds: 900 });
       rerender(
         <MemoryRouter>
           <OverviewPage />
@@ -403,7 +433,7 @@ describe("OverviewPage operational dashboard", () => {
       );
 
       expect(busyChart()).toBeNull();
-      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 1 minuto")).toBeInTheDocument();
+      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 15 min")).toBeInTheDocument();
     });
 
     it("keeps the previous establishment chart while the chosen one loads", () => {
@@ -411,7 +441,7 @@ describe("OverviewPage operational dashboard", () => {
       renderPage();
       openEstablishmentView();
 
-      telemetry.history = loading();
+      telemetry.aggregate = loading();
       fireEvent.change(screen.getByLabelText("Establecimiento"), { target: { value: "environment-2" } });
 
       expect(within(readingsCard()).queryByRole("status")).not.toBeInTheDocument();
@@ -421,7 +451,7 @@ describe("OverviewPage operational dashboard", () => {
 
     it("shows the skeleton when there is nothing loaded yet", () => {
       useEstablishmentDevices();
-      telemetry.history = loading();
+      telemetry.aggregate = loading();
       renderPage();
       openEstablishmentView();
 
@@ -533,7 +563,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(screen.getByRole("button", { name: "Por dispositivo" })).toHaveAttribute("aria-pressed", "true");
     expect((screen.getByLabelText("Dispositivo") as HTMLSelectElement).value).toBe("device-offline-enabled");
     expect(lastTelemetryQuery("latest").queryKey.slice(0, 3)).toEqual(["telemetry", "latest", "device-offline-enabled"]);
-    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-offline-enabled", "24h"]);
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-offline-enabled", "24h", "now", "auto"]);
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
@@ -557,7 +587,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(screen.getByRole("button", { name: "Por establecimiento" })).toHaveAttribute("aria-pressed", "true");
     expect((screen.getByLabelText("Establecimiento") as HTMLSelectElement).value).toBe("environment-2");
     expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
-      ["telemetry", "history", "device-presence-unavailable", "24h"],
+      ["telemetry", "aggregate", "device-presence-unavailable", "24h", "now", "auto"],
     ]);
   });
 
@@ -571,7 +601,7 @@ describe("OverviewPage operational dashboard", () => {
     fireEvent.change(select, { target: { value: "device-offline-enabled" } });
 
     expect(lastTelemetryQuery("latest").queryKey.slice(0, 3)).toEqual(["telemetry", "latest", "device-offline-enabled"]);
-    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-offline-enabled", "24h"]);
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-offline-enabled", "24h", "now", "auto"]);
   });
 
   it("keeps the default device when its presence changes after a refresh", () => {
@@ -594,26 +624,168 @@ describe("OverviewPage operational dashboard", () => {
     );
 
     expect((screen.getByLabelText("Dispositivo") as HTMLSelectElement).value).toBe("device-online");
-    expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "24h"]);
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
   });
 
-  it("changes the history period with the range presets", async () => {
+  it("changes the period with the range presets and keeps rolling keys stable", () => {
+    renderPage();
+    expect(screen.getByRole("button", { name: "Últimas 24 horas" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Últimos 7 días" }));
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "7d", "now", "auto"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Últimos 30 días" }));
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "30d", "now", "auto"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
+    expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "1h", "now", "auto"]);
+    expect(screen.getByRole("button", { name: "Última hora" })).toHaveAttribute("aria-pressed", "true");
+    // The dashboard no longer reads raw history: the chart and the establishment table use aggregates.
+    expect(queryConfigs().some((config) => config.queryKey[1] === "history")).toBe(false);
+  });
+
+  it("requests the rolling window and the browser offset when the aggregate query runs", async () => {
+    const { environmentalSensorService } = await import("@/app/services/environmentalSensor.service");
+    const getAggregate = vi.spyOn(environmentalSensorService, "getAggregate").mockResolvedValue(aggregateReadings as never);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-10T12:30:00.000Z"));
     try {
       renderPage();
-      expect(screen.getByRole("button", { name: "Últimas 24 horas" })).toHaveAttribute("aria-pressed", "true");
+      await lastTelemetryQuery("aggregate").queryFn();
 
-      fireEvent.click(screen.getByRole("button", { name: "Últimos 7 días" }));
-      expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "7d"]);
-
-      fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
-      const history = lastTelemetryQuery("history");
-      expect(history.queryKey).toEqual(["telemetry", "history", "device-online", "1h"]);
-      expect(screen.getByRole("button", { name: "Última hora" })).toHaveAttribute("aria-pressed", "true");
+      expect(getAggregate).toHaveBeenCalledWith("device-online", {
+        start: "2026-10-09T12:30:00.000Z",
+        end: "2026-10-10T12:30:00.000Z",
+        bucket: "auto",
+        utcOffsetMinutes: -new Date().getTimezoneOffset() || 0,
+        maxPoints: 800,
+      });
     } finally {
       vi.useRealTimers();
+      getAggregate.mockRestore();
     }
+  });
+
+  describe("period navigation", () => {
+    const DAY = 24 * HOUR;
+    const iso = (time: number) => new Date(time).toISOString();
+    const aggregateKey = () => lastTelemetryQuery("aggregate").queryKey;
+
+    it("moves the window back and forth by its span and returns to the live preset", () => {
+      renderPage();
+      expect(screen.getByRole("button", { name: "Período siguiente" })).toBeDisabled();
+      expect(screen.queryByRole("button", { name: "Ahora" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Período anterior" }));
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", iso(NOW - 2 * DAY), iso(NOW - DAY), "auto"]);
+      expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-window-end", String(NOW - DAY));
+      expect(screen.getByRole("button", { name: "Últimas 24 horas" })).toHaveAttribute("aria-pressed", "false");
+
+      fireEvent.click(screen.getByRole("button", { name: "Período anterior" }));
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", iso(NOW - 3 * DAY), iso(NOW - 2 * DAY), "auto"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Período siguiente" }));
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", iso(NOW - 2 * DAY), iso(NOW - DAY), "auto"]);
+
+      fireEvent.click(screen.getByRole("button", { name: "Período siguiente" }));
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
+      expect(screen.getByRole("button", { name: "Período siguiente" })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Período anterior" }));
+      fireEvent.click(screen.getByRole("button", { name: "Ahora" }));
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
+      expect(screen.getByRole("button", { name: "Últimas 24 horas" })).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("applies a custom range with times and validates it", () => {
+      renderPage();
+
+      fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
+      const dialog = screen.getByRole("dialog", { name: "Período personalizado" });
+      fireEvent.change(within(dialog).getByLabelText("Desde"), { target: { value: "2026-10-05T08:00:00.000Z" } });
+      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-04T08:00:00.000Z" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+
+      expect(within(dialog).getByRole("alert")).toHaveTextContent("La fecha hasta tiene que ser posterior a la fecha desde.");
+      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
+
+      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-06T20:30:00.000Z" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+
+      expect(screen.queryByRole("dialog", { name: "Período personalizado" })).not.toBeInTheDocument();
+      expect(aggregateKey()).toEqual([
+        "telemetry", "aggregate", "device-online", "2026-10-05T08:00:00.000Z", "2026-10-06T20:30:00.000Z", "auto",
+      ]);
+      expect(screen.getByRole("button", { name: /Personalizado/ })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("button", { name: "Período siguiente" })).toBeEnabled();
+    });
+
+    it("refuses a custom range longer than 366 days", () => {
+      renderPage();
+
+      fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
+      const dialog = screen.getByRole("dialog", { name: "Período personalizado" });
+      fireEvent.change(within(dialog).getByLabelText("Desde"), { target: { value: "2025-01-01T00:00:00.000Z" } });
+      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-01T00:00:00.000Z" } });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+
+      expect(within(dialog).getByRole("alert")).toHaveTextContent("El período no puede superar los 366 días.");
+    });
+  });
+
+  describe("aggregation level and function", () => {
+    const levelSelect = () => screen.getByLabelText("Nivel de agregación") as HTMLSelectElement;
+    const optionStates = () => Array.from(levelSelect().options).map((option) => [option.text, option.disabled]);
+
+    it("shows the resolved automatic bucket and requests the chosen level", () => {
+      renderPage();
+
+      expect(levelSelect().value).toBe("auto");
+      expect(optionStates()).toEqual([
+        ["Automático · 1 min", false],
+        ["1 min", false],
+        ["5 min", false],
+        ["15 min", false],
+        ["1 h", false],
+        ["6 h", false],
+        ["1 día", false],
+      ]);
+
+      fireEvent.change(levelSelect(), { target: { value: "15m" } });
+      expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "15m"]);
+    });
+
+    it("disables the levels that exceed the bucket cap of the period and falls back to automatic", () => {
+      renderPage();
+      fireEvent.change(levelSelect(), { target: { value: "1m" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Últimos 30 días" }));
+
+      expect(optionStates()[1]).toEqual(["1 min", true]);
+      expect(optionStates()[2]).toEqual(["5 min", false]);
+      expect(levelSelect().value).toBe("auto");
+      expect(lastTelemetryQuery("aggregate").queryKey).toEqual(["telemetry", "aggregate", "device-online", "30d", "now", "auto"]);
+    });
+
+    it("plots the chosen function and shows the min–max band only with the average", () => {
+      renderPage();
+      const chart = () => screen.getByTestId("environment-chart");
+      expect(chart()).toHaveAttribute("data-values", "[23.1,23.4]");
+      expect(chart()).toHaveAttribute("data-band", "true");
+
+      fireEvent.click(screen.getByRole("switch", { name: "Mostrar rango mín–máx" }));
+      expect(chart()).toHaveAttribute("data-band", "false");
+      fireEvent.click(screen.getByRole("switch", { name: "Mostrar rango mín–máx" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Mínimo" }));
+      expect(chart()).toHaveAttribute("data-values", "[22.9,23]");
+      expect(chart()).toHaveAttribute("data-band", "false");
+      expect(screen.queryByRole("switch", { name: "Mostrar rango mín–máx" })).not.toBeInTheDocument();
+      expect(screen.getByText("1 sensor · mínimo cada 1 min")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Máximo" }));
+      expect(chart()).toHaveAttribute("data-values", "[23.3,23.8]");
+    });
   });
 
   it("charts the selected device in a single chart with one series per sensor", () => {
@@ -623,7 +795,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(charts).toHaveLength(1);
     expect(charts[0]).toHaveAttribute("data-variable", "temperature");
     expect(within(charts[0]).getAllByRole("listitem").map((item) => item.textContent)).toEqual(["DHT22"]);
-    expect(screen.getByText("1 sensor · promedio cada 10 minutos")).toBeInTheDocument();
+    expect(screen.getByText("1 sensor · promedio cada 1 min")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Últimos registros" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Humedad (%)" }));
@@ -682,7 +854,7 @@ describe("OverviewPage operational dashboard", () => {
   it("shows empty chart and records states when the device has no readings", () => {
     telemetry.latest = state({ items: [], total: 0, sensors: [] });
     telemetry.live = state({ ...liveState, time: null, values: {}, sensors: [], health: {} });
-    telemetry.history = state({ items: [], total: 0, sensors: [] });
+    telemetry.aggregate = state(emptyAggregate);
 
     renderPage();
 
@@ -703,7 +875,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(screen.getByText("Tu usuario no tiene permiso para ver lecturas.")).toBeInTheDocument();
     expect(lastTelemetryQuery("latest").enabled).toBe(false);
     expect(lastTelemetryQuery("live").enabled).toBe(false);
-    expect(lastTelemetryQuery("history").enabled).toBe(false);
+    expect(lastTelemetryQuery("aggregate").enabled).toBe(false);
     expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Valores actuales" })).not.toBeInTheDocument();
   });
@@ -786,8 +958,8 @@ describe("OverviewPage operational dashboard", () => {
     ]);
     const queries = lastEnvironmentQueries();
     expect(queries.map((config) => config.queryKey)).toEqual([
-      ["telemetry", "history", "device-offline-enabled", "24h"],
-      ["telemetry", "history", "device-online", "24h"],
+      ["telemetry", "aggregate", "device-offline-enabled", "24h", "now", "auto"],
+      ["telemetry", "aggregate", "device-online", "24h", "now", "auto"],
     ]);
     expect(queries.every((config) => config.enabled === true && config.refetchInterval === false)).toBe(true);
     expect(typeof queries[0].queryFn).toBe("function");
@@ -798,7 +970,7 @@ describe("OverviewPage operational dashboard", () => {
       "Sensor Sur · DHT22",
       "Sensor Norte · DHT22",
     ]);
-    expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 10 minutos")).toBeInTheDocument();
+    expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 1 min")).toBeInTheDocument();
   });
 
   it("loads the devices of the chosen establishment and shares the range presets", () => {
@@ -808,14 +980,14 @@ describe("OverviewPage operational dashboard", () => {
 
     fireEvent.change(screen.getByLabelText("Establecimiento"), { target: { value: "environment-2" } });
     expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
-      ["telemetry", "history", "device-presence-unavailable", "24h"],
+      ["telemetry", "aggregate", "device-presence-unavailable", "24h", "now", "auto"],
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
     expect(lastEnvironmentQueries().map((config) => config.queryKey)).toEqual([
-      ["telemetry", "history", "device-presence-unavailable", "1h"],
+      ["telemetry", "aggregate", "device-presence-unavailable", "1h", "now", "auto"],
     ]);
-    expect(screen.getByText("1 dispositivo · 1 sensor · promedio cada 1 minuto")).toBeInTheDocument();
+    expect(screen.getByText("1 dispositivo · 1 sensor · promedio cada 1 min")).toBeInTheDocument();
   });
 
   it("plots the variable picked in the variable chips", () => {
@@ -836,7 +1008,7 @@ describe("OverviewPage operational dashboard", () => {
 
   it("draws the devices that loaded and reports the ones that failed", () => {
     useEstablishmentDevices();
-    telemetry.historyByDevice["device-online"] = state(undefined, { isError: true });
+    telemetry.aggregateByDevice["device-online"] = state(undefined, { isError: true });
     renderPage();
     openEstablishmentView();
 
@@ -847,13 +1019,13 @@ describe("OverviewPage operational dashboard", () => {
 
   it("shows loading and empty states for the establishment chart", () => {
     useEstablishmentDevices();
-    telemetry.history = state(undefined, { isLoading: true, isPending: true });
+    telemetry.aggregate = state(undefined, { isLoading: true, isPending: true });
     const { rerender } = renderPage();
     openEstablishmentView();
 
     expect(screen.getByRole("status", { name: "Cargando lecturas del establecimiento" })).toBeInTheDocument();
 
-    telemetry.history = state({ items: [], total: 0, sensors });
+    telemetry.aggregate = state({ ...emptyAggregate, sensors });
     rerender(
       <MemoryRouter>
         <OverviewPage />
@@ -891,6 +1063,12 @@ describe("OverviewPage operational dashboard", () => {
       "Sensor Norte · DHT22 (%)",
     ]);
     expect(within(screen.getByRole("table")).getAllByRole("row").slice(1)).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Temperatura (°C)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Máximo" }));
+    const maxRows = within(screen.getByRole("table")).getAllByRole("row").slice(1);
+    expect(within(maxRows[0]).getAllByText("23,8")).toHaveLength(2);
+    expect(within(maxRows[1]).getAllByText("23,3")).toHaveLength(2);
   });
 
   it("does not request establishment telemetry without the telemetry permission", () => {
@@ -943,7 +1121,7 @@ describe("OverviewPage operational dashboard", () => {
     openEstablishmentView();
     fireEvent.click(legendButton("Sensor Sur · DHT22"));
 
-    telemetry.history = state({ ...readings, items: [...readings.items] });
+    telemetry.aggregate = state({ ...aggregateReadings, items: [...aggregateReadings.items] });
     rerender(
       <MemoryRouter>
         <OverviewPage />

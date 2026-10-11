@@ -1,17 +1,17 @@
 import { LineChart as LineChartIcon } from "lucide-react";
 
-import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
+import type { AggregateBucket, TelemetryVariable } from "@/app/types/environmentalSensor.types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { EnvironmentReadingsChart } from "./EnvironmentReadingsChart";
 import type { EnvironmentPoint, EnvironmentSeries } from "./environmentSeries";
-import type { ReadingsRange, ReadingsWindow } from "./overviewModel";
+import { AGGREGATE_FUNCTIONS, BUCKET_LABEL, type AggregateFunction, type ReadingsWindow } from "./overviewModel";
 import type { ReadingsDisplay, ReadingsView } from "./ReadingsControls";
 import { SeriesLegend } from "./SeriesLegend";
 import { SeriesTable } from "./SeriesTable";
 import type { HiddenSeries } from "./useHiddenSeries";
 
-/** Bucketed history of the active view (one device or every device of an establishment). */
+/** Aggregated readings of the active view (one device or every device of an establishment). */
 export interface SeriesReadingsState {
   loading: boolean;
   failedDevices: number;
@@ -20,14 +20,20 @@ export interface SeriesReadingsState {
   variable?: TelemetryVariable;
   series: EnvironmentSeries[];
   points: EnvironmentPoint[];
-  bucketLabel: string;
-  /** Range of the shown data (bucketing, axis ticks and window). */
-  range: ReadingsRange;
-  /** Rolling window the X axis spans. */
-  timeWindow?: ReadingsWindow;
-  /** The data of a previous range or establishment, kept on screen while the new one loads. */
+  /** Bucket of the shown data, as resolved by the server. */
+  bucket?: AggregateBucket;
+  /** Bucket statistic plotted as the value. */
+  fn: AggregateFunction;
+  /** Window the X axis spans (rolling or fixed). */
+  timeWindow: ReadingsWindow;
+  /** Identifies the shown window (view, target, period, bucket): the chart zoom resets when it changes. */
+  windowKey: string;
+  /** The data of a previous period or establishment, kept on screen while the new one loads. */
   stale?: boolean;
 }
+
+const functionLabel = (fn: AggregateFunction) =>
+  (AGGREGATE_FUNCTIONS.find((entry) => entry.id === fn)?.label ?? "").toLowerCase();
 
 const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
 
@@ -50,18 +56,20 @@ interface SeriesReadingsBodyProps {
   readings: SeriesReadingsState;
   /** Series hidden from the legend; they leave the chart, its tooltip and the table. */
   hidden: HiddenSeries;
+  /** Shade the min–max band of the visible series. */
+  showBand: boolean;
 }
 
 /** Chart or merged-bucket table for the selected variable, with loading, failure and empty states. */
-export function SeriesReadingsBody({ scope, display, readings, hidden }: SeriesReadingsBodyProps) {
-  const { loading, failedDevices, deviceCount, variable, series, points, bucketLabel, range, timeWindow, stale } = readings;
+export function SeriesReadingsBody({ scope, display, readings, hidden, showBand }: SeriesReadingsBodyProps) {
+  const { loading, failedDevices, deviceCount, variable, series, points, bucket, fn, timeWindow, windowKey, stale } = readings;
   const copy = COPY[scope];
   const hasData = Boolean(variable) && series.length > 0 && points.length > 0;
 
   if (loading && !hasData) {
     return (
       <div role="status" aria-label={copy.loading}>
-        <Skeleton className="h-[220px] w-full sm:h-[260px]" />
+        <Skeleton className="h-[244px] w-full sm:h-[284px]" />
       </div>
     );
   }
@@ -91,7 +99,7 @@ export function SeriesReadingsBody({ scope, display, readings, hidden }: SeriesR
   const summary = [
     scope === "environment" ? plural(deviceCount, "dispositivo", "dispositivos") : null,
     plural(series.length, "sensor", "sensores"),
-    `promedio cada ${bucketLabel}`,
+    bucket ? `${functionLabel(fn)} cada ${BUCKET_LABEL[bucket]}` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -103,16 +111,18 @@ export function SeriesReadingsBody({ scope, display, readings, hidden }: SeriesR
           variable={variable}
           series={series.filter((entry) => !hidden.hiddenKeys.has(entry.key))}
           points={points}
-          range={range}
+          bucket={bucket}
+          spanMs={timeWindow.end - timeWindow.start}
         />
       ) : (
         <EnvironmentReadingsChart
+          key={windowKey}
           variable={variable}
           series={series}
           hiddenKeys={hidden.hiddenKeys}
           points={points}
-          range={range}
           timeWindow={timeWindow}
+          showBand={showBand}
           ariaLabel={`Historial de ${variable.name} por sensor ${copy.noun}`}
         />
       )}

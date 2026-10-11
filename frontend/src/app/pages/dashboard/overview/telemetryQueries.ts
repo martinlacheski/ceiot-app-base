@@ -1,7 +1,8 @@
 import { keepPreviousData } from "@tanstack/react-query";
 
+import { localUtcOffsetMinutes } from "@/app/live/telemetryCachePatch";
 import { environmentalSensorService } from "@/app/services/environmentalSensor.service";
-import { resolveReadingsPeriod, type ReadingsRange } from "./overviewModel";
+import { periodQueryKey, periodWindow, type AggregationLevel, type ReadingsPeriod } from "./overviewModel";
 
 /** Slow fallback refresh, only while the live pulse stream is down. */
 export const FALLBACK_REFETCH_MS = 60_000;
@@ -21,22 +22,35 @@ export function liveRefreshOptions(liveConnected: boolean) {
   };
 }
 
+/** Point budget of the automatic bucket: 1h → 1 min, 24h → 5 min, 7d → 15 min, 30d → 1 h. */
+export const AUTO_MAX_POINTS = 800;
+
 /**
- * History query shared by the per-device and per-establishment views. The key matches the device
- * detail page so both views share the cache and the live pulse patches it in place. The previous
- * data stays on screen while another device or range loads.
+ * Aggregate query shared by the per-device and per-establishment views: `["telemetry",
+ * "aggregate", deviceId, startKey, endKey, bucket]`. A preset is keyed by its id and "now"
+ * and resolves its rolling bounds when the query runs, so the key stays stable and the live
+ * pulse folds new readings into its last bucket. The previous data stays on screen while
+ * another device, period or bucket loads.
  */
-export function historyQueryOptions(
+export function aggregateQueryOptions(
   deviceId: string | undefined,
-  range: ReadingsRange,
+  period: ReadingsPeriod,
+  bucket: AggregationLevel,
   enabled: boolean,
   liveConnected: boolean,
 ) {
   return {
-    queryKey: ["telemetry", "history", deviceId, range],
+    queryKey: ["telemetry", "aggregate", deviceId, ...periodQueryKey(period), bucket],
     queryFn: () => {
-      const { start, end } = resolveReadingsPeriod(range, Date.now());
-      return environmentalSensorService.getHistory(deviceId!, start, end);
+      const now = Date.now();
+      const { start, end } = periodWindow(period, now);
+      return environmentalSensorService.getAggregate(deviceId!, {
+        start: new Date(start).toISOString(),
+        end: new Date(end).toISOString(),
+        bucket,
+        utcOffsetMinutes: localUtcOffsetMinutes(now),
+        maxPoints: AUTO_MAX_POINTS,
+      });
     },
     enabled: Boolean(deviceId) && enabled,
     placeholderData: keepPreviousData,

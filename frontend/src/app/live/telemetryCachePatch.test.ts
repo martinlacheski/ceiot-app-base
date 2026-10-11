@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { AggregateTelemetry, LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
 import {
+  aggregateWindowOf,
+  bucketStartOf,
   isReadingValues,
   latestLimit,
   patchHistoryPage,
   patchLatestPage,
+  patchAggregate,
   patchLiveState,
   ROLLING_RANGE_MS,
   rollingRangeOf,
@@ -287,5 +290,116 @@ describe("patchLiveState", () => {
       .toEqual({ status: "invalidate" });
     expect(patchLiveState(live(), { time: "not a time", values: { dht22: { temperature: 3 } } }))
       .toEqual({ status: "invalidate" });
+  });
+});
+
+describe("aggregate buckets", () => {
+  const MINUTE = 60 * 1000;
+
+  it("aligns buckets on the local midnight of the requested UTC offset", () => {
+    expect(bucketStartOf(Date.parse("2026-10-10T12:07:30Z"), 5 * MINUTE, 0)).toBe(Date.parse("2026-10-10T12:05:00Z"));
+    // UTC-3: a daily bucket starts at 03:00 UTC.
+    expect(bucketStartOf(Date.parse("2026-10-10T02:59:00Z"), 24 * HOUR, -180)).toBe(Date.parse("2026-10-09T03:00:00Z"));
+    expect(bucketStartOf(Date.parse("2026-10-10T03:00:00Z"), 24 * HOUR, -180)).toBe(Date.parse("2026-10-10T03:00:00Z"));
+    // UTC+5:30: a 1h bucket starts at the half hour in UTC.
+    expect(bucketStartOf(Date.parse("2026-10-10T12:10:00Z"), HOUR, 330)).toBe(Date.parse("2026-10-10T11:30:00Z"));
+  });
+
+  it("reads whether an aggregate key follows the live window and its rolling span", () => {
+    expect(aggregateWindowOf(["telemetry", "aggregate", "dev-1", "24h", "now", "auto"])).toEqual({ live: true, rangeMs: 24 * HOUR });
+    expect(aggregateWindowOf(["telemetry", "aggregate", "dev-1", "2026-10-01T00:00:00.000Z", "2026-10-02T00:00:00.000Z", "1h"]))
+      .toEqual({ live: false, rangeMs: null });
+  });
+});
+
+describe("patchAggregate", () => {
+  const stat = (avg: number, min: number, max: number, count: number) => ({ avg, min, max, count });
+  const aggregate = (overrides: Partial<AggregateTelemetry> = {}): AggregateTelemetry => ({
+    bucket: "5m",
+    bucketSeconds: 300,
+    start: "2026-10-10T11:03:00Z",
+    end: "2026-10-10T12:03:00Z",
+    items: [
+      { time: "2026-10-10T11:55:00Z", values: { dht22: { temperature: stat(18, 18, 18, 1) } } },
+      { time: "2026-10-10T12:00:00Z", values: { dht22: { temperature: stat(20, 19, 21, 2) } } },
+    ],
+    sensors,
+    ...overrides,
+  });
+  const live = { live: true, rangeMs: HOUR, now: Date.parse("2026-10-10T12:04:00Z"), utcOffsetMinutes: 0 };
+  const patched = (outcome: ReturnType<typeof patchAggregate>) => {
+    if (outcome.status !== "patched") throw new Error(`expected a patch, got ${outcome.status}`);
+    return outcome.page;
+  };
+
+  it("folds a reading into the last bucket: running average, min, max and count", () => {
+    const page = patched(patchAggregate(aggregate(), reading("2026-10-10T12:04:00Z", 23), live));
+
+    expect(page.items).toHaveLength(2);
+    expect(page.items[1].values.dht22.temperature).toEqual(stat(21, 19, 23, 3));
+    expect(page.items[0]).toEqual(aggregate().items[0]);
+    // The reading is counted: the same pulse delivered twice is not folded again.
+    expect(page.end).toBe("2026-10-10T12:04:00.000Z");
+    expect(patchAggregate(page, reading("2026-10-10T12:04:00Z", 23), live)).toEqual({ status: "unchanged" });
+  });
+
+  it("starts the statistics of a variable the bucket did not have yet, ignoring nulls", () => {
+    const humid = { time: "2026-10-10T12:04:00Z", values: { dht22: { temperature: null, relative_humidity: 50 } } };
+    const page = patched(patchAggregate(aggregate(), humid, live));
+
+    expect(page.items[1].values.dht22).toEqual({ temperature: stat(20, 19, 21, 2), relative_humidity: stat(50, 50, 50, 1) });
+  });
+
+  it("appends a new bucket when the reading falls after the last bucket end", () => {
+    const page = patched(patchAggregate(aggregate(), reading("2026-10-10T12:06:10Z", 25), { ...live, now: Date.parse("2026-10-10T12:06:10Z") }));
+
+    expect(page.items.map((entry) => entry.time)).toEqual([
+      "2026-10-10T11:55:00Z", "2026-10-10T12:00:00Z", "2026-10-10T12:05:00.000Z",
+    ]);
+    expect(page.items[2].values).toEqual({ dht22: { temperature: stat(25, 25, 25, 1) } });
+  });
+
+  it("uses the bucket size of the response, also for an automatic bucket", () => {
+    const hourly = aggregate({ bucket: "1h", bucketSeconds: 3600, items: [
+      { time: "2026-10-10T12:00:00Z", values: { dht22: { temperature: stat(20, 20, 20, 1) } } },
+    ] });
+    const page = patched(patchAggregate(hourly, reading("2026-10-10T12:50:00Z", 22), { ...live, rangeMs: 24 * HOUR }));
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0].values.dht22.temperature).toEqual(stat(21, 20, 22, 2));
+  });
+
+  it("drops the buckets that left the rolling window", () => {
+    const now = Date.parse("2026-10-10T13:01:00Z");
+    const page = patched(patchAggregate(aggregate(), reading("2026-10-10T13:01:00Z", 22), { ...live, now }));
+
+    // 11:55 ended at 12:00, before the 12:01 window start; 12:00 ends at 12:05, still inside.
+    expect(page.items.map((entry) => entry.time)).toEqual(["2026-10-10T12:00:00Z", "2026-10-10T13:00:00.000Z"]);
+  });
+
+  it("leaves a past (fixed) window untouched", () => {
+    expect(patchAggregate(aggregate(), reading("2026-10-10T12:04:00Z"), { ...live, live: false, rangeMs: null }))
+      .toEqual({ status: "unchanged" });
+  });
+
+  it("skips a reading the server already counted", () => {
+    expect(patchAggregate(aggregate(), reading("2026-10-10T12:02:00Z"), live)).toEqual({ status: "unchanged" });
+  });
+
+  it("asks for a refetch when a sensor or variable is not described by the cached aggregate", () => {
+    expect(patchAggregate(aggregate(), { time: "2026-10-10T12:04:00Z", values: { bme280: { pressure: 1013 } } }, live))
+      .toEqual({ status: "invalidate" });
+    expect(patchAggregate(aggregate({ items: [], sensors: [] }), reading("2026-10-10T12:04:00Z"), live))
+      .toEqual({ status: "invalidate" });
+  });
+
+  it("asks for a refetch when the reading time is unreadable and ignores an empty cache", () => {
+    expect(patchAggregate(aggregate(), reading("not a time"), live)).toEqual({ status: "invalidate" });
+    expect(patchAggregate(undefined, reading("2026-10-10T12:04:00Z"), live)).toEqual({ status: "unchanged" });
+  });
+
+  it("ignores a reading without numeric values", () => {
+    const empty = { time: "2026-10-10T12:04:00Z", values: { dht22: { temperature: null } } };
+    expect(patchAggregate(aggregate(), empty, live)).toEqual({ status: "unchanged" });
   });
 });

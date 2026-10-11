@@ -1,10 +1,20 @@
 import { Lock, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
+import type { AggregateBucket, TelemetryVariable } from "@/app/types/environmentalSensor.types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { READINGS_RANGES, type ReadingsRange } from "./overviewModel";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import {
+  AGGREGATE_FUNCTIONS,
+  AGGREGATION_LEVELS,
+  aggregationAllowed,
+  BAND_MAX_SERIES,
+  BUCKET_LABEL,
+  type AggregateFunction,
+  type AggregationLevel,
+} from "./overviewModel";
 
 export type ReadingsView = "device" | "environment";
 export type ReadingsDisplay = "chart" | "table";
@@ -50,10 +60,11 @@ export function TelemetryPermissionNotice() {
   );
 }
 
-function SegmentedToggle<T extends string>({ label, options, value, onChange }: {
+/** Buttons where one (or none, with a null value) is pressed. */
+export function SegmentedToggle<T extends string>({ label, options, value, onChange }: {
   label: string;
   options: Array<{ id: T; label: string; description?: string }>;
-  value: T;
+  value: T | null;
   onChange: (value: T) => void;
 }) {
   return (
@@ -88,8 +99,54 @@ export function DisplayToggle({ display, onDisplayChange }: {
   return <SegmentedToggle label="Formato de lecturas" options={DISPLAYS} value={display} onChange={onDisplayChange} />;
 }
 
-export function RangePresets({ range, onRangeChange }: { range: ReadingsRange; onRangeChange: (range: ReadingsRange) => void }) {
-  return <SegmentedToggle label="Período de lecturas" options={READINGS_RANGES} value={range} onChange={onRangeChange} />;
+const SELECT_CLASS = "h-9 min-w-0 rounded-md border bg-background px-3 text-sm";
+
+/** Bucket size: automatic (showing the bucket the server resolved) or an explicit level that fits the span. */
+export function AggregationSelect({ value, resolved, spanMs, onChange }: {
+  value: AggregationLevel;
+  /** Bucket the server used for the data on screen. */
+  resolved?: AggregateBucket;
+  spanMs: number;
+  onChange: (level: AggregationLevel) => void;
+}) {
+  return (
+    <div className="min-w-36">
+      <label htmlFor="readings-aggregation" className="sr-only">Nivel de agregación</label>
+      <select
+        id="readings-aggregation"
+        className={SELECT_CLASS}
+        value={value}
+        title="Nivel de agregación"
+        onChange={(event) => onChange(event.target.value as AggregationLevel)}
+      >
+        {AGGREGATION_LEVELS.map((level) => (
+          // Levels that exceed the server's bucket cap for this span cannot be requested.
+          <option key={level.id} value={level.id} disabled={!aggregationAllowed(level.id, spanMs)}>
+            {level.id === "auto" && resolved ? `${level.label} · ${BUCKET_LABEL[resolved]}` : level.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+export function FunctionToggle({ value, onChange }: { value: AggregateFunction; onChange: (fn: AggregateFunction) => void }) {
+  return <SegmentedToggle label="Función de agregación" options={AGGREGATE_FUNCTIONS} value={value} onChange={onChange} />;
+}
+
+/** Shows or hides the bucket min–max band; unavailable with too many visible series. */
+export function BandToggle({ checked, available, onChange }: {
+  checked: boolean;
+  available: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const hint = available ? undefined : `El rango se muestra con hasta ${BAND_MAX_SERIES} series visibles`;
+  return (
+    <div className="flex items-center gap-2" title={hint}>
+      <Switch id="readings-band" checked={checked && available} disabled={!available} onCheckedChange={onChange} />
+      <Label htmlFor="readings-band" className="text-xs font-normal text-muted-foreground">Mostrar rango mín–máx</Label>
+    </div>
+  );
 }
 
 export function VariableChips({ variables, selected, onSelect }: {

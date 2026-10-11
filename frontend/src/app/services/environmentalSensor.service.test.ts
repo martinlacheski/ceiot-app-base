@@ -52,4 +52,18 @@ describe("environmentalSensorService", () => {
     await expect(environmentalSensorService.getLive("device-1")).resolves.toEqual(live);
     expect(appApi.get).toHaveBeenCalledWith("/devices/device-1/telemetry/live");
   });
+
+  it("requests time-bucketed aggregates with the bucket, the browser UTC offset and the auto point budget", async () => {
+    const aggregate = { bucket: "5m", bucketSeconds: 300, start: "s", end: "e", items: [], sensors: [] };
+    vi.mocked(appApi.get).mockResolvedValue({ data: aggregate });
+    await expect(environmentalSensorService.getAggregate("device-1", {
+      start: "s", end: "e", bucket: "auto", utcOffsetMinutes: -180, maxPoints: 800,
+    })).resolves.toEqual(aggregate);
+    await environmentalSensorService.getAggregate("device-1", { start: "s", end: "e", bucket: "1h", utcOffsetMinutes: 0 });
+    expect(appApi.get).toHaveBeenCalledWith("/devices/device-1/telemetry/aggregate", { params: expect.any(URLSearchParams) });
+    const params = (call: number) =>
+      Object.fromEntries((vi.mocked(appApi.get).mock.calls[call][1] as { params: URLSearchParams }).params);
+    expect(params(0)).toEqual({ start: "s", end: "e", bucket: "auto", utc_offset_minutes: "-180", max_points: "800" });
+    expect(params(1)).toEqual({ start: "s", end: "e", bucket: "1h", utc_offset_minutes: "0" });
+  });
 });

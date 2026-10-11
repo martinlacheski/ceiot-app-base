@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { Device } from "@/app/types/device.types";
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { AggregateTelemetry } from "@/app/types/environmentalSensor.types";
 import {
-  BUCKET_MS,
+  bandKey,
   buildEnvironmentSeries,
   collectVariables,
   defaultVariableCode,
@@ -11,7 +11,7 @@ import {
   listDeviceEnvironments,
   sensorLabel,
   seriesStroke,
-  type DeviceHistory,
+  type DeviceAggregate,
 } from "./environmentSeries";
 
 const TEMPERATURE = { code: "temperature", name: "Temperatura", unit: "°C" };
@@ -19,17 +19,20 @@ const HUMIDITY = { code: "relative_humidity", name: "Humedad", unit: "%" };
 const PRESSURE = { code: "pressure", name: "Presión", unit: "hPa" };
 
 const at = (time: string) => Date.parse(`2026-10-10T${time}:00Z`);
+const stat = (avg: number, min = avg, max = avg, count = 1) => ({ avg, min, max, count });
 
-const north: TelemetryPage = {
-  // Newest first, like the API.
+const north: AggregateTelemetry = {
+  bucket: "5m",
+  bucketSeconds: 300,
+  start: "2026-10-10T12:00:00Z",
+  end: "2026-10-10T13:00:00Z",
+  // Ascending bucket starts, like the API.
   items: [
-    { time: "2026-10-10T12:40:00Z", values: { dht22: { temperature: null }, bmp280: { temperature: null } } },
-    { time: "2026-10-10T12:15:00Z", values: { dht22: { temperature: 24 } } },
-    { time: "2026-10-10T12:12:00Z", values: { dht22: { temperature: null, relative_humidity: 50 } } },
-    { time: "2026-10-10T12:05:00Z", values: { dht22: { temperature: 22 }, bmp280: { temperature: 21.5 } } },
-    { time: "2026-10-10T12:01:00Z", values: { dht22: { temperature: 20 }, sht31: { relative_humidity: 40 } } },
+    { time: "2026-10-10T12:00:00Z", values: { dht22: { temperature: stat(21, 20, 22, 2) }, sht31: { relative_humidity: stat(40) } } },
+    { time: "2026-10-10T12:05:00Z", values: { dht22: { temperature: stat(22) }, bmp280: { temperature: stat(21.5, 21, 22, 3) } } },
+    { time: "2026-10-10T12:10:00Z", values: { dht22: { relative_humidity: stat(50) } } },
+    { time: "2026-10-10T12:15:00Z", values: { dht22: { temperature: stat(24, 23, 25, 4) } } },
   ],
-  total: 5,
   sensors: [
     { key: "dht22", sensorCode: "dht22", sensorName: "DHT22", variables: [TEMPERATURE, HUMIDITY] },
     { key: "bmp280", sensorCode: "bmp280", sensorName: "BMP280", variables: [TEMPERATURE, PRESSURE] },
@@ -37,21 +40,21 @@ const north: TelemetryPage = {
   ],
 };
 
-const south: TelemetryPage = {
-  items: [{ time: "2026-10-10T12:03:00Z", values: { dht22: { temperature: 18 } } }],
-  total: 1,
+const south: AggregateTelemetry = {
+  ...north,
+  items: [{ time: "2026-10-10T12:00:00Z", values: { dht22: { temperature: stat(18, 17, 19, 2) } } }],
   sensors: [{ key: "dht22", sensorCode: "dht22", sensorName: "DHT22", variables: [TEMPERATURE] }],
 };
 
-const histories: DeviceHistory[] = [
-  { deviceId: "north", deviceName: "Sensor Norte", page: north },
-  { deviceId: "south", deviceName: "Sensor Sur", page: south },
-  { deviceId: "pending", deviceName: "Sensor Oeste", page: undefined },
+const aggregates: DeviceAggregate[] = [
+  { deviceId: "north", deviceName: "Sensor Norte", data: north },
+  { deviceId: "south", deviceName: "Sensor Sur", data: south },
+  { deviceId: "pending", deviceName: "Sensor Oeste", data: undefined },
 ];
 
 describe("buildEnvironmentSeries", () => {
   it("builds one labelled series per device sensor that measures the variable", () => {
-    const { series } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["24h"]);
+    const { series } = buildEnvironmentSeries(aggregates, "temperature");
 
     expect(series).toEqual([
       { key: "s0", label: "Sensor Norte · DHT22", deviceId: "north", sensorKey: "dht22" },
@@ -60,69 +63,81 @@ describe("buildEnvironmentSeries", () => {
     ]);
   });
 
-  it("averages non-null readings per time bucket in ascending order", () => {
-    const { points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["24h"]);
+  it("plots the bucket averages by default, merged on the bucket starts in ascending order", () => {
+    const { points } = buildEnvironmentSeries(aggregates, "temperature");
 
-    expect(points).toEqual([
-      { time: at("12:00"), s0: 21, s1: 21.5, s2: 18 },
-      { time: at("12:10"), s0: 24, s1: null, s2: null },
+    expect(points.map((point) => [point.time, point.s0, point.s1, point.s2])).toEqual([
+      [at("12:00"), 21, null, 18],
+      [at("12:05"), 22, 21.5, null],
+      [at("12:15"), 24, null, null],
     ]);
+  });
+
+  it("plots the chosen function: minimum or maximum of every bucket", () => {
+    const minimum = buildEnvironmentSeries(aggregates, "temperature", { fn: "min" }).points;
+    const maximum = buildEnvironmentSeries(aggregates, "temperature", { fn: "max" }).points;
+
+    expect(minimum.map((point) => [point.s0, point.s1, point.s2])).toEqual([[20, null, 17], [22, 21, null], [23, null, null]]);
+    expect(maximum.map((point) => [point.s0, point.s1, point.s2])).toEqual([[22, null, 19], [22, 22, null], [25, null, null]]);
+  });
+
+  it("carries the min–max band of every series next to its value", () => {
+    const { points } = buildEnvironmentSeries(aggregates, "temperature");
+
+    expect(points[0][bandKey("s0")]).toEqual([20, 22]);
+    expect(points[0][bandKey("s1")]).toBeNull();
+    expect(points[0][bandKey("s2")]).toEqual([17, 19]);
+    expect(points[2][bandKey("s0")]).toEqual([23, 25]);
   });
 
   it("drops buckets where no series has a value", () => {
-    const { points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["24h"]);
+    const { points } = buildEnvironmentSeries(aggregates, "temperature");
 
-    expect(points.some((point) => point.time === at("12:40"))).toBe(false);
-  });
-
-  it("keeps every reading apart with the one-minute bucket", () => {
-    const { points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"]);
-
-    expect(points.map((point) => point.time)).toEqual([
-      at("12:01"), at("12:03"), at("12:05"), at("12:15"),
-    ]);
-    expect(points[0]).toEqual({ time: at("12:01"), s0: 20, s1: null, s2: null });
+    expect(points.some((point) => point.time === at("12:10"))).toBe(false);
   });
 
   it("labels series with the sensor name only when given the sensor label strategy", () => {
-    const { series, points } = buildEnvironmentSeries(histories.slice(0, 1), "temperature", BUCKET_MS["24h"], { label: sensorLabel });
+    const { series, points } = buildEnvironmentSeries(aggregates.slice(0, 1), "temperature", { label: sensorLabel });
 
     expect(series.map((entry) => entry.label)).toEqual(["DHT22", "BMP280"]);
-    expect(points[0]).toEqual({ time: at("12:00"), s0: 21, s1: 21.5 });
+    expect(points[1]).toMatchObject({ time: at("12:05"), s0: 22, s1: 21.5 });
   });
 
-  it("drops readings older than the window start, keeping the series", () => {
-    const { series, points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"], { since: at("12:04") });
+  it("drops the buckets that ended before the window start, keeping the series", () => {
+    // The 12:00 bucket ends at 12:05: still partly inside a window that starts at 12:04.
+    expect(buildEnvironmentSeries(aggregates, "temperature", { since: at("12:04") }).points.map((point) => point.time))
+      .toEqual([at("12:00"), at("12:05"), at("12:15")]);
+    const { series, points } = buildEnvironmentSeries(aggregates, "temperature", { since: at("12:05") });
 
     expect(series).toHaveLength(3);
     expect(points.map((point) => point.time)).toEqual([at("12:05"), at("12:15")]);
   });
 
-  it("has no points once every reading left the window", () => {
-    const { series, points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"], { since: at("13:00") });
+  it("has no points once every bucket left the window", () => {
+    const { series, points } = buildEnvironmentSeries(aggregates, "temperature", { since: at("13:00") });
 
     expect(series).toHaveLength(3);
     expect(points).toEqual([]);
   });
 
   it("returns no series or points for an unknown variable", () => {
-    expect(buildEnvironmentSeries(histories, "co2", BUCKET_MS["7d"])).toEqual({ series: [], points: [] });
+    expect(buildEnvironmentSeries(aggregates, "co2")).toEqual({ series: [], points: [] });
   });
 });
 
 describe("latestPoints", () => {
   it("returns the newest buckets first, up to the limit", () => {
-    const { points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"]);
+    const { points } = buildEnvironmentSeries(aggregates, "temperature");
 
     expect(latestPoints(points, 2).map((point) => point.time)).toEqual([at("12:15"), at("12:05")]);
-    expect(latestPoints(points, 20)).toHaveLength(4);
-    expect(points[0].time).toBe(at("12:01"));
+    expect(latestPoints(points, 20)).toHaveLength(3);
+    expect(points[0].time).toBe(at("12:00"));
   });
 });
 
 describe("collectVariables", () => {
   it("merges variables by code across devices and sensors", () => {
-    expect(collectVariables(histories)).toEqual([TEMPERATURE, HUMIDITY, PRESSURE]);
+    expect(collectVariables(aggregates)).toEqual([TEMPERATURE, HUMIDITY, PRESSURE]);
   });
 
   it("prefers temperature as the default variable, else the first", () => {
