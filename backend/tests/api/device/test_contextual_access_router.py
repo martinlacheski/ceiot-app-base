@@ -371,8 +371,9 @@ def test_authenticated_guest_without_environment_permission_can_read_environment
     client: TestClient,
     session: Session,
 ):
+    """Reading the type catalog needs only environment_type:read (in BASIC), no environment:*."""
     seed = seed_context_graph(session)
-    seed["guest"].permissions = []
+    seed["guest"].permissions = ["environment_type:read"]
     session.add(seed["guest"])
     session.commit()
     token = make_token(seed["guest"].id)

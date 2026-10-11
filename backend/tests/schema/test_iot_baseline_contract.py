@@ -63,6 +63,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0023_retire_environment_invitation.py",
         "0024_device_model_override.py",
         "0025_device_state.py",
+        "0026_environment_type_permissions.py",
     ]
 
 

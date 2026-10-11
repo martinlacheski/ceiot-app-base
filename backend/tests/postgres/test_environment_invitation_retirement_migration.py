@@ -204,7 +204,9 @@ def test_upgrade_moves_legacy_invitations_strips_permissions_and_round_trips(scr
         assert INVITATION_CODES <= _permissions(connection, ids["owner"])
     engine.dispose()
 
-    _must(scratch_url, "upgrade", "head")
+    # Pinned to 0023: later data revisions (0026 grants environment_type:read) also edit
+    # the owner's permissions, and this test only proves the 0023 round trip.
+    _must(scratch_url, "upgrade", "0023")
     engine = create_engine(scratch_url)
     with engine.connect() as connection:
         _assert_retired(connection, ids)

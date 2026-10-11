@@ -18,6 +18,8 @@ def headers_fixture(session: Session) -> dict[str, str]:
         permissions=[
             "location:read", "location:create", "location:update", "location:delete",
             "environment:read", "environment:create", "environment:update", "environment:delete",
+            "environment_type:read", "environment_type:create", "environment_type:update",
+            "environment_type:delete",
         ],
     )
     session.add(user)

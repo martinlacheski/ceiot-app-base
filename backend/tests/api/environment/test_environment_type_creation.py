@@ -11,7 +11,7 @@ def _create_environment_type_admin(session: Session) -> User:
         username="environment_type_admin",
         password=hash_password("testpassword"),
         is_verified=True,
-        permissions=["environment:create"],
+        permissions=["environment_type:create"],
     )
     session.add(user)
     session.commit()

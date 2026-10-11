@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, status
 from typing import Optional
 import uuid
 
-from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
+from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker
 from app.api.auth.models import User
 from app.api.environment.environment_type.service import EnvironmentTypeService
 from app.api.environment.environment_type.repository import EnvironmentTypeRepository
@@ -18,7 +18,7 @@ router = APIRouter()
 async def create_environment_type(
     payload: EnvironmentTypeCreate, 
     db: AuthedAsyncDBSession,
-    current_user: User = Depends(PermissionChecker("environment:create"))
+    current_user: User = Depends(PermissionChecker("environment_type:create"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
     return await service.create(payload)
@@ -29,6 +29,8 @@ async def create_environment_type(
 async def ensure_environment_type(
     payload: EnvironmentTypeCreate, 
     db: AuthedAsyncDBSession,
+    # Deliberately environment:create, not environment_type:create: a standard user
+    # creating an establishment may add a missing type on the fly (EnvironmentForm).
     current_user: User = Depends(PermissionChecker("environment:create"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
@@ -43,7 +45,7 @@ async def get_all_environment_types(
     is_active: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     sort: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(PermissionChecker("environment_type:read"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
     return await service.get_all(page, per_page, is_active, search, sort)
@@ -53,7 +55,7 @@ async def get_all_environment_types(
 async def get_environment_type_by_id(
     type_id: uuid.UUID, 
     db: AuthedAsyncDBSession,
-    current_user: User = Depends(PermissionChecker("environment:read"))
+    current_user: User = Depends(PermissionChecker("environment_type:read"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
     return await service.get_by_id(type_id)
@@ -64,7 +66,7 @@ async def update_environment_type(
     type_id: uuid.UUID, 
     payload: EnvironmentTypeUpdate, 
     db: AuthedAsyncDBSession,
-    current_user: User = Depends(PermissionChecker("environment:update"))
+    current_user: User = Depends(PermissionChecker("environment_type:update"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
     return await service.update(type_id, payload)
@@ -73,7 +75,7 @@ async def update_environment_type(
 async def delete_environment_type(
     type_id: uuid.UUID, 
     db: AuthedAsyncDBSession,
-    current_user: User = Depends(PermissionChecker("environment:delete"))
+    current_user: User = Depends(PermissionChecker("environment_type:delete"))
 ):
     service = EnvironmentTypeService(EnvironmentTypeRepository(db))
     return await service.delete(type_id)
