@@ -38,6 +38,16 @@ if [ -f backend/.env ]; then
 fi
 echo "Proveedor de embeddings: $provider"
 
+# Without the broker certificates Docker would create mqtt/certs/ owned by root
+# and EMQX would start without its mTLS listener.
+certs_dir="${MQTT_CERTS_DIR:-mqtt/certs}"
+for cert in ca.crt emqx.crt emqx.key; do
+  if [ ! -f "$certs_dir/$cert" ]; then
+    echo "Error: falta $certs_dir/$cert. Generá los certificados del broker antes de levantar el stack (ver docs/certificados-mqtt.md)." >&2
+    exit 1
+  fi
+done
+
 if [ ! -f pgadmin/.env ]; then
   echo "Aviso: falta pgadmin/.env (PGADMIN_DEFAULT_EMAIL y PGADMIN_DEFAULT_PASSWORD); pgAdmin solo arranca si ya se inicializó antes." >&2
 fi
