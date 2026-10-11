@@ -16,7 +16,7 @@ from threading import Lock
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col, select
 
 from app.api.device.models import Device, DeviceStatus
@@ -222,7 +222,9 @@ async def get_public_map_locations(
             selectinload(Device.environment)
             .selectinload(Environment.city)
             .selectinload(LocationCity.state)
-            .selectinload(LocationState.country)
+            .selectinload(LocationState.country),
+            # The public map never exposes runtime state; skip the device_state load.
+            noload(Device.state),
         )
         .where(
             col(Device.is_active).is_(True),
