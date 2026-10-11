@@ -52,7 +52,7 @@ FIRMWARE_DIR = REPO_ROOT / "esp32"
 DEFAULT_FIRMWARE_CERT_DIR = FIRMWARE_DIR / "cert"
 # The backend is reached from this machine; its published port comes from
 # backend/.env (BACKEND_PORT) unless CEIOT_API_BASE_URL overrides it.
-DEFAULT_API_BASE_URL = "http://localhost:${BACKEND_PORT:-18000}"
+DEFAULT_API_BASE_URL = "http://localhost:${BACKEND_PORT:-8000}"
 # Stack env files read (only the variables a profile or default references)
 # after the process environment and provisioning/.env.local.
 STACK_ENV_FILES = (REPO_ROOT / "mqtt" / ".env", REPO_ROOT / "backend" / ".env")

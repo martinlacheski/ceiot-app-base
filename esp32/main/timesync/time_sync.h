@@ -27,7 +27,7 @@ time_source_t time_sync_get_source(void);
 // Handles a message received on iot/devices/{serial}/time.
 void time_sync_on_mqtt_time(const char *data, int len);
 
-// Effective backend base URL: NVS "backend_url", or http://<broker>:18000.
+// Effective backend base URL: NVS "backend_url", or http://<broker>:8000.
 void time_sync_get_backend_url(char *out, size_t out_size);
 
 #endif // TIME_SYNC_H

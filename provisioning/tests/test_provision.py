@@ -31,9 +31,9 @@ class ProfileTests(unittest.TestCase):
             return provision.load_profile(path)
 
     def test_local_profile_reads_the_stack_variables(self):
-        values = {"LAN_BIND_IP": "192.168.1.100", "MQTT_LISTENER_TLS": "18883"}
+        values = {"LAN_BIND_IP": "192.168.1.100", "MQTT_LISTENER_TLS": "8883"}
         self.assertEqual(provision.load_profile(provision.DEFAULT_PROFILE, values.get),
-                         {"mqtt_uri": "192.168.1.100", "mqtt_port": "18883", "mqtt_use_tls": "1"})
+                         {"mqtt_uri": "192.168.1.100", "mqtt_port": "8883", "mqtt_use_tls": "1"})
 
     def test_missing_variable_is_an_error(self):
         with self.assertRaises(provision.ProvisioningError):
@@ -44,7 +44,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(provision.expand_vars("${A}:${B:-8883}", lookup), "x:8883")
         self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {"BACKEND_PORT": "19000"}.get),
                          "http://localhost:19000")
-        self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {}.get), "http://localhost:18000")
+        self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {}.get), "http://localhost:8000")
 
     def test_native_types_are_normalized_to_strings(self):
         self.assertEqual(self.load({"mqtt_uri": " h ", "mqtt_port": 1883, "mqtt_use_tls": False}),
@@ -130,7 +130,7 @@ class FirmwareSensorTests(unittest.TestCase):
             self.parse("--firmware-sensor", "ds18b20")
 
     def test_firmware_profile_adds_the_sensor(self):
-        profile = {"mqtt_uri": "h", "mqtt_port": "18883", "mqtt_use_tls": "1"}
+        profile = {"mqtt_uri": "h", "mqtt_port": "8883", "mqtt_use_tls": "1"}
         self.assertEqual(provision.firmware_profile(profile, "auto"), {**profile, "sensor": "auto"})
         self.assertNotIn("sensor", profile)
 
@@ -145,7 +145,7 @@ class StageTests(unittest.TestCase):
                 (certs / name).write_text(name, encoding="utf-8")
             ca = tmp / "ca.crt"
             ca.write_text("ca", encoding="utf-8")
-            profile = {"mqtt_uri": "h", "mqtt_port": "18883", "mqtt_use_tls": "1", "sensor": "auto"}
+            profile = {"mqtt_uri": "h", "mqtt_port": "8883", "mqtt_use_tls": "1", "sensor": "auto"}
             staged = provision.stage(tmp / "build", "IOT-DEM0-0009", certs, ca, profile)
             provision.copy_to_firmware(staged, tmp / "fw")
             self.assertEqual(sorted(p.name for p in (tmp / "fw").iterdir()), sorted(provision.STAGED_FILES))

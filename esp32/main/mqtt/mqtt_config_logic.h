@@ -13,8 +13,9 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* Placeholder host: provisioning.json or the MQTT page set the real one. */
 #define MQTT_DEFAULT_HOST "192.168.1.100"
-#define MQTT_DEFAULT_TLS_PORT 18883  /* dev stack: MQTT_LISTENER_TLS on LAN_BIND_IP */
+#define MQTT_DEFAULT_TLS_PORT 8883  /* standard MQTT over TLS (MQTT_LISTENER_TLS) */
 #define MQTT_DEFAULT_TCP_PORT 1883
 #define MQTT_SERIAL_MAX 32
 #define MQTT_HOST_MAX 128

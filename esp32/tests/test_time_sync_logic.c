@@ -116,9 +116,9 @@ static void test_compensation(void) {
 static void test_backend_urls(void) {
   char url[64];
   CHECK(time_sync_default_backend_url("192.168.1.100", url, sizeof(url)));
-  CHECK(strcmp(url, "http://192.168.1.100:18000") == 0);
+  CHECK(strcmp(url, "http://192.168.1.100:8000") == 0);
   CHECK(time_sync_default_backend_url("fd00::5", url, sizeof(url)));
-  CHECK(strcmp(url, "http://[fd00::5]:18000") == 0);
+  CHECK(strcmp(url, "http://[fd00::5]:8000") == 0);
   CHECK(!time_sync_default_backend_url("", url, sizeof(url)));
   CHECK(!time_sync_default_backend_url("a-very-long-host-name.example.com", url, 20));
 

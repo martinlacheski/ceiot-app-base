@@ -16,7 +16,7 @@ static void test_first_boot_defaults_with_factory_serial(void) {
   CHECK(strcmp(c.host, MQTT_DEFAULT_HOST) == 0);
   CHECK(strcmp(c.host, "192.168.1.100") == 0);
   CHECK(c.port == MQTT_DEFAULT_TLS_PORT);
-  CHECK(MQTT_DEFAULT_TLS_PORT == 18883);
+  CHECK(MQTT_DEFAULT_TLS_PORT == 8883);
   CHECK(strcmp(c.uri, "mqtts://192.168.1.100") == 0);
 }
 

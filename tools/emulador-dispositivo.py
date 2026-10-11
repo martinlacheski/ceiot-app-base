@@ -730,8 +730,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--port",
         type=int,
-        default=18883,
-        help="Puerto TLS publicado en el host por mqtt/docker-compose.yml (default: 18883)",
+        default=8883,
+        help="Puerto TLS publicado en el host por mqtt/docker-compose.yml (default: 8883)",
     )
     parser.add_argument("--interval", type=float, default=5.0, help="Segundos entre publicaciones (default: 5)")
     parser.add_argument("--count", type=int, default=1, help="Cantidad de lecturas a publicar (default: 1)")
@@ -768,7 +768,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--ota-url-base",
         default=None,
         help=(
-            "Reemplaza esquema y host de la URL de descarga recibida (ej. http://localhost:18000) "
+            "Reemplaza esquema y host de la URL de descarga recibida (ej. http://localhost:8000) "
             "cuando FIRMWARE_DOWNLOAD_BASE_URL apunta a una IP o host no alcanzable desde donde corre el emulador."
         ),
     )

@@ -26,8 +26,8 @@
 #define TIME_SYNC_MQTT_RETRY_MS 30000U
 // 2024-01-01T00:00:00Z: anything earlier is an unset / bogus clock.
 #define TIME_SYNC_MIN_VALID_EPOCH_MS 1704067200000LL
-// Default backend port (docker compose publishes the API on 18000).
-#define TIME_SYNC_DEFAULT_BACKEND_PORT 18000
+// Default backend port (BACKEND_PORT in the standard configuration).
+#define TIME_SYNC_DEFAULT_BACKEND_PORT 8000
 
 typedef enum {
   TIME_SOURCE_NONE = 0,
@@ -79,7 +79,7 @@ int64_t time_sync_compensate(int64_t epoch_ms, int64_t t_request_us,
                              int64_t t_response_us);
 
 // Default backend base URL from the MQTT broker host:
-// "http://<host>:18000". Returns false if host is empty or out does not fit.
+// "http://<host>:8000". Returns false if host is empty or out does not fit.
 bool time_sync_default_backend_url(const char *mqtt_host, char *out,
                                    size_t out_size);
 

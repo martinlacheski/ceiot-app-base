@@ -830,7 +830,7 @@ static esp_err_t api_config_mqtt_post_handler(httpd_req_t *req) {
   cJSON *backend_url = cJSON_GetObjectItem(root, "backend_url");
 
   // Optional backend base URL for the HTTP time bootstrap; "" = default
-  // (http://<broker host>:18000).
+  // (http://<broker host>:8000).
   if (backend_url != NULL &&
       (!cJSON_IsString(backend_url) ||
        strlen(backend_url->valuestring) >= 128 ||

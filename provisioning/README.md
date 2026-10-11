@@ -30,7 +30,7 @@ toman los valores nuevos sin editar el perfil.
 
 La URL del backend es `CEIOT_API_BASE_URL` si está definida; si no,
 `http://localhost:${BACKEND_PORT}` con `BACKEND_PORT` de `backend/.env`
-(`18000` por defecto). `--api-base-url` tiene prioridad sobre ambas.
+(`8000` por defecto). `--api-base-url` tiene prioridad sobre ambas.
 
 ## Requisitos
 
@@ -164,10 +164,10 @@ En el monitor serie, al arrancar:
 
 ```
 NVS_MGR: Provisioning: factory serial IOT-DEM0-0002 from /littlefs/serial.txt
-NVS_MGR: Provisioning: broker 192.168.1.100:18883 (TLS on) from /littlefs/provisioning.json
+NVS_MGR: Provisioning: broker 192.168.1.100:8883 (TLS on) from /littlefs/provisioning.json
 NVS_MGR: Provisioning: sensor dht22 from /littlefs/provisioning.json
 SENSOR: Sensor setting: DHT22 (manual)
-MQTT_MGR: Broker 192.168.1.100:18883 (mTLS), client id IOT-DEM0-0002
+MQTT_MGR: Broker 192.168.1.100:8883 (mTLS), client id IOT-DEM0-0002
 ```
 
 Con `"sensor": "auto"` aparece en cambio

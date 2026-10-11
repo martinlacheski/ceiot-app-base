@@ -355,7 +355,7 @@ def test_cli_defaults_keep_the_previous_behavior():
     assert args.ota_disconnect_at is None
     assert args.ota_url_base is None
     assert args.firmware_version == "emulador"
-    assert (args.host, args.port, args.count, args.interval) == ("localhost", 18883, 1, 5.0)
+    assert (args.host, args.port, args.count, args.interval) == ("localhost", 8883, 1, 5.0)
 
 
 def test_cli_ota_flags():
