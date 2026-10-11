@@ -60,8 +60,8 @@ dentro de Docker) exige certificado de cliente.
 
 | Variable | Para qué | Valor sugerido |
 | --- | --- | --- |
-| `MQTT_LISTENER_TLS` | Puerto TLS publicado en el host | `18883` (el que asumen el README raíz y el emulador; el ejemplo trae `8883`) |
-| `MQTT_LISTENER_TCP`, `MQTT_LISTENER_WS` | Puertos TCP y WebSocket publicados | `11883` y `28083`, según la tabla del README raíz |
+| `MQTT_LISTENER_TLS` | Puerto TLS publicado en el host | `8883` (estándar; cámbielo solo si el puerto está ocupado en su máquina) |
+| `MQTT_LISTENER_TCP`, `MQTT_LISTENER_WS` | Puertos TCP y WebSocket publicados | `1883` y `8083` (estándar) |
 | `LAN_BIND_IP` | IP de esta máquina en la red local, para dispositivos reales | Opcional; el mismo valor en `backend/.env` |
 | `EMQX_BACKEND_PASSWORD` | Contraseña del usuario `backend-services` | `openssl rand -hex 32` |
 | `EMQX_PASSWORD` | Contraseña del panel de EMQX | `openssl rand -hex 64` |
@@ -167,7 +167,7 @@ cmp mqtt/certs/ca.crt mqtt/pki/ca/ca.crt
 docker compose ps emqx
 
 # Handshake mTLS real con el certificado de un dispositivo
-openssl s_client -connect localhost:18883 \
+openssl s_client -connect localhost:8883 \
   -CAfile mqtt/pki/ca/ca.crt \
   -cert mqtt/pki/devices/IOT-DEM0-0001/client.crt \
   -key mqtt/pki/devices/IOT-DEM0-0001/client.key \
@@ -175,8 +175,8 @@ openssl s_client -connect localhost:18883 \
 ```
 
 El último comando debe mostrar `Verification: OK`. Para probar el acceso por
-la red local, use `-connect <LAN_BIND_IP>:18883` y reemplace
-`-verify_hostname localhost` por `-verify_ip <LAN_BIND_IP>`. Reemplace `18883`
+la red local, use `-connect <LAN_BIND_IP>:8883` y reemplace
+`-verify_hostname localhost` por `-verify_ip <LAN_BIND_IP>`. Reemplace `8883`
 si definió otro `MQTT_LISTENER_TLS`.
 
 Para una prueba de punta a punta (mTLS, broker, `mqtt-runtime` y base de
