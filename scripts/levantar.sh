@@ -127,6 +127,12 @@ for dir in mqtt/data mqtt/log; do
     echo "Aviso: $dir no pertenece al uid $emqx_uid (usuario de EMQX en el contenedor); EMQX podría no poder escribir ahí. Corregilo con: sudo chown -R $emqx_uid:$emqx_uid mqtt/data mqtt/log" >&2
   fi
 done
+# The broker key is created 0600 by the PKI scripts: EMQX can only read it when
+# it belongs to the same uid.
+broker_key="${MQTT_CERTS_DIR:-mqtt/certs}/emqx.key"
+if [ -f "$broker_key" ] && [ "$(stat -c '%u' "$broker_key")" != "$emqx_uid" ]; then
+  echo "Aviso: $broker_key no pertenece al uid $emqx_uid; EMQX no podrá leerla y el listener TLS no arrancará. Corregilo con: sudo chown $emqx_uid:$emqx_uid $broker_key" >&2
+fi
 
 export MAIL_TRANSPORT=mailpit
 

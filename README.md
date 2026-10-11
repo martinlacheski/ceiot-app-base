@@ -92,8 +92,8 @@ El script:
    `sudo chown -R 1000:1000 mqtt/data mqtt/log`.
 3. Arranca PostgreSQL, espera a que esté sano y aplica las migraciones
    (`alembic upgrade head`) en un contenedor descartable del backend. En una
-   base vacía crean el esquema y los catálogos iniciales: el tipo de
-   dispositivo "Ambiental", los sensores y las variables. Si la base ya está
+   base vacía crean el esquema y los catálogos iniciales: los tipos de
+   dispositivo ("Ambiental" y "1 Relé"), los sensores y las variables. Si la base ya está
    al día, no hacen nada.
 4. Levanta el resto del stack con los correos redirigidos a Mailpit (perfil
    `local-mail`), incluidos pgAdmin y RedisInsight. Solo crea el contenedor de

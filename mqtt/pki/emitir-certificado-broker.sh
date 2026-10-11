@@ -68,4 +68,4 @@ install -m 644 "$CA_CERT" "$OUT_DIR/ca.crt"
 
 echo "Certificado del broker emitido en $OUT_DIR"
 echo "  SAN: $SAN"
-echo "Recree el contenedor emqx para que tome el certificado nuevo (desde la raíz del proyecto): docker compose up -d --force-recreate emqx"
+echo "Si el stack ya está levantado, recree el contenedor emqx para que tome el certificado nuevo (desde la raíz del proyecto): docker compose up -d --force-recreate emqx"

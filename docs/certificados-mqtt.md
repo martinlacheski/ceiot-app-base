@@ -68,7 +68,7 @@ dentro de Docker) exige certificado de cliente.
 | `MQTT_LISTENER_TCP`, `MQTT_LISTENER_WS` | Puertos TCP y WebSocket publicados | `1883` y `8083` (estándar) |
 | `LAN_BIND_IP` | IP de esta máquina en la red local, para dispositivos reales | Opcional; el mismo valor en `backend/.env` |
 | `EMQX_BACKEND_PASSWORD` | Contraseña del usuario `backend-services` | `openssl rand -hex 32` |
-| `EMQX_PASSWORD` | Contraseña del panel de EMQX | `openssl rand -hex 64` |
+| `EMQX_PASSWORD` | Contraseña del panel de EMQX | `openssl rand -hex 32` |
 
 ## Paso 1: crear la CA
 
