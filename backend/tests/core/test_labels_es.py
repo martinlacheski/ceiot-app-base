@@ -45,6 +45,8 @@ class SpanishLabelTests(unittest.TestCase):
             ("DÁTOS", {"sensor_data"}),
             ("  datos   de  sensores ", {"sensor_data"}),
             ("activo", {"keep_active"}),
+            ("desvinculación", {"unpair"}),
+            ("traslado", {"move"}),
             ("", set()),
             ("   ", set()),
             ("%", set()),

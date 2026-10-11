@@ -12,6 +12,10 @@ class DeviceOperationType(str, Enum):
     ERROR = "error"
     OTHER = "other"
     FIRMWARE_UPDATE = "firmware_update"
+    # The device left an establishment (unpair / move to another one). Recorded in the
+    # establishment being left, with the device name it had there (``device_name``).
+    UNPAIR = "unpair"
+    MOVE = "move"
 
 class DeviceOperationStatus(str, Enum):
     SUCCESS = "success"
@@ -55,6 +59,11 @@ class DeviceOperation(SQLModel, table=True):
     )
     
     operation_type: DeviceOperationType = Field(index=True)
+
+    # Name the device had in this row's establishment, snapshotted when it leaves it
+    # (UNPAIR / MOVE). Former owners read it instead of the live device row, which they
+    # can no longer see and whose later renames belong to the next owner.
+    device_name: Optional[str] = Field(default=None, nullable=True)
     
     status: DeviceOperationStatus = Field(default=DeviceOperationStatus.PENDING)
     

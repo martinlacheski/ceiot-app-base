@@ -24,6 +24,8 @@ OPERATION_TYPE_LABELS: dict[str, str] = {
     "error": "Error",
     "other": "Otro",
     "firmware_update": "Actualización de firmware",
+    "unpair": "Desvinculación",
+    "move": "Traslado",
 }
 
 OPERATION_STATUS_LABELS: dict[str, str] = {

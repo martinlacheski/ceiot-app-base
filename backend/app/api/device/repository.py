@@ -32,6 +32,7 @@ from app.api.device.models import (
     normalize_model_override,
 )
 from app.api.device.service import DeviceService
+from app.api.device.operations.models import DeviceOperation, DeviceOperationStatus, DeviceOperationType
 from app.services.pagination import paginate_query_async
 
 from app.api.environment.environment.models import Environment, EnvironmentUser
@@ -601,7 +602,28 @@ class DeviceRepository:
         # Re-fetch with relationships loaded to avoid MissingGreenlet
         return await self.get(db_device.id, include_inactive=True)
 
+    def _record_departure(self, db_device: Device, operation_type: DeviceOperationType) -> None:
+        """Record that the device leaves its current establishment, in that establishment.
+
+        The row snapshots the device name it had there: once it leaves, the former owner can
+        no longer read the device row, and a later owner's rename must never reach them. The
+        environment is set explicitly (the insert trigger would only fill a NULL from the
+        live device row) and the row is added before the device changes, in the same
+        transaction, so a failed or rolled back unpair/move records nothing. Inserting needs
+        the system identity (deviceoperation only accepts system writes).
+        """
+        self.session.add(DeviceOperation(
+            operation_type=operation_type,
+            status=DeviceOperationStatus.SUCCESS,
+            device_id=db_device.id,
+            device_serial=db_device.serial,
+            environment_id=db_device.environment_id,
+            device_name=db_device.name,
+        ))
+
     async def unpair(self, db_device: Device) -> Device:
+        if db_device.environment_id is not None:
+            self._record_departure(db_device, DeviceOperationType.UNPAIR)
         db_device.environment_id = None
         db_device.status = DeviceStatus.UNPAIRED
         self.session.add(db_device)
@@ -630,6 +652,7 @@ class DeviceRepository:
         if origin_environment_id is None or destination is None:
             raise DeviceStateChangedError
 
+        self._record_departure(db_device, DeviceOperationType.MOVE)
         result = await self.session.exec(
             update(Device)
             .where(

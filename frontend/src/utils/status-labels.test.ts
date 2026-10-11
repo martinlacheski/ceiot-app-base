@@ -47,6 +47,13 @@ describe("status labels", () => {
     expect(getFirmwareUpdateStateLabel("rejected")).toBe("Rechazada");
   });
 
+  it("labels the operations that record a device leaving an establishment", () => {
+    expect(getOperationTypeLabel("unpair")).toBe("Desvinculación");
+    expect(getOperationTypeLabel("move")).toBe("Traslado");
+    expect(OPERATION_TYPE_OPTIONS).toContainEqual({ value: "unpair", label: "Desvinculación" });
+    expect(OPERATION_TYPE_OPTIONS).toContainEqual({ value: "move", label: "Traslado" });
+  });
+
   it("labels nullable booleans without losing false", () => {
     expect(getBooleanLabel(true)).toBe("Sí");
     expect(getBooleanLabel(false)).toBe("No");

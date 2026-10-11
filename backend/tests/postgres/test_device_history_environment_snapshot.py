@@ -22,6 +22,7 @@ from app.api.device.operations.models import (
 )
 from app.api.device.operations.service import DeviceOperationService
 from app.api.device.history.service import DeviceHistoryService
+from app.api.device.repository import DeviceRepository, DeviceStateChangedError
 from app.api.environment.environment.models import Environment, EnvironmentUser
 from app.api.environment.environment_type.models import EnvironmentType
 from app.api.location.models import LocationCity, LocationCountry, LocationState
@@ -574,3 +575,132 @@ async def test_admin_history_detail_totals_exclude_rows_without_environment(
     assert telemetry["total"] == 1
     assert all(item.environment_id is not None for item in telemetry["items"])
     assert all(item.environment_id is not None for item in operations["items"])
+
+
+async def _system_repository_call(rls_engine_factory, device_id, action):
+    """Run a repository write as the application's system identity under real RLS."""
+    role_engine = rls_engine_factory(pool_size=1)
+    async with AsyncSession(role_engine, expire_on_commit=False) as session:
+        # Session-level, like core.db.system_session (survives the repository commit).
+        await session.execute(text("SELECT set_config('app.current_user_id', 'system_mqtt', false)"))
+        repo = DeviceRepository(session)
+        device = await repo.get(device_id)
+        await action(repo, device)
+
+
+async def _history_names(rls_engine_factory, user_id, serial, *, admin=False):
+    role_engine = rls_engine_factory(pool_size=1)
+    async with AsyncSession(role_engine, expire_on_commit=False) as session:
+        await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                              {"uid": "system_admin" if admin else str(user_id)})
+        user = User(id=user_id, email=f"{user_id}@example.com", username=str(user_id),
+                    password="unused", is_admin=admin)
+        result = await DeviceHistoryService(session).list_devices(
+            user, only_former=False, search=serial)
+    return {item["environment_id"]: item["device_name"] for item in result["items"]}
+
+
+async def _snapshot_operations(admin_engine, serial):
+    async with admin_engine.connect() as connection:
+        return (await connection.execute(text(
+            "SELECT operation_type::text AS operation_type, environment_id, device_name, status::text AS status "
+            "FROM deviceoperation WHERE device_serial = :serial AND device_name IS NOT NULL ORDER BY time"
+        ), {"serial": serial})).all()
+
+
+async def test_unpair_records_name_snapshot_and_former_owner_never_sees_later_rename(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    """D1: the former owner sees the name the device had in THEIR establishment."""
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    try:
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            )
+            await session.commit()
+
+        async def unpair(repo, device):
+            await repo.unpair(device)
+        await _system_repository_call(rls_engine_factory, history_rows.device_id, unpair)
+
+        snapshots = await _snapshot_operations(admin_engine, history_rows.device_serial)
+        assert [(row.operation_type, row.environment_id, row.device_name, row.status) for row in snapshots] == [
+            ("UNPAIR", history_rows.old_environment_id, "History snapshot device", "SUCCESS")]
+
+        names = await _history_names(rls_engine_factory, history_rows.old_owner_id,
+                                     history_rows.device_serial)
+        assert names == {history_rows.old_environment_id: "History snapshot device"}
+
+        # A later owner pairs and renames it: the former owner keeps the snapshot.
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            await session.execute(text(
+                "UPDATE device SET environment_id = :env, name = 'Renamed by new owner' WHERE id = :id"),
+                {"env": history_rows.new_environment_id, "id": history_rows.device_id})
+            await session.commit()
+            await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            )
+            await session.commit()
+
+        assert await _history_names(rls_engine_factory, history_rows.old_owner_id,
+                                    history_rows.device_serial) == {
+            history_rows.old_environment_id: "History snapshot device"}
+        assert await _history_names(rls_engine_factory, history_rows.new_owner_id,
+                                    history_rows.device_serial) == {
+            history_rows.new_environment_id: "Renamed by new owner"}
+        assert await _history_names(rls_engine_factory, uuid.uuid4(), history_rows.device_serial,
+                                    admin=True) == {
+            history_rows.old_environment_id: "History snapshot device",
+            history_rows.new_environment_id: "Renamed by new owner"}
+    finally:
+        await admin_engine.dispose()
+
+
+async def test_move_records_name_snapshot_in_the_origin_environment(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    try:
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+            )
+            await session.commit()
+
+        async def move(repo, device):
+            await repo.move(device, history_rows.new_environment_id)
+        await _system_repository_call(rls_engine_factory, history_rows.device_id, move)
+
+        snapshots = await _snapshot_operations(admin_engine, history_rows.device_serial)
+        assert [(row.operation_type, row.environment_id, row.device_name) for row in snapshots] == [
+            ("MOVE", history_rows.old_environment_id, "History snapshot device")]
+
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            await session.execute(text("UPDATE device SET name = 'Renamed after move' WHERE id = :id"),
+                                  {"id": history_rows.device_id})
+            await session.commit()
+
+        assert await _history_names(rls_engine_factory, history_rows.old_owner_id,
+                                    history_rows.device_serial) == {
+            history_rows.old_environment_id: "History snapshot device"}
+    finally:
+        await admin_engine.dispose()
+
+
+async def test_move_conflict_records_no_snapshot(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    try:
+        async def stale_move(repo, device):
+            async with admin_engine.begin() as connection:
+                await connection.execute(text("UPDATE device SET environment_id = NULL WHERE id = :id"),
+                                         {"id": history_rows.device_id})
+            with pytest.raises(DeviceStateChangedError):
+                await repo.move(device, history_rows.new_environment_id)
+        await _system_repository_call(rls_engine_factory, history_rows.device_id, stale_move)
+
+        assert await _snapshot_operations(admin_engine, history_rows.device_serial) == []
+    finally:
+        await admin_engine.dispose()

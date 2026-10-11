@@ -135,6 +135,8 @@ class DeviceHistoryService:
         current = {(row.serial, row.environment_id): row.name for row in
                    (await self.session.execute(select(Device.serial, Device.environment_id, Device.name).where(
                        Device.environment_id.in_(env_ids), Device.serial.in_(serials)))).all()}
+        snapshots = ({} if entries.keys() <= current.keys()
+                     else await self._snapshot_names(scope, serials, env_ids))
         owners = {}
         if include_owner:
             for env_id, user_id, first, last, username in (await self.session.execute(select(
@@ -147,10 +149,29 @@ class DeviceHistoryService:
         for key, item in entries.items():
             owner_id, owner_name = owners.get(item["environment_id"], (None, None))
             result.append({**item, "environment_name": names.get(item["environment_id"]),
-                           "device_name": current.get(key),
+                           "device_name": current[key] if key in current else snapshots.get(key),
                            "is_former": key not in current,
                            "owner_id": owner_id, "owner_name": owner_name})
         return result
+
+    async def _snapshot_names(self, scope, serials, env_ids):
+        """Latest device name recorded in each (serial, environment) the caller may read.
+
+        Used when the live device row is not in that environment (or not visible): the
+        name is the one the device had when it left, never a later owner's rename.
+        """
+        rank = func.row_number().over(
+            partition_by=(DeviceOperation.device_serial, DeviceOperation.environment_id),
+            order_by=(DeviceOperation.time.desc(), DeviceOperation.id.desc())).label("rank")
+        latest = select(DeviceOperation.device_serial, DeviceOperation.environment_id,
+                        DeviceOperation.device_name, rank).where(
+            DeviceOperation.device_name.is_not(None),
+            DeviceOperation.device_serial.in_(serials),
+            DeviceOperation.environment_id.in_(env_ids),
+            scope.condition(DeviceOperation.environment_id, DeviceOperation.time)).subquery()
+        rows = (await self.session.execute(select(latest.c.device_serial, latest.c.environment_id,
+                                                  latest.c.device_name).where(latest.c.rank == 1))).all()
+        return {(row.device_serial, row.environment_id): row.device_name for row in rows}
 
     async def list_devices(self, user, *, environment_id=None, only_former=True, search=None,
                            last_seen_from=None, last_seen_to=None, owner_id=None,

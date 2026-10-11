@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/api/deviceHistory.api", () => ({ deviceHistoryApi: {
   telemetry: vi.fn().mockResolvedValue({ items: [], sensors: [], total: 0, page: 1, perPage: 10, pages: 0 }),
   variables: vi.fn().mockResolvedValue([]),
+  devices: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, perPage: 10, pages: 0 }),
   operations: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, perPage: 10, pages: 0 }),
 } }));
 vi.mock("@/lib/downloadReport", () => ({ downloadReport: vi.fn().mockResolvedValue(undefined) }));
@@ -67,6 +68,17 @@ describe("device history page", () => {
     expect(await screen.findByRole("heading", { name: /Historial: SN-1/ })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Telemetría" })).toHaveAttribute("data-state", "active");
     expect(screen.getByRole("tab", { name: "Operaciones" })).toBeInTheDocument();
+  });
+
+  it("names the device in the header with the name it had in that establishment", async () => {
+    vi.mocked(deviceHistoryApi.devices).mockResolvedValueOnce({ items: [
+      { serial: "SN-10", deviceName: "Otro", environmentId: "env-1", firstSeen: null, lastSeen: null, readingsCount: 0, operationsCount: 0, isFormer: true },
+      { serial: "SN-1", deviceName: "Nombre en otro establecimiento", environmentId: "env-2", firstSeen: null, lastSeen: null, readingsCount: 0, operationsCount: 0, isFormer: true },
+      { serial: "SN-1", deviceName: "Sensor Living", environmentId: "env-1", firstSeen: null, lastSeen: null, readingsCount: 1, operationsCount: 1, isFormer: true },
+    ], total: 3, page: 1, perPage: 10, pages: 1 });
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={["/app/devices/history/SN-1?environmentId=env-1"]}><Routes><Route path="/app/devices/history/:serial" element={<FormerDeviceHistoryPage />} /></Routes></MemoryRouter></QueryClientProvider>);
+    expect(await screen.findByRole("heading", { name: "Historial: Sensor Living (SN-1)" })).toBeInTheDocument();
+    expect(deviceHistoryApi.devices).toHaveBeenCalledWith(expect.objectContaining({ environmentId: "env-1", search: "SN-1", onlyFormer: false }));
   });
 
   it("preserves each tab's search when switching and places dates beside filters", async () => {

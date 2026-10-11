@@ -15,6 +15,8 @@ export const OPERATION_TYPE_LABELS: Record<string, string> = {
   error: "Error",
   other: "Otro",
   firmware_update: "Actualización de firmware",
+  unpair: "Desvinculación",
+  move: "Traslado",
 };
 
 /** Raw API enum values for operation filters; labels remain display-only. */
@@ -25,6 +27,8 @@ export const OPERATION_TYPE_OPTIONS = [
   { value: "error", label: OPERATION_TYPE_LABELS.error },
   { value: "other", label: OPERATION_TYPE_LABELS.other },
   { value: "firmware_update", label: OPERATION_TYPE_LABELS.firmware_update },
+  { value: "unpair", label: OPERATION_TYPE_LABELS.unpair },
+  { value: "move", label: OPERATION_TYPE_LABELS.move },
 ];
 
 /** States of a firmware update attempt (`firmware_update.state`). */
