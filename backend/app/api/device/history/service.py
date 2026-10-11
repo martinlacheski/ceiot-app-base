@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import Float, String, and_, cast, exists, false, func, or_, select, true, union_all
+from sqlalchemy import Float, String, and_, cast, exists, false, func, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.access.models import ScopeType, ScopedGuestRelation
@@ -27,7 +27,9 @@ class HistoryScope:
 
     def condition(self, environment_column, time_column, environment_id=None, *, members_only=False):
         if self.unrestricted:
-            scope = true()
+            # Rows ingested while unpaired (NULL environment) are nobody's history: the
+            # summary (list_entries) skips them, so the detail lists must too.
+            scope = environment_column.is_not(None)
         else:
             parts = []
             if self.member_environment_ids:

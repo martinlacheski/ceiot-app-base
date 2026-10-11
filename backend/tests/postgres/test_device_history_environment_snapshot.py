@@ -517,3 +517,60 @@ async def test_is_former_is_per_snapshot_environment_under_rls(
         assert all_entries[history_rows.new_environment_id]["is_former"] is False
     finally:
         await admin_engine.dispose()
+
+
+async def test_admin_history_detail_totals_exclude_rows_without_environment(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    """Rows ingested after an unpair (environment_id NULL) are not history of any establishment.
+
+    The summary (``list_entries``) already ignores them, so an admin opening the detail
+    without ``environment_id`` must get telemetry/operation totals that match it.
+    """
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+        await SensorService(SensorRepository(session)).save_reading(
+            device_id=history_rows.device_id, device_serial=history_rows.device_serial,
+        )
+        session.add(Telemetry(device_id=history_rows.device_id,
+                              device_serial=history_rows.device_serial, values={}))
+        await DeviceOperationService(session).create_operation(
+            operation_type=DeviceOperationType.SENSOR_DATA,
+            device_serial=history_rows.device_serial,
+            status=DeviceOperationStatus.SUCCESS,
+        )
+        await session.commit()
+        await session.execute(text("UPDATE device SET environment_id = NULL WHERE id = :id"),
+                              {"id": history_rows.device_id})
+        await session.commit()
+        session.add(Telemetry(device_id=history_rows.device_id,
+                              device_serial=history_rows.device_serial, values={}))
+        await DeviceOperationService(session).create_operation(
+            operation_type=DeviceOperationType.KEEP_ACTIVE,
+            device_serial=history_rows.device_serial,
+            status=DeviceOperationStatus.SUCCESS,
+        )
+        await session.commit()
+        null_counts = (await session.execute(text(
+            "SELECT (SELECT count(*) FROM telemetry WHERE device_serial = :s AND environment_id IS NULL), "
+            "(SELECT count(*) FROM deviceoperation WHERE device_serial = :s AND environment_id IS NULL)"
+        ), {"s": history_rows.device_serial})).one()
+    await admin_engine.dispose()
+    assert tuple(null_counts) == (1, 1), "the unpaired rows must keep a NULL environment"
+
+    role_engine = rls_engine_factory(pool_size=1)
+    async with AsyncSession(role_engine, expire_on_commit=False) as session:
+        await session.execute(text("SELECT set_config('app.current_user_id', 'system_admin', true)"))
+        admin = User(id=uuid.uuid4(), email="history-admin@example.com", username="history-admin",
+                     password="unused", is_admin=True)
+        service = DeviceHistoryService(session)
+        scope = await service.resolve_scope(admin)
+        entries = await service.list_entries(scope, serial=history_rows.device_serial)
+        telemetry = await service.list_telemetry(scope, serial=history_rows.device_serial)
+        operations = await service.list_operations(scope, serial=history_rows.device_serial)
+
+    assert [entry["environment_id"] for entry in entries] == [history_rows.old_environment_id]
+    assert operations["total"] == sum(entry["operations_count"] for entry in entries) == 1
+    assert telemetry["total"] == 1
+    assert all(item.environment_id is not None for item in telemetry["items"])
+    assert all(item.environment_id is not None for item in operations["items"])
