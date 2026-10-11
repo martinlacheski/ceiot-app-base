@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 from datetime import date, datetime, timedelta
 
@@ -552,3 +553,88 @@ def test_revoke_accepted_environment_scoped_invitation_removes_guest_relation(
     ).first()
     assert relation is not None
     assert relation.is_active is False
+
+
+def test_migrated_legacy_environment_invitation_resolves_and_accepts_through_access_routes(
+    client: TestClient, session: Session
+):
+    """Migration 0023 copied every ``environmentinvitation`` row into ``scoped_guest_invitation``
+    with the same id, so old ``/invitations/accept?id=<legacy id>`` email links resolve here."""
+    seed = seed_router_graph(session)
+    created_at = utc_now() - timedelta(days=30)
+    legacy_id = uuid.UUID("5f0c8c3e-6a1b-4f3d-9e2a-0b7d1c4e8a11")
+    session.add(
+        ScopedGuestInvitation(
+            id=legacy_id,
+            owner_user_id=seed["owner"].id,
+            email=seed["guest"].email,
+            scope_type=ScopeType.ENVIRONMENT,
+            scope_id=seed["environment"].id,
+            access_starts_at=created_at,
+            status=InvitationStatus.PENDING,
+            created_at=created_at,
+            updated_at=created_at,
+        )
+    )
+    session.commit()
+
+    details = client.get(f"/api/access/invitations/{legacy_id}")
+
+    assert details.status_code == 200
+    assert details.json()["id"] == str(legacy_id)
+    assert details.json()["status"] == "pending"
+    assert details.json()["scopeType"] == ScopeType.ENVIRONMENT.value
+    assert details.json()["environmentName"] == seed["environment"].name
+    assert details.json()["ownerEmail"] == seed["owner"].email
+
+    accepted = client.post(
+        f"/api/access/invitations/{legacy_id}/accept",
+        headers={"Authorization": f"Bearer {make_token(seed['guest'].id)}"},
+    )
+
+    assert accepted.status_code == 200
+    relation = session.exec(
+        select(ScopedGuestRelation).where(
+            ScopedGuestRelation.scope_type == ScopeType.ENVIRONMENT,
+            ScopedGuestRelation.scope_id == seed["environment"].id,
+            ScopedGuestRelation.guest_user_id == seed["guest"].id,
+            ScopedGuestRelation.is_active == True,  # noqa: E712
+        )
+    ).first()
+    membership = session.exec(
+        select(EnvironmentUser).where(
+            EnvironmentUser.environment_id == seed["environment"].id,
+            EnvironmentUser.user_id == seed["guest"].id,
+        )
+    ).first()
+    assert relation is not None
+    assert membership is None
+
+
+def test_unknown_invitation_id_is_404_without_a_legacy_fallback(client: TestClient, session: Session):
+    seed = seed_router_graph(session)
+    unknown = uuid.uuid4()
+    token = make_token(seed["guest"].id)
+
+    assert client.get(f"/api/access/invitations/{unknown}").status_code == 404
+    for action in ("accept", "decline"):
+        response = client.post(
+            f"/api/access/invitations/{unknown}/{action}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 404, action
+
+
+def test_legacy_environment_invitation_routes_are_gone(client: TestClient, session: Session):
+    seed = seed_router_graph(session)
+    headers = {"Authorization": f"Bearer {make_token(seed['owner'].id)}"}
+    env_id = seed["environment"].id
+
+    assert client.post(
+        f"/api/environment/{env_id}/invitations", headers=headers, json={"email": "x@example.com"}
+    ).status_code in (404, 405)
+    assert client.get(f"/api/environment/{env_id}/invitations", headers=headers).status_code in (404, 405)
+    assert client.delete(
+        f"/api/environment/{env_id}/invitations/{uuid.uuid4()}", headers=headers
+    ).status_code in (404, 405)
+    assert client.get(f"/api/environment/invitations/{uuid.uuid4()}").status_code in (404, 405)

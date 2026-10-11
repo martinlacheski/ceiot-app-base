@@ -2,7 +2,7 @@
 
 ``app.main_runtime`` runs in its own process (compose service ``mqtt-runtime``)
 and never imports the API routers, so string relationships such as
-``Environment.invitations`` only resolve if the runtime imports their models.
+``EnvironmentUser.user`` only resolve if the runtime imports their models.
 """
 
 import os

@@ -5,6 +5,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 LEGACY_MODEL_PATHS = (
     "app/api/device/billing_settings",
+    "app/api/environment/invitation",
     "app/api/mercadopago",
     "app/api/settings",
     "app/api/tax/tax_type",
@@ -59,6 +60,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0020_drop_sensorreading_device_type.py",
         "0021_catalog_created_at.py",
         "0022_timestamptz_everywhere.py",
+        "0023_retire_environment_invitation.py",
     ]
 
 

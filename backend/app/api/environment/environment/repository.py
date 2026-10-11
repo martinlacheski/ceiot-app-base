@@ -9,7 +9,6 @@ from app.api.environment.environment.models import (
     Environment, EnvironmentUpdate,
     EnvironmentUser
 )
-from app.api.environment.invitation.models import EnvironmentInvitation
 from app.services.pagination import paginate_query_async
 from sqlalchemy.orm import selectinload
 from app.api.location.models import LocationCity, LocationState, LocationCountry

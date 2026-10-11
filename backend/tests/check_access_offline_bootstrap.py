@@ -44,7 +44,6 @@ class AccessOfflineBootstrapChecks(unittest.TestCase):
             "tests/api/access/test_router.py",
             "tests/api/device/test_contextual_access_router.py",
             "tests/api/device/test_operation_service_slim.py",
-            "tests/api/environment/test_invitation_service_access.py",
             "tests/api/environment/test_environment_creation_without_mercadopago.py",
             "tests/api/access/test_commission_free_sharing.py",
             "tests/api/test_mp_retirement_surface.py",

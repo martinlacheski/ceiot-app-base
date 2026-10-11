@@ -23,10 +23,6 @@ from app.api.access.schemas import (
     ScopedGuestRelationUpdate,
 )
 from app.api.access.service import GuestAccessService
-from app.api.auth.repository import UserRepository
-from app.api.environment.environment.repository import EnvironmentRepository
-from app.api.environment.invitation.repository import EnvironmentInvitationRepository
-from app.api.environment.invitation.service import EnvironmentInvitationService
 from tests.api.access.test_router import make_token, seed_router_graph
 from tests.api.access.test_service import seed_service_graph
 
@@ -335,15 +331,17 @@ async def test_access_start_uses_earliest_applicable_relation(session: Session, 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("scope_type", [ScopeType.ENVIRONMENT, ScopeType.DEVICE])
 async def test_scoped_wrong_email_acceptance_preserves_pending_invitation_and_creates_no_relation(
     session: Session,
     async_session,
+    scope_type: ScopeType,
 ):
     seed = seed_service_graph(session)
     service = GuestAccessService(GuestAccessRepository(async_session), email_service=None)
     invitation = await service.create_guest_invitation(
-        scope_type=ScopeType.DEVICE,
-        scope_id=seed["device"].id,
+        scope_type=scope_type,
+        scope_id=scope_id_for(seed, scope_type),
         email=seed["guest"].email,
         actor_user=seed["owner"],
     )
@@ -361,40 +359,4 @@ async def test_scoped_wrong_email_acceptance_preserves_pending_invitation_and_cr
     assert persisted is not None
     assert persisted.status == InvitationStatus.PENDING
     assert persisted.is_active is True
-    assert await service.repository.list_guest_relations(ScopeType.DEVICE, seed["device"].id) == []
-
-
-@pytest.mark.asyncio
-async def test_legacy_wrong_email_acceptance_preserves_pending_invitation_and_creates_no_relation(
-    session: Session,
-    async_session,
-):
-    seed = seed_service_graph(session)
-    service = EnvironmentInvitationService(
-        EnvironmentInvitationRepository(async_session),
-        EnvironmentRepository(async_session),
-        UserRepository(async_session),
-    )
-    invitation = await service.send_invitation(
-        seed["environment"].id,
-        seed["guest"].email,
-        seed["owner"].id,
-    )
-    assert invitation.id is not None
-
-    with pytest.raises(HTTPException) as exc:
-        await service.accept_invitation(
-            invitation.id,
-            seed["stranger"].id,
-            seed["stranger"].email,
-        )
-
-    assert exc.value.status_code == 403
-    persisted = await service.repo.get_by_id(invitation.id)
-    assert persisted is not None
-    assert persisted.status == "Pendiente"
-    assert persisted.is_active is True
-    assert await GuestAccessRepository(async_session).list_guest_relations(
-        ScopeType.ENVIRONMENT,
-        seed["environment"].id,
-    ) == []
+    assert await service.repository.list_guest_relations(scope_type, scope_id_for(seed, scope_type)) == []

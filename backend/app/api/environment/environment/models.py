@@ -13,7 +13,6 @@ from app.api.location.models import LocationCityRead
 from app.core.time import UTCDateTime
 
 if TYPE_CHECKING:
-    from app.api.environment.invitation.models import EnvironmentInvitation
     from app.api.auth.models import User
 
 # Environment
@@ -53,7 +52,6 @@ class Environment(EnvironmentBase, table=True):
     type: Optional[EnvironmentType] = Relationship(back_populates="environments")
     city: Optional[LocationCity] = Relationship()
     users: List["EnvironmentUser"] = Relationship(back_populates="environment")
-    invitations: List["EnvironmentInvitation"] = Relationship(back_populates="environment")
 
     @property
     def owner_name(self) -> Optional[str]:

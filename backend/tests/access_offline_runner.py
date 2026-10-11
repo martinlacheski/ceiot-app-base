@@ -24,7 +24,6 @@ _ALLOWED_TARGETS = (
     "tests/api/access/test_router.py",
     "tests/api/device/test_contextual_access_router.py",
     "tests/api/device/test_operation_service_slim.py",
-    "tests/api/environment/test_invitation_service_access.py",
     "tests/api/environment/test_environment_creation_without_mercadopago.py",
     "tests/api/access/test_commission_free_sharing.py",
     "tests/api/test_mp_retirement_surface.py",
@@ -39,7 +38,6 @@ _EMAIL_SERVICE_CONSUMERS = (
     "app.api.access.router",
     "app.api.device.router",
     "app.api.device.billing_settings.router",
-    "app.api.environment.invitation.router",
     "app.api.public.router",
     "app.api.auth.service",
 )

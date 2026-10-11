@@ -21,7 +21,6 @@ from app.api.location.models import LocationCountry, LocationState, LocationCity
 from app.api.tax.identification_type.models import IdentificationType  # noqa: F401
 from app.api.environment.environment.models import Environment, EnvironmentUser  # noqa: F401
 from app.api.environment.environment_type.models import EnvironmentType  # noqa: F401
-from app.api.environment.invitation.models import EnvironmentInvitation  # noqa: F401
 from app.api.device.device_type.models import DeviceTypeCatalog  # noqa: F401
 from app.api.device.models import Device, DeviceLocationReport  # noqa: F401
 from app.api.device.operations.models import DeviceOperation  # noqa: F401

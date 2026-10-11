@@ -1114,3 +1114,71 @@ async def test_service_returns_404_when_revoking_non_device_scoped_invitation_th
         )
 
     assert exc.value.status_code == 404
+
+
+class _EmailSpy:
+    def __init__(self):
+        self.calls = []
+
+    async def send_invitation_email(self, **kwargs):
+        self.calls.append(kwargs)
+
+
+@pytest.mark.asyncio
+async def test_service_environment_invitation_for_unregistered_email_is_pending_and_emailed(
+    session, async_session
+):
+    """Scoped replacement of the retired legacy ``send_invitation`` coverage."""
+    seed = seed_service_graph(session)
+    spy = _EmailSpy()
+    service = GuestAccessService(GuestAccessRepository(async_session), email_service=spy)
+
+    invitation = await service.create_guest_invitation(
+        scope_type=ScopeType.ENVIRONMENT,
+        scope_id=seed["environment"].id,
+        email=" Future-Guest@Example.com ",
+        actor_user=seed["owner"],
+    )
+
+    assert invitation.email == "future-guest@example.com"
+    assert invitation.status == InvitationStatus.PENDING
+    assert spy.calls == [
+        {
+            "email_to": "future-guest@example.com",
+            "environment_name": seed["environment"].name,
+            "owner_email": seed["owner"].email,
+            "invitation_id": str(invitation.id),
+        }
+    ]
+    details = await service.get_guest_invitation_details(invitation.id)
+    assert details.scope_type == ScopeType.ENVIRONMENT
+    assert details.environment_name == seed["environment"].name
+    assert details.invited_user_exists is False
+
+
+@pytest.mark.asyncio
+async def test_service_environment_invitations_are_listed_and_revoked_only_by_the_owner(
+    session, async_session
+):
+    seed = seed_service_graph(session)
+    service = GuestAccessService(GuestAccessRepository(async_session), email_service=None)
+    invitation = await service.create_guest_invitation(
+        scope_type=ScopeType.ENVIRONMENT,
+        scope_id=seed["environment"].id,
+        email=seed["guest"].email,
+        actor_user=seed["owner"],
+    )
+
+    with pytest.raises(HTTPException) as listing:
+        await service.authorize_scope_manager(ScopeType.ENVIRONMENT, seed["environment"].id, seed["guest"])
+    with pytest.raises(HTTPException) as revoking:
+        await service.revoke_guest_invitation(
+            scope_type=ScopeType.ENVIRONMENT,
+            scope_id=seed["environment"].id,
+            invitation_id=invitation.id,
+            actor_user=seed["guest"],
+        )
+
+    assert (listing.value.status_code, revoking.value.status_code) == (403, 403)
+    persisted = await service.repository.get_guest_invitation_by_id(invitation.id)
+    assert persisted.status == InvitationStatus.PENDING
