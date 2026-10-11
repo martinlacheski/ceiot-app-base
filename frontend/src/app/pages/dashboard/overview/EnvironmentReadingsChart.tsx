@@ -5,7 +5,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { seriesStroke, type EnvironmentPoint, type EnvironmentSeries } from "./environmentSeries";
-import type { ReadingsRange } from "./overviewModel";
+import type { ReadingsRange, ReadingsWindow } from "./overviewModel";
 
 interface EnvironmentReadingsChartProps {
   variable: TelemetryVariable;
@@ -15,6 +15,8 @@ interface EnvironmentReadingsChartProps {
   hiddenKeys?: ReadonlySet<string>;
   points: EnvironmentPoint[];
   range: ReadingsRange;
+  /** Rolling window shown on the X axis; without it the axis fits the data. */
+  timeWindow?: ReadingsWindow;
   /** Accessible name; defaults to the establishment wording. */
   ariaLabel?: string;
 }
@@ -23,7 +25,9 @@ const numberFormat = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 }
 
 const formatReading = (value: number, unit: string) => `${numberFormat.format(value)}${unit ? ` ${unit}` : ""}`;
 
-export function EnvironmentReadingsChart({ variable, series, hiddenKeys, points, range, ariaLabel }: EnvironmentReadingsChartProps) {
+export function EnvironmentReadingsChart({
+  variable, series, hiddenKeys, points, range, timeWindow, ariaLabel,
+}: EnvironmentReadingsChartProps) {
   const visible = series
     .map((entry, index) => ({ entry, stroke: seriesStroke(index) }))
     .filter(({ entry }) => !hiddenKeys?.has(entry.key));
@@ -46,7 +50,7 @@ export function EnvironmentReadingsChart({ variable, series, hiddenKeys, points,
           dataKey="time"
           type="number"
           scale="time"
-          domain={["dataMin", "dataMax"]}
+          domain={timeWindow ? [timeWindow.start, timeWindow.end] : ["dataMin", "dataMax"]}
           tickFormatter={(value: number) => format(new Date(value), tickPattern)}
           tickLine={false}
           axisLine={false}

@@ -61,6 +61,16 @@ export const deviceSensorLabel: SeriesLabel = (deviceName, sensorName) => `${dev
 /** For a single device, where repeating its name on every series adds nothing. */
 export const sensorLabel: SeriesLabel = (_deviceName, sensorName) => sensorName;
 
+export interface SeriesOptions {
+  /** Names each series; defaults to "device · sensor". */
+  label?: SeriesLabel;
+  /**
+   * Epoch milliseconds: readings before it are left out. Keeps a rolling window moving
+   * while a quiet device sends nothing that would trim its cached history.
+   */
+  since?: number;
+}
+
 /**
  * One series per device sensor that measures `variableCode`, merged on a shared time axis:
  * readings are grouped in `bucketMs` buckets and averaged per series, ignoring nulls.
@@ -70,7 +80,7 @@ export function buildEnvironmentSeries(
   histories: DeviceHistory[],
   variableCode: string,
   bucketMs: number,
-  label: SeriesLabel = deviceSensorLabel,
+  { label = deviceSensorLabel, since = -Infinity }: SeriesOptions = {},
 ): { series: EnvironmentSeries[]; points: EnvironmentPoint[] } {
   const series: EnvironmentSeries[] = [];
   const buckets = new Map<number, Map<string, { sum: number; count: number }>>();
@@ -85,7 +95,7 @@ export function buildEnvironmentSeries(
       for (const item of page.items) {
         const value = item.values[sensor.key]?.[variableCode];
         const time = Date.parse(item.time);
-        if (value === null || value === undefined || Number.isNaN(time)) continue;
+        if (value === null || value === undefined || Number.isNaN(time) || time < since) continue;
         const bucketStart = Math.floor(time / bucketMs) * bucketMs;
         const bucket = buckets.get(bucketStart) ?? new Map<string, { sum: number; count: number }>();
         const total = bucket.get(key) ?? { sum: 0, count: 0 };

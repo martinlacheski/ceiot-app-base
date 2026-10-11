@@ -12,12 +12,24 @@ export const READINGS_RANGES: Array<{ id: ReadingsRange; label: string; descript
 /** Recent readings fetched for the records table and the current-values strip. */
 export const RECENT_READINGS_LIMIT = 10;
 
-/** ISO bounds of a rolling window that ends at `now` (same windows the live pulse trims to). */
-export function resolveReadingsPeriod(range: ReadingsRange, now: number) {
+export interface ReadingsWindow {
+  /** Epoch milliseconds. */
+  start: number;
+  end: number;
+}
+
+/** Bounds of the rolling window that ends at `now` (same windows the live pulse trims to). */
+export function readingsWindow(range: ReadingsRange, now: number): ReadingsWindow {
   const duration = ROLLING_RANGE_MS[range] ?? ROLLING_RANGE_MS["24h"];
+  return { start: now - duration, end: now };
+}
+
+/** ISO bounds of the rolling window that ends at `now`, for the history request. */
+export function resolveReadingsPeriod(range: ReadingsRange, now: number) {
+  const { start, end } = readingsWindow(range, now);
   return {
-    start: new Date(now - duration).toISOString(),
-    end: new Date(now).toISOString(),
+    start: new Date(start).toISOString(),
+    end: new Date(end).toISOString(),
   };
 }
 

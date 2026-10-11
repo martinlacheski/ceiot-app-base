@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EnvironmentReadingsChart } from "./EnvironmentReadingsChart";
 import type { EnvironmentSeries } from "./environmentSeries";
 
-const mocks = vi.hoisted(() => ({ config: vi.fn(), line: vi.fn(), tooltip: vi.fn() }));
+const mocks = vi.hoisted(() => ({ config: vi.fn(), line: vi.fn(), tooltip: vi.fn(), xAxis: vi.fn() }));
 vi.mock("@/components/ui/chart", () => ({
   ChartContainer: ({ children, config, ...props }: { children: ReactNode; config: unknown }) => {
     mocks.config(config);
@@ -26,7 +26,10 @@ vi.mock("recharts", () => ({
     mocks.line(props);
     return null;
   },
-  XAxis: () => null,
+  XAxis: (props: unknown) => {
+    mocks.xAxis(props);
+    return null;
+  },
   YAxis: () => null,
 }));
 
@@ -107,5 +110,18 @@ describe("EnvironmentReadingsChart", () => {
     };
     expect(indicator).toBe("dot");
     expect(labelFormatter(undefined, [{ payload: { time: Date.parse("2026-10-10T12:30:00Z") } }])).toBeTruthy();
+  });
+
+  it("spans the X axis over the rolling window when given one", () => {
+    const timeWindow = { start: Date.parse("2026-10-10T11:30:00Z"), end: Date.parse("2026-10-10T12:30:00Z") };
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" timeWindow={timeWindow} />);
+
+    expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: [timeWindow.start, timeWindow.end] }));
+  });
+
+  it("fits the X axis to the data without a window", () => {
+    render(<EnvironmentReadingsChart variable={variable} series={series} points={[]} range="1h" />);
+
+    expect(mocks.xAxis).toHaveBeenLastCalledWith(expect.objectContaining({ domain: ["dataMin", "dataMax"] }));
   });
 });

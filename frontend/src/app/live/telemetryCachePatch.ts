@@ -81,6 +81,35 @@ function insertReading(items: TelemetryItem[], reading: TelemetryItem): Telemetr
   return [...items.slice(0, position), reading, ...items.slice(position)];
 }
 
+/**
+ * Settle the folded rows and the page counters. `candidates` are the cached rows still
+ * in place plus the reading when it belongs there, newest first; at most `capacity`
+ * stay loaded. `removed` cached rows left the rolling window.
+ *
+ * - When cached rows left the window, every unloaded row (older than all loaded ones)
+ *   left it too, so the total is the rows that remain.
+ * - A reading sliced off a page with unloaded rows may repeat one of them: not counted.
+ * - `pages` follows `total` whenever the page size is known.
+ */
+function settle(
+  page: TelemetryPage,
+  reading: TelemetryItem,
+  candidates: TelemetryItem[],
+  removed: number,
+  capacity: number,
+): PatchOutcome {
+  const items = candidates.slice(0, capacity);
+  const kept = items.includes(reading);
+  const unloaded = Math.max(page.total - page.items.length, 0);
+  const counted = candidates.includes(reading) && (kept || unloaded === 0) ? 1 : 0;
+  const total = Math.max(unloaded > 0 && removed > 0 ? candidates.length : page.total - removed + counted, items.length);
+  if (removed === 0 && !kept && total === page.total) return UNCHANGED;
+
+  const settled: TelemetryPage = { ...page, items, total };
+  if (typeof page.perPage === "number" && page.perPage > 0) settled.pages = Math.ceil(total / page.perPage);
+  return { status: "patched", page: settled };
+}
+
 /** Fold a reading into a rolling history page (`items` newest first). */
 export function patchHistoryPage(
   page: TelemetryPage | undefined,
@@ -97,11 +126,14 @@ export function patchHistoryPage(
 
   const windowStart = now - rangeMs;
   const inWindow = inserted.filter((item) => epoch(item.time) >= windowStart);
-  const trimmed = inserted.length - inWindow.length;
-  // A truncated page (only the newest rows of a larger window) keeps its loaded size.
+  const removed = page.items.filter((item) => epoch(item.time) < windowStart).length;
+  // A paginated page keeps its page size; a truncated one (only the newest rows of a larger
+  // window) keeps its loaded size; a complete one holds the whole window.
   const truncated = page.items.length < page.total;
-  const items = truncated ? inWindow.slice(0, Math.max(page.items.length, 1)) : inWindow;
-  return { status: "patched", page: { ...page, items, total: Math.max(page.total + 1 - trimmed, items.length) } };
+  const capacity = typeof page.perPage === "number" && page.perPage > 0
+    ? page.perPage
+    : truncated ? Math.max(page.items.length, 1) : Infinity;
+  return settle(page, reading, inWindow, removed, capacity);
 }
 
 /** Fold a reading into a "latest N readings" page. */
@@ -111,5 +143,5 @@ export function patchLatestPage(page: TelemetryPage | undefined, reading: Teleme
   const inserted = insertReading(page.items, reading);
   if (inserted === "invalid") return INVALIDATE;
   if (inserted === "duplicate") return UNCHANGED;
-  return { status: "patched", page: { ...page, items: inserted.slice(0, limit), total: page.total + 1 } };
+  return settle(page, reading, inserted, 0, limit);
 }

@@ -139,6 +139,59 @@ describe("patchHistoryPage", () => {
   });
 });
 
+describe("patchHistoryPage counters", () => {
+  const loaded = [item("2026-10-10T11:30:00Z", 23), item("2026-10-10T11:00:00Z", 22)];
+  const paginated = (total: number): TelemetryPage => ({ ...page(loaded, total), page: 1, perPage: 2, pages: Math.ceil(total / 2) });
+  const patched = (outcome: ReturnType<typeof patchHistoryPage>) => {
+    expect(outcome.status).toBe("patched");
+    return (outcome as { page: TelemetryPage }).page;
+  };
+
+  it("keeps a paginated page at its page size and recomputes the page count", () => {
+    const result = patched(patchHistoryPage(paginated(2), reading(), 24 * HOUR, NOW));
+
+    expect(result.items.map((entry) => entry.time)).toEqual(["2026-10-10T12:00:00+00:00", "2026-10-10T11:30:00Z"]);
+    expect(result.total).toBe(3);
+    expect(result.pages).toBe(2);
+    expect(result.perPage).toBe(2);
+  });
+
+  it("counts an older reading sliced off a complete page, since it cannot repeat an unloaded row", () => {
+    const result = patched(patchHistoryPage(paginated(2), reading("2026-10-10T10:30:00Z"), 24 * HOUR, NOW));
+
+    expect(result.items).toEqual(loaded);
+    expect(result.total).toBe(3);
+    expect(result.pages).toBe(2);
+  });
+
+  it("does not count an out-of-order reading that falls past the loaded rows of a truncated page", () => {
+    expect(patchHistoryPage(page(loaded, 50), reading("2026-10-10T10:00:00Z"), 24 * HOUR, NOW))
+      .toEqual({ status: "unchanged" });
+    expect(patchHistoryPage(paginated(50), reading("2026-10-10T10:00:00Z"), 24 * HOUR, NOW))
+      .toEqual({ status: "unchanged" });
+  });
+
+  it("drops the unloaded rows too once a loaded row leaves the window of a truncated page", () => {
+    // The unloaded rows are older than every loaded one, so they left the window first.
+    const result = patched(patchHistoryPage(paginated(50), reading(), HOUR / 2 + 60_000, NOW));
+
+    expect(result.items.map((entry) => entry.time)).toEqual(["2026-10-10T12:00:00+00:00", "2026-10-10T11:30:00Z"]);
+    expect(result.total).toBe(2);
+    expect(result.pages).toBe(1);
+  });
+
+  it("only subtracts the rows that left the window when the reading itself is too old", () => {
+    const result = patched(patchHistoryPage(page(loaded), reading("2026-10-10T10:00:00Z"), HOUR / 2 + 60_000, NOW));
+
+    expect(result.items.map((entry) => entry.time)).toEqual(["2026-10-10T11:30:00Z"]);
+    expect(result.total).toBe(1);
+  });
+
+  it("leaves the page alone when only the reading falls outside the window", () => {
+    expect(patchHistoryPage(page(loaded), reading("2026-10-09T10:00:00Z"), 24 * HOUR, NOW)).toEqual({ status: "unchanged" });
+  });
+});
+
 describe("patchLatestPage", () => {
   const cached = page([item("2026-10-10T11:30:00Z", 23), item("2026-10-10T11:00:00Z", 22)], 2);
 
@@ -158,6 +211,21 @@ describe("patchLatestPage", () => {
     if (outcome.status !== "patched") return;
     expect(outcome.page.items).toHaveLength(1);
     expect(outcome.page.items[0].time).toBe("2026-10-10T12:00:00+00:00");
+  });
+
+  it("does not count an out-of-order reading sliced off a full page", () => {
+    const full = page([item("2026-10-10T11:30:00Z", 23), item("2026-10-10T11:00:00Z", 22)], 40);
+
+    expect(patchLatestPage(full, reading("2026-10-10T10:00:00Z"), 2)).toEqual({ status: "unchanged" });
+  });
+
+  it("counts a newer reading on a full page", () => {
+    const full = page([item("2026-10-10T11:30:00Z", 23), item("2026-10-10T11:00:00Z", 22)], 40);
+    const outcome = patchLatestPage(full, reading(), 2);
+
+    expect(outcome.status).toBe("patched");
+    if (outcome.status !== "patched") return;
+    expect(outcome.page.total).toBe(41);
   });
 
   it("ignores duplicates, signals unknown sensors and leaves an empty cache untouched", () => {

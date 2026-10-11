@@ -2,9 +2,10 @@ import { LineChart as LineChartIcon } from "lucide-react";
 
 import type { TelemetryVariable } from "@/app/types/environmentalSensor.types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { EnvironmentReadingsChart } from "./EnvironmentReadingsChart";
 import type { EnvironmentPoint, EnvironmentSeries } from "./environmentSeries";
-import type { ReadingsRange } from "./overviewModel";
+import type { ReadingsRange, ReadingsWindow } from "./overviewModel";
 import type { ReadingsDisplay, ReadingsView } from "./ReadingsControls";
 import { SeriesLegend } from "./SeriesLegend";
 import { SeriesTable } from "./SeriesTable";
@@ -20,6 +21,12 @@ export interface SeriesReadingsState {
   series: EnvironmentSeries[];
   points: EnvironmentPoint[];
   bucketLabel: string;
+  /** Range of the shown data (bucketing, axis ticks and window). */
+  range: ReadingsRange;
+  /** Rolling window the X axis spans. */
+  timeWindow?: ReadingsWindow;
+  /** The data of a previous range or establishment, kept on screen while the new one loads. */
+  stale?: boolean;
 }
 
 const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
@@ -40,15 +47,14 @@ const COPY: Record<ReadingsView, { noun: string; loading: string; empty: string 
 interface SeriesReadingsBodyProps {
   scope: ReadingsView;
   display: ReadingsDisplay;
-  range: ReadingsRange;
   readings: SeriesReadingsState;
   /** Series hidden from the legend; they leave the chart, its tooltip and the table. */
   hidden: HiddenSeries;
 }
 
 /** Chart or merged-bucket table for the selected variable, with loading, failure and empty states. */
-export function SeriesReadingsBody({ scope, display, range, readings, hidden }: SeriesReadingsBodyProps) {
-  const { loading, failedDevices, deviceCount, variable, series, points, bucketLabel } = readings;
+export function SeriesReadingsBody({ scope, display, readings, hidden }: SeriesReadingsBodyProps) {
+  const { loading, failedDevices, deviceCount, variable, series, points, bucketLabel, range, timeWindow, stale } = readings;
   const copy = COPY[scope];
   const hasData = Boolean(variable) && series.length > 0 && points.length > 0;
 
@@ -89,7 +95,8 @@ export function SeriesReadingsBody({ scope, display, range, readings, hidden }: 
   ].filter(Boolean).join(" · ");
 
   return (
-    <div className="space-y-2">
+    // Dimmed, not replaced, while the next range or establishment loads: no layout shift.
+    <div className={cn("space-y-2 transition-opacity", stale && "opacity-60")} aria-busy={stale || undefined}>
       {failure}
       {display === "table" ? (
         <SeriesTable
@@ -105,6 +112,7 @@ export function SeriesReadingsBody({ scope, display, range, readings, hidden }: 
           hiddenKeys={hidden.hiddenKeys}
           points={points}
           range={range}
+          timeWindow={timeWindow}
           ariaLabel={`Historial de ${variable.name} por sensor ${copy.noun}`}
         />
       )}

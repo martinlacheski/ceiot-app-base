@@ -24,6 +24,7 @@ import {
   countPresence,
   deviceLabel,
   pickSelectedDevice,
+  readingsWindow,
   RECENT_READINGS_LIMIT,
   type ReadingsRange,
 } from "./overview/overviewModel";
@@ -31,8 +32,24 @@ import type { ReadingsDisplay, ReadingsView } from "./overview/ReadingsControls"
 import { ReadingsPanel } from "./overview/ReadingsPanel";
 import type { SeriesReadingsState } from "./overview/SeriesReadingsBody";
 import { historyQueryOptions, liveRefreshOptions } from "./overview/telemetryQueries";
+import { useNow } from "./overview/useNow";
 
 const INVENTORY_PAGE_SIZE = 100;
+
+/** Histories of the establishment view as last loaded, with the range they were loaded for. */
+interface EnvironmentSnapshot {
+  histories: DeviceHistory[];
+  range: ReadingsRange;
+}
+
+/** Same devices, same cached pages (query data is referentially stable) and same range. */
+function isSameSnapshot(snapshot: EnvironmentSnapshot | null, histories: DeviceHistory[], range: ReadingsRange) {
+  return snapshot !== null
+    && snapshot.range === range
+    && snapshot.histories.length === histories.length
+    && snapshot.histories.every((history, index) =>
+      history.deviceId === histories[index].deviceId && history.page === histories[index].page);
+}
 
 export default function OverviewPage() {
   const { user } = useAuthStore();
@@ -46,6 +63,7 @@ export default function OverviewPage() {
   // The live pulse updates the caches in place; poll slowly only while it is down.
   const liveConnected = useLivePulseStatus((status) => status.connected);
   const refreshOptions = liveRefreshOptions(liveConnected);
+  const now = useNow();
 
   const environmentsQuery = useQuery({
     queryKey: ["environments", "operational-overview"],
@@ -111,20 +129,38 @@ export default function OverviewPage() {
     ? [{ deviceId: selectedDevice.id, deviceName: deviceLabel(selectedDevice), page: historyQuery.data }]
     : [];
 
+  // `keepPreviousData` does nothing inside `useQueries` (each key gets a new observer), so the
+  // establishment view remembers its last loaded histories and keeps them on screen, dimmed,
+  // while another range or establishment has nothing loaded yet.
+  const environmentLoaded = environmentHistories.some((history) => history.page);
+  const [lastEnvironment, setLastEnvironment] = useState<EnvironmentSnapshot | null>(null);
+  if (view === "environment" && environmentLoaded && !isSameSnapshot(lastEnvironment, environmentHistories, range)) {
+    setLastEnvironment({ histories: environmentHistories, range });
+  }
+  const environmentLoading = environmentHistory.some((query) => query.isLoading);
+  const staleEnvironment = view === "environment" && !environmentLoaded && environmentLoading ? lastEnvironment : null;
+
   // Both views share the variable chips, the range bucketing and the series model.
-  const histories = view === "environment" ? environmentHistories : deviceHistories;
+  const shown: EnvironmentSnapshot = staleEnvironment
+    ?? { histories: view === "environment" ? environmentHistories : deviceHistories, range };
+  const { histories } = shown;
+  // Trim at render time: a quiet device sends nothing that would trim its cached history.
+  const timeWindow = readingsWindow(shown.range, now);
   const variables = collectVariables(histories);
   const variable = variables.find((entry) => entry.code === requestedVariableCode)
     ?? variables.find((entry) => entry.code === defaultVariableCode(variables));
   const seriesModel = variable
-    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[range], view === "device" ? sensorLabel : undefined)
+    ? buildEnvironmentSeries(histories, variable.code, BUCKET_MS[shown.range], {
+      label: view === "device" ? sensorLabel : undefined,
+      since: timeWindow.start,
+    })
     : { series: [], points: [] };
   const readings: SeriesReadingsState = {
     ...(view === "environment"
       ? {
-        loading: environmentHistory.some((query) => query.isLoading),
+        loading: environmentLoading,
         failedDevices: environmentHistory.filter((query) => query.isError && !query.data).length,
-        deviceCount: environmentDevices.length,
+        deviceCount: histories.length,
       }
       : {
         loading: historyQuery.isLoading,
@@ -134,7 +170,10 @@ export default function OverviewPage() {
     variables,
     variable,
     ...seriesModel,
-    bucketLabel: BUCKET_LABEL[range],
+    bucketLabel: BUCKET_LABEL[shown.range],
+    range: shown.range,
+    timeWindow,
+    stale: staleEnvironment !== null,
   };
 
   const readingsRef = useRef<HTMLDivElement>(null);

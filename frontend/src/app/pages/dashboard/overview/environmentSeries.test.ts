@@ -85,10 +85,24 @@ describe("buildEnvironmentSeries", () => {
   });
 
   it("labels series with the sensor name only when given the sensor label strategy", () => {
-    const { series, points } = buildEnvironmentSeries(histories.slice(0, 1), "temperature", BUCKET_MS["24h"], sensorLabel);
+    const { series, points } = buildEnvironmentSeries(histories.slice(0, 1), "temperature", BUCKET_MS["24h"], { label: sensorLabel });
 
     expect(series.map((entry) => entry.label)).toEqual(["DHT22", "BMP280"]);
     expect(points[0]).toEqual({ time: at("12:00"), s0: 21, s1: 21.5 });
+  });
+
+  it("drops readings older than the window start, keeping the series", () => {
+    const { series, points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"], { since: at("12:04") });
+
+    expect(series).toHaveLength(3);
+    expect(points.map((point) => point.time)).toEqual([at("12:05"), at("12:15")]);
+  });
+
+  it("has no points once every reading left the window", () => {
+    const { series, points } = buildEnvironmentSeries(histories, "temperature", BUCKET_MS["1h"], { since: at("13:00") });
+
+    expect(series).toHaveLength(3);
+    expect(points).toEqual([]);
   });
 
   it("returns no series or points for an unknown variable", () => {

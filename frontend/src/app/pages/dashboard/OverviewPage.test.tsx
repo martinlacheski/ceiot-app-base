@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +11,7 @@ import OverviewPage from "./OverviewPage";
 
 const {
   auth,
+  clock,
   deviceRefetch,
   environmentRefetch,
   telemetry,
@@ -17,6 +19,7 @@ const {
   useQueryMock,
 } = vi.hoisted(() => ({
   auth: { user: { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] } as unknown },
+  clock: { now: 0 },
   deviceRefetch: vi.fn(),
   environmentRefetch: vi.fn(),
   telemetry: {
@@ -38,13 +41,25 @@ vi.mock("@/auth/store/auth.store", () => ({
   useAuthStore: () => ({ user: auth.user }),
 }));
 
+vi.mock("./overview/useNow", () => ({
+  useNow: () => clock.now,
+}));
+
 vi.mock("./overview/EnvironmentReadingsChart", () => ({
-  EnvironmentReadingsChart: ({ variable, series, hiddenKeys }: {
+  EnvironmentReadingsChart: ({ variable, series, hiddenKeys, points, timeWindow }: {
     variable: { code: string };
     series: Array<{ key: string; label: string }>;
     hiddenKeys?: ReadonlySet<string>;
+    points: unknown[];
+    timeWindow?: { start: number; end: number };
   }) => (
-    <ul data-testid="environment-chart" data-variable={variable.code}>
+    <ul
+      data-testid="environment-chart"
+      data-variable={variable.code}
+      data-points={points.length}
+      data-window-start={timeWindow?.start}
+      data-window-end={timeWindow?.end}
+    >
       {series.filter((entry) => !hiddenKeys?.has(entry.key)).map((entry) => <li key={entry.key}>{entry.label}</li>)}
     </ul>
   ),
@@ -150,6 +165,10 @@ const readings = {
   sensors,
 };
 
+/** A minute after the newest fixture reading. */
+const NOW = Date.parse("2026-10-10T12:31:00Z");
+const HOUR = 60 * 60 * 1000;
+
 const state = (data: unknown, overrides: QueryState = {}) => ({
   data,
   isError: false,
@@ -210,6 +229,7 @@ const chartSeries = () =>
 describe("OverviewPage operational dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clock.now = NOW;
     useLivePulseStatus.getState().setConnected(true);
     auth.user = { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] };
     telemetry.latest = state(readings);
@@ -297,6 +317,94 @@ describe("OverviewPage operational dashboard", () => {
 
       expect(screen.queryByText(/Actualizando/)).not.toBeInTheDocument();
       expect(screen.getByTestId("environment-chart")).toBeInTheDocument();
+    });
+  });
+
+  describe("rolling window while a device stays quiet", () => {
+    const rerenderPage = (rerender: (ui: ReactElement) => void) => rerender(
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>,
+    );
+
+    it("spans the chart over the selected rolling window", () => {
+      renderPage();
+
+      const chart = screen.getByTestId("environment-chart");
+      expect(chart).toHaveAttribute("data-window-start", String(NOW - 24 * HOUR));
+      expect(chart).toHaveAttribute("data-window-end", String(NOW));
+    });
+
+    it("drops readings that left the window as time passes without new readings", () => {
+      const { rerender } = renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
+      expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-points", "2");
+
+      // 12:30 is still inside the hour that ends at 13:29:30; 12:29 is not.
+      clock.now = Date.parse("2026-10-10T13:29:30Z");
+      rerenderPage(rerender);
+      expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-points", "1");
+      expect(screen.getByTestId("environment-chart")).toHaveAttribute("data-window-end", String(clock.now));
+
+      clock.now = Date.parse("2026-10-10T14:00:00Z");
+      rerenderPage(rerender);
+      expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
+      expect(screen.getByText("No hay lecturas de este dispositivo en el período elegido.")).toBeInTheDocument();
+    });
+  });
+
+  describe("establishment view while another range or establishment loads", () => {
+    const loading = () => state(undefined, { isLoading: true, isPending: true });
+    const readingsCard = () => screen.getByRole("region", { name: "Lecturas" });
+    const busyChart = () => screen.getByTestId("environment-chart").closest("[aria-busy='true']");
+
+    it("keeps the previous merged chart, dimmed, until the new range has data", () => {
+      useEstablishmentDevices();
+      const { rerender } = renderPage();
+      openEstablishmentView();
+      expect(busyChart()).toBeNull();
+
+      telemetry.history = loading();
+      fireEvent.click(screen.getByRole("button", { name: "Última hora" }));
+
+      expect(within(readingsCard()).queryByRole("status")).not.toBeInTheDocument();
+      expect(chartSeries()).toEqual(["Sensor Sur · DHT22", "Sensor Norte · DHT22"]);
+      expect(busyChart()).not.toBeNull();
+      // Still the data (and bucketing) of the previous range.
+      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 10 minutos")).toBeInTheDocument();
+
+      telemetry.history = state(readings);
+      rerender(
+        <MemoryRouter>
+          <OverviewPage />
+        </MemoryRouter>,
+      );
+
+      expect(busyChart()).toBeNull();
+      expect(screen.getByText("2 dispositivos · 2 sensores · promedio cada 1 minuto")).toBeInTheDocument();
+    });
+
+    it("keeps the previous establishment chart while the chosen one loads", () => {
+      useEstablishmentDevices();
+      renderPage();
+      openEstablishmentView();
+
+      telemetry.history = loading();
+      fireEvent.change(screen.getByLabelText("Establecimiento"), { target: { value: "environment-2" } });
+
+      expect(within(readingsCard()).queryByRole("status")).not.toBeInTheDocument();
+      expect(chartSeries()).toEqual(["Sensor Sur · DHT22", "Sensor Norte · DHT22"]);
+      expect(busyChart()).not.toBeNull();
+    });
+
+    it("shows the skeleton when there is nothing loaded yet", () => {
+      useEstablishmentDevices();
+      telemetry.history = loading();
+      renderPage();
+      openEstablishmentView();
+
+      expect(screen.getByRole("status", { name: "Cargando lecturas del establecimiento" })).toBeInTheDocument();
+      expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
     });
   });
 

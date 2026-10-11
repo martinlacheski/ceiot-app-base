@@ -108,7 +108,7 @@ function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device })
 }
 
 function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidden: HiddenSeries }) {
-  const { selectedDevice, environments, view, display, range, onSelectVariable, canReadTelemetry, readings, latest, hidden } = props;
+  const { selectedDevice, environments, view, display, onSelectVariable, canReadTelemetry, readings, latest, hidden } = props;
 
   if (!canReadTelemetry) return <TelemetryPermissionNotice />;
   if (view === "environment" && environments.length === 0) {
@@ -136,7 +136,7 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidd
           onSelectVariable={onSelectVariable}
         />
       )}
-      <SeriesReadingsBody scope={view} display={display} range={range} readings={readings} hidden={hidden} />
+      <SeriesReadingsBody scope={view} display={display} readings={readings} hidden={hidden} />
     </>
   );
 }
