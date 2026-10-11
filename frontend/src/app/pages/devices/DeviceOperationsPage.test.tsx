@@ -89,13 +89,13 @@ const operations: DeviceOperation[] = [
   {
     id: "operation-later",
     time: "2026-07-24T15:30:00Z",
-    operation_type: "SENSOR_DATA",
+    operation_type: "sensor_data",
     status: "SUCCESS",
   },
   {
     id: "operation-earlier",
     time: "2026-07-23T12:15:00Z",
-    operation_type: "KEEP_ACTIVE",
+    operation_type: "keep_active",
     status: "CONFIRMED",
   },
 ];
@@ -277,7 +277,7 @@ describe("DeviceOperationsPage responsive presentation", () => {
   it("sends URL-backed search, dates, sorting and pagination to the server", async () => {
     const user = userEvent.setup();
     queryState.data = { items: operations, pages: 2, total: 40 };
-    renderPage("/app/devices/device-1/operations?search=SENSOR_DATA&page=1&size=20&startDate=2026-07-03&endDate=2026-07-04&sortBy=status&sortOrder=asc");
+    renderPage("/app/devices/device-1/operations?search=sensor_data&page=1&size=20&startDate=2026-07-03&endDate=2026-07-04&sortBy=status&sortOrder=asc");
 
     expect(screen.getAllByRole("article")).toHaveLength(2);
     expect(screen.getAllByText("Datos de sensores")).toHaveLength(2);
@@ -289,7 +289,7 @@ describe("DeviceOperationsPage responsive presentation", () => {
       expect.objectContaining({
         page: 1,
         perPage: 20,
-        search: "SENSOR_DATA",
+        search: "sensor_data",
         sortBy: "status",
         sortOrder: "asc",
         startDate: expect.any(Date),

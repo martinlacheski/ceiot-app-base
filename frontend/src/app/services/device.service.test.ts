@@ -249,7 +249,7 @@ describe("deviceService.getOperations", () => {
     vi.mocked(appApi.get)
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "first", time: "2026-09-01T00:00:00Z", operation_type: "SENSOR_DATA", status: "success" }],
+          items: [{ id: "first", time: "2026-09-01T00:00:00Z", operation_type: "sensor_data", status: "success" }],
           total: 10001,
           pages: 2,
           page: 1,
@@ -258,7 +258,7 @@ describe("deviceService.getOperations", () => {
       })
       .mockResolvedValueOnce({
         data: {
-          items: [{ id: "last", time: "2026-09-02T00:00:00Z", operation_type: "KEEP_ACTIVE", status: "failed" }],
+          items: [{ id: "last", time: "2026-09-02T00:00:00Z", operation_type: "keep_active", status: "failed" }],
           total: 10001,
           pages: 2,
           page: 2,
@@ -337,7 +337,7 @@ describe("mapDeviceOperation", () => {
       time: "2026-03-06T12:00:00Z",
       id: "evt-1",
       device_serial: "IOT-1000",
-      operation_type: "SENSOR_DATA",
+      operation_type: "sensor_data",
       status: "success",
     });
 
@@ -345,12 +345,16 @@ describe("mapDeviceOperation", () => {
       time: "2026-03-06T12:00:00Z",
       id: "evt-1",
       device_serial: "IOT-1000",
-      operation_type: "SENSOR_DATA",
+      operation_type: "sensor_data",
       status: "success",
     });
     expect("device_id" in result).toBe(false);
     expect("payload" in result).toBe(false);
     expect("response" in result).toBe(false);
+  });
+
+  it("defaults a missing operation type to the lowercase other code", () => {
+    expect(mapDeviceOperation({ id: "evt-2" }).operation_type).toBe("other");
   });
 
   it("ignores legacy raw and financial operation fields from backend payloads", () => {
@@ -373,7 +377,7 @@ describe("mapDeviceOperation", () => {
       time: "2026-03-06T12:00:00Z",
       id: "evt-raw",
       device_serial: "IOT-1001",
-      operation_type: "KEEP_ACTIVE",
+      operation_type: "keep_active",
       status: "success",
       ...legacyFields,
     });
@@ -382,7 +386,7 @@ describe("mapDeviceOperation", () => {
       time: "2026-03-06T12:00:00Z",
       id: "evt-raw",
       device_serial: "IOT-1001",
-      operation_type: "KEEP_ACTIVE",
+      operation_type: "keep_active",
       status: "success",
     });
   });

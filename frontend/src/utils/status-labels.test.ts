@@ -30,8 +30,10 @@ describe("status labels", () => {
 
   it("uses this project's backend vocabularies", () => {
     expect(getDeviceStatusLabel("paired")).toBe("VINCULADO");
+    expect(getOperationTypeLabel("sensor_data")).toBe("Datos de sensores");
+    expect(getOperationTypeLabel("keep_active")).toBe("Dispositivo activo");
+    // Legacy uppercase codes still render the same label.
     expect(getOperationTypeLabel("SENSOR_DATA")).toBe("Datos de sensores");
-    expect(getOperationTypeLabel("KEEP_ACTIVE")).toBe("Dispositivo activo");
     expect(getOperationStatusLabel("success")).toBe("Exitoso");
     expect(getInvitationStatusLabel("pending")).toBe("Pendiente");
     expect(getConnectionStatusLabel("offline")).toBe("Fuera de línea");
@@ -52,6 +54,22 @@ describe("status labels", () => {
     expect(getOperationTypeLabel("move")).toBe("Traslado");
     expect(OPERATION_TYPE_OPTIONS).toContainEqual({ value: "unpair", label: "Desvinculación" });
     expect(OPERATION_TYPE_OPTIONS).toContainEqual({ value: "move", label: "Traslado" });
+  });
+
+  it("offers every operation type filter as a lowercase snake_case API value", () => {
+    expect(OPERATION_TYPE_OPTIONS.map((option) => option.value)).toEqual([
+      "sensor_data",
+      "keep_active",
+      "session_request",
+      "error",
+      "other",
+      "firmware_update",
+      "unpair",
+      "move",
+    ]);
+    for (const option of OPERATION_TYPE_OPTIONS) {
+      expect(option.label).toBe(getOperationTypeLabel(option.value));
+    }
   });
 
   it("labels nullable booleans without losing false", () => {

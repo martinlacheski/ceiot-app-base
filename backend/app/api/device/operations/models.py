@@ -6,8 +6,15 @@ from sqlmodel import SQLModel, Field, func
 from sqlalchemy import Column, DateTime, ForeignKey, Uuid
 
 class DeviceOperationType(str, Enum):
-    SENSOR_DATA = "SENSOR_DATA"
-    KEEP_ACTIVE = "KEEP_ACTIVE"
+    """Operation kinds. Values (the API contract) are lowercase snake_case.
+
+    PostgreSQL stores member NAMES (SQLAlchemy's ``Enum`` default), so the values can
+    change without touching stored rows. Parsing is case-insensitive so legacy
+    clients sending ``SENSOR_DATA`` / ``KEEP_ACTIVE`` keep working.
+    """
+
+    SENSOR_DATA = "sensor_data"
+    KEEP_ACTIVE = "keep_active"
     SESSION_REQUEST = "session_request"
     ERROR = "error"
     OTHER = "other"
@@ -16,6 +23,15 @@ class DeviceOperationType(str, Enum):
     # establishment being left, with the device name it had there (``device_name``).
     UNPAIR = "unpair"
     MOVE = "move"
+
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            for member in cls:
+                if member.value == lowered:
+                    return member
+        return None
 
 class DeviceOperationStatus(str, Enum):
     SUCCESS = "success"

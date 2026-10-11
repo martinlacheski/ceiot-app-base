@@ -100,7 +100,7 @@ def test_history_detail_success_camel_case_and_filter_forwarding(client, token, 
     async def fake_operations(self, scope, **kwargs):
         calls["operations"] = kwargs
         return {"items": [{"id": operation_id, "time": now, "device_serial": "HISTORY-1",
-                           "operation_type": "SENSOR_DATA", "status": "success"}],
+                           "operation_type": "sensor_data", "status": "success"}],
                 "total": 1, "page": kwargs["page"], "per_page": kwargs["per_page"], "pages": 1}
 
     monkeypatch.setattr(DeviceHistoryService, "resolve_scope", fake_scope)
@@ -110,12 +110,12 @@ def test_history_detail_success_camel_case_and_filter_forwarding(client, token, 
     prefix = "/api/devices/history/devices/HISTORY-1"
 
     operations = client.get(f"{prefix}/operations", params={
-        "status": "success", "operation_type": "SENSOR_DATA", "search": "sensores",
+        "status": "success", "operation_type": "sensor_data", "search": "sensores",
         "sort_by": "operation_type", "sort_order": "asc", "per_page": 1}, headers=headers)
     assert operations.status_code == 200
-    assert operations.json()["items"][0]["operationType"] == "SENSOR_DATA"
+    assert operations.json()["items"][0]["operationType"] == "sensor_data"
     assert calls["operations"]["status"].value == "success"
-    assert calls["operations"]["operation_type"].value == "SENSOR_DATA"
+    assert calls["operations"]["operation_type"].value == "sensor_data"
     assert calls["operations"]["sort_by"] == "operation_type"
 
 

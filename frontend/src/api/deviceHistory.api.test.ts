@@ -18,9 +18,9 @@ describe("deviceHistoryApi", () => {
 
   it("sends operation type and status without payment parameters", async () => {
     get.mockResolvedValue({ data: { items: [], total: 0, page: 1, perPage: 10, pages: 0 } });
-    await deviceHistoryApi.operations("SN-1", { environmentId: "env-2", operationType: "SENSOR_DATA", status: "success", page: 1, perPage: 10 });
+    await deviceHistoryApi.operations("SN-1", { environmentId: "env-2", operationType: "sensor_data", status: "success", page: 1, perPage: 10 });
     const [, request] = get.mock.calls[0];
-    expect(request.params).toMatchObject({ environment_id: "env-2", operation_type: "SENSOR_DATA", status: "success" });
+    expect(request.params).toMatchObject({ environment_id: "env-2", operation_type: "sensor_data", status: "success" });
     expect(Object.keys(request.params).join(" ")).not.toMatch(/payment|amount|revenue/);
   });
 

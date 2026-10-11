@@ -21,8 +21,8 @@ export const OPERATION_TYPE_LABELS: Record<string, string> = {
 
 /** Raw API enum values for operation filters; labels remain display-only. */
 export const OPERATION_TYPE_OPTIONS = [
-  { value: "SENSOR_DATA", label: OPERATION_TYPE_LABELS.sensor_data },
-  { value: "KEEP_ACTIVE", label: OPERATION_TYPE_LABELS.keep_active },
+  { value: "sensor_data", label: OPERATION_TYPE_LABELS.sensor_data },
+  { value: "keep_active", label: OPERATION_TYPE_LABELS.keep_active },
   { value: "session_request", label: OPERATION_TYPE_LABELS.session_request },
   { value: "error", label: OPERATION_TYPE_LABELS.error },
   { value: "other", label: OPERATION_TYPE_LABELS.other },

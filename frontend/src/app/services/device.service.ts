@@ -150,7 +150,7 @@ export const mapDeviceOperation = (
   time: op.time ?? "",
   id: op.id ?? "",
   device_serial: op.device_serial ?? op.deviceSerial,
-  operation_type: op.operation_type ?? op.operationType ?? "OTHER",
+  operation_type: op.operation_type ?? op.operationType ?? "other",
   status: op.status ?? "pending",
 });
 
