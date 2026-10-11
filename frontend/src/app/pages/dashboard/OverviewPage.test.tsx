@@ -46,13 +46,22 @@ vi.mock("./overview/useNow", () => ({
   useNow: () => clock.now,
 }));
 
-vi.mock("@/components/custom/DateTimePicker24h", () => ({
-  DateTimePicker24h: ({ id, value, onChange }: { id?: string; value?: Date; onChange: (date: Date | undefined) => void }) => (
-    <input
-      id={id}
-      value={value ? value.toISOString() : ""}
-      onChange={(event) => onChange(event.target.value ? new Date(event.target.value) : undefined)}
-    />
+const picker = vi.hoisted(() => ({ range: { from: new Date(), to: new Date() } as { from: Date; to?: Date } }));
+
+vi.mock("@/components/ui/date-range-picker", () => ({
+  DateRangePicker: ({ initialDateFrom, initialDateTo, onUpdate }: {
+    initialDateFrom?: Date;
+    initialDateTo?: Date;
+    onUpdate: (values: { range: { from: Date; to?: Date } }) => void;
+  }) => (
+    <button
+      type="button"
+      data-from={initialDateFrom?.toDateString()}
+      data-to={initialDateTo?.toDateString()}
+      onClick={() => onUpdate({ range: picker.range })}
+    >
+      Elegir fechas
+    </button>
   ),
 }));
 
@@ -697,39 +706,52 @@ describe("OverviewPage operational dashboard", () => {
       expect(screen.getByRole("button", { name: "Últimas 24 horas" })).toHaveAttribute("aria-pressed", "true");
     });
 
-    it("applies a custom range with times and validates it", () => {
+    it("picks whole local days with the shared DateRangePicker", () => {
       renderPage();
+      expect(screen.queryByRole("button", { name: "Elegir fechas" })).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
-      const dialog = screen.getByRole("dialog", { name: "Período personalizado" });
-      fireEvent.change(within(dialog).getByLabelText("Desde"), { target: { value: "2026-10-05T08:00:00.000Z" } });
-      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-04T08:00:00.000Z" } });
-      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+      expect(screen.getByRole("button", { name: "Personalizado" })).toHaveAttribute("aria-pressed", "true");
+      const trigger = screen.getByRole("button", { name: "Elegir fechas" });
+      // Starts from the window on screen (the last 24 hours), as whole days.
+      expect(trigger).toHaveAttribute("data-to", new Date(clock.now).toDateString());
 
-      expect(within(dialog).getByRole("alert")).toHaveTextContent("La fecha hasta tiene que ser posterior a la fecha desde.");
-      expect(aggregateKey()).toEqual(["telemetry", "aggregate", "device-online", "24h", "now", "auto"]);
+      picker.range = { from: new Date(2026, 9, 4, 15, 20), to: new Date(2026, 9, 6, 9, 5) };
+      fireEvent.click(trigger);
 
-      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-06T20:30:00.000Z" } });
-      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
-
-      expect(screen.queryByRole("dialog", { name: "Período personalizado" })).not.toBeInTheDocument();
       expect(aggregateKey()).toEqual([
-        "telemetry", "aggregate", "device-online", "2026-10-05T08:00:00.000Z", "2026-10-06T20:30:00.000Z", "auto",
+        "telemetry", "aggregate", "device-online",
+        new Date(2026, 9, 4, 0, 0, 0, 0).toISOString(),
+        new Date(2026, 9, 6, 23, 59, 59, 999).toISOString(),
+        "auto",
       ]);
-      expect(screen.getByRole("button", { name: /Personalizado/ })).toHaveAttribute("aria-pressed", "true");
       expect(screen.getByRole("button", { name: "Período siguiente" })).toBeEnabled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("uses a single day when only the start is picked", () => {
+      renderPage();
+      fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
+
+      picker.range = { from: new Date(2026, 9, 2, 11) };
+      fireEvent.click(screen.getByRole("button", { name: "Elegir fechas" }));
+
+      expect(aggregateKey().slice(3, 5)).toEqual([
+        new Date(2026, 9, 2, 0, 0, 0, 0).toISOString(),
+        new Date(2026, 9, 2, 23, 59, 59, 999).toISOString(),
+      ]);
     });
 
     it("refuses a custom range longer than 366 days", () => {
       renderPage();
-
       fireEvent.click(screen.getByRole("button", { name: "Personalizado" }));
-      const dialog = screen.getByRole("dialog", { name: "Período personalizado" });
-      fireEvent.change(within(dialog).getByLabelText("Desde"), { target: { value: "2025-01-01T00:00:00.000Z" } });
-      fireEvent.change(within(dialog).getByLabelText("Hasta"), { target: { value: "2026-10-01T00:00:00.000Z" } });
-      fireEvent.click(within(dialog).getByRole("button", { name: "Aplicar" }));
+      const before = aggregateKey();
 
-      expect(within(dialog).getByRole("alert")).toHaveTextContent("El período no puede superar los 366 días.");
+      picker.range = { from: new Date(2025, 0, 1), to: new Date(2026, 9, 1) };
+      fireEvent.click(screen.getByRole("button", { name: "Elegir fechas" }));
+
+      expect(screen.getByRole("alert")).toHaveTextContent("El período no puede superar los 366 días.");
+      expect(aggregateKey()).toEqual(before);
     });
   });
 
