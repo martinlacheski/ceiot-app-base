@@ -203,7 +203,6 @@ def seed_sensor_graph(session: Session):
             time=base_time + timedelta(hours=index),
             device_id=device.id,
             device_serial=device.serial,
-            device_type="environmental",
             uptime=100 + index,
             wifi_rssi=-40 - index,
         )

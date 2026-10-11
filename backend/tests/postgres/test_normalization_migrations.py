@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
@@ -18,6 +20,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.config import settings
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+# Later revisions extend the chain; "upgrade head" must land on whatever the head is now.
+HEAD = ScriptDirectory.from_config(Config(str(BACKEND_ROOT / "alembic.ini"))).get_current_head()
 
 
 @pytest.fixture
@@ -106,7 +110,7 @@ def test_upgrade_handles_existing_violations_and_round_trips(scratch_url):
 
     engine = create_engine(scratch_url)
     with engine.begin() as connection:
-        assert _version(connection) == "0019"
+        assert _version(connection) == HEAD
         # 1) device_id backfilled by canonical serial; the orphan stays NULL.
         rows = dict(connection.execute(text("SELECT device_serial, device_id FROM deviceoperation")).all())
         assert rows["IOT-ABCD-EFGH"] == ids["device"]

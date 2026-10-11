@@ -35,7 +35,6 @@ class SensorReading(SQLModel, table=True):
             index=True,
         ),
     )
-    device_type: str = Field(default="generic")
     
     # Generic device-health signals
     power_supply_state: Optional[bool] = Field(default=None)

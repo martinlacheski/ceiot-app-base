@@ -450,6 +450,23 @@ async def test_generic_runtime_report_records_keep_active(
 
 
 @pytest.mark.asyncio
+async def test_health_reading_no_longer_writes_a_device_type_column(
+    isolated_handler_boundaries: dict[str, Any],
+) -> None:
+    """The reading's type comes from device.device_type_id (migration 0020 dropped the
+    redundant text column); a payload key of that name is kept as plain metadata."""
+    await handlers.process_sensor_message_pub(
+        "iot/devices/SYNTHETIC-1000/telemetry",
+        '{"firmware_version": "test-fw", "uptime": 5, "device_type": "legacy-kind"}',
+    )
+
+    readings = isolated_handler_boundaries["sensor_readings"]
+    assert len(readings) == 1
+    assert "device_type" not in readings[0]
+    assert readings[0]["metadata"] == {"device_type": "legacy-kind"}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("payload", "expected_connected"),
     [("online", True), ('{"status": "offline"}', False)],

@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, TYPE_CHECKING
 from pydantic import model_validator
-from sqlalchemy import CheckConstraint, Index, event, inspect as sa_inspect, text
+from sqlalchemy import CheckConstraint, Column, DateTime, Index, event, inspect as sa_inspect, text
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.core.coordinates import format_location, in_range, parse_lat_lng
 from app.api.location.models import LocationCity
@@ -43,6 +43,10 @@ class Environment(EnvironmentBase, table=True):
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
+    )
 
     # Relationships
     type: Optional[EnvironmentType] = Relationship(back_populates="environments")

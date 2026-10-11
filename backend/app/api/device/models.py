@@ -1,8 +1,9 @@
 from app.api.environment.environment.models import EnvironmentEmbeddedRead
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.api.device.device_type.constants import (
     DEFAULT_DEVICE_TYPE_ID,
@@ -67,6 +68,10 @@ class Device(DeviceBase, table=True):
     )
     updated_at: Optional[datetime] = Field(
         default=None, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
+    )
 
     # Relationships
     environment: Optional["Environment"] = Relationship()
@@ -157,6 +162,7 @@ class DeviceRead(CamelModel):
     broker_connected_at: Optional[datetime] = None
     broker_disconnected_at: Optional[datetime] = None
     broker_status_updated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     environment_id: Optional[uuid.UUID] = None
     type: Optional[DeviceTypeRead] = None

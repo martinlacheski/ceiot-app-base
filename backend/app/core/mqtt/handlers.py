@@ -279,7 +279,6 @@ async def process_sensor_message_pub(topic: str, payload: str):
                     device_serial=serial,
                     device_id=device.id if device else None,
                     power_supply_state=data.get("power_supply_state"),
-                    device_type=data.get("device_type", "generic"),
                     device_datetime=data.get("datetime"),
                     # Telemetría
                     uptime=data.get("uptime"),
@@ -300,7 +299,6 @@ async def process_sensor_message_pub(topic: str, payload: str):
                             "temperature",
                             "humidity",
                             "pressure",
-                            "device_type",
                             "datetime",
                             "uptime",
                             "firmware_version",

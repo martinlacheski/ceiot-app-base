@@ -97,7 +97,6 @@ class SensorService:
         wifi_ip: Optional[str] = None,
         last_error: Optional[str] = None,
         # Metadata
-        device_type: str = "generic",
         device_datetime: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> SensorReading:
@@ -109,7 +108,6 @@ class SensorService:
             device_serial=device_serial,
             device_id=device_id,
             power_supply_state=power_supply_state,
-            device_type=device_type,
             device_datetime=device_datetime,
             uptime=uptime,
             firmware_version=firmware_version,

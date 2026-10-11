@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import Index, text
+from sqlalchemy import Column, DateTime, Index, text
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.core.utils import CamelModel
 
@@ -22,6 +22,10 @@ class EnvironmentType(EnvironmentTypeBase, table=True):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
     updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
+    )
     
     # environments: List["Environment"] = Relationship(back_populates="type") 
     # To avoid circular imports, I might comment out back_populates or use string class name.
