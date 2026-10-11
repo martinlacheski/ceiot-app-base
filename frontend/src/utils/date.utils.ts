@@ -2,8 +2,37 @@ import { format, formatDistanceToNow, isValid } from "date-fns";
 import { es } from "date-fns/locale";
 
 /**
- * Formatea una fecha a un string legible en formato 24h.
- * Maneja conversion de Timezone (Browser Local Time) asegurando que el input se trate como UTC si es necesario.
+ * Parsea un timestamp de la API a `Date`.
+ * La API devuelve instantes con zona explícita (`Z` / `+00:00`); un timestamp sin zona
+ * (formato legado) se toma como UTC. Una fecha pura `YYYY-MM-DD` es un día local.
+ */
+export function parseApiDateTime(
+  date: string | Date | null | undefined,
+): Date | null {
+  if (!date) return null;
+  if (date instanceof Date) return isValid(date) ? date : null;
+
+  let dateStr = date.trim();
+  if (!dateStr) return null;
+
+  // Fecha pura YYYY-MM-DD: se parsea localmente para evitar el salto de día por UTC.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}/.test(dateStr)) {
+    dateStr = dateStr.replace(" ", "T");
+  }
+
+  // Sin zona explícita (Z o ±hh:mm): UTC "naive".
+  const hasZone = /[Zz]$/.test(dateStr) || /[+-]\d\d:?\d\d$/.test(dateStr);
+  const parsed = new Date(hasZone ? dateStr : `${dateStr}Z`);
+  return isValid(parsed) ? parsed : null;
+}
+
+/**
+ * Formatea una fecha a un string legible en formato 24h, en la hora local del navegador.
  * @param date fecha en string (ISO) o objeto Date
  * @param formatStr string de formato (default: dd/MM/yyyy HH:mm)
  */
@@ -11,41 +40,8 @@ export function formatDateTime(
   date: string | Date | null | undefined,
   formatStr: string = "dd/MM/yyyy HH:mm",
 ): string {
-  if (!date) return "-";
-
-  let dateObj: Date;
-
-  if (typeof date === "string") {
-    let dateStr = date.trim();
-
-    // Si es una fecha pura YYYY-MM-DD sin hora, la parseamos localmente
-    // para evitar el salto de día por UTC.
-    if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      const [year, month, day] = dateStr.split("-").map(Number);
-      dateObj = new Date(year, month - 1, day);
-    } 
-    // Si tiene hora, seguimos el flujo normal con UTC conversion
-    else if (dateStr.match(/^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}/)) {
-      dateStr = dateStr.replace(" ", "T");
-      // ... resto de la lógica ...
-    }
-
-    // Si viene sin timezone explícito (Z o +...), asumimos que es UTC "naive"
-    // y le agregamos Z para que el navegador lo parsee como UTC y lo convierta a Local.
-    if (
-      !dateStr.includes("Z") &&
-      !dateStr.includes("+") &&
-      !dateStr.match(/-\d\d:?\d\d$/)
-    ) {
-      dateObj = new Date(dateStr + "Z");
-    } else {
-      dateObj = new Date(dateStr);
-    }
-  } else {
-    dateObj = date;
-  }
-
-  if (!isValid(dateObj)) return "-";
+  const dateObj = parseApiDateTime(date);
+  if (!dateObj) return "-";
 
   return format(dateObj, formatStr, { locale: es });
 }

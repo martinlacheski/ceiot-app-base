@@ -20,6 +20,7 @@ export const formatAccessStartLabel = (value?: string) => {
   return `Desde ${format(date, "dd/MM/yyyy HH:mm", { locale: es })}`;
 };
 
+// The picked local wall clock with its UTC offset: the API stores that exact instant.
 export const toLocalDateTimePayload = (value: Date) => {
-  return format(value, "yyyy-MM-dd'T'HH:mm:ss");
+  return format(value, "yyyy-MM-dd'T'HH:mm:ssxxx");
 };

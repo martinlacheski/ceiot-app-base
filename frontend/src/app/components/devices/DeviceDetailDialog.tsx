@@ -25,6 +25,7 @@ import { formatDeviceGpsSummary, formatDeviceMac } from "./deviceTelemetry";
 import { DeviceFirmwareSection } from "./DeviceFirmwareSection";
 import { DevicePresenceBadge } from "./DevicePresenceBadge";
 import { getDeviceStatusLabel } from "@/utils/status-labels";
+import { formatDateTime } from "@/utils/date.utils";
 
 interface DeviceDetailDialogProps {
   device: Device | null;
@@ -215,7 +216,7 @@ export function DeviceDetailDialog({
               <span className="flex items-center gap-1">
                 <Clock className="size-3" />
                 Actualizado:{" "}
-                {format(new Date(device.updatedAt), "PP p", { locale: es })}
+                {formatDateTime(device.updatedAt, "PP p")}
               </span>
             )}
           </div>

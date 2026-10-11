@@ -1,4 +1,5 @@
 import { appApi } from "@/api/appApi";
+import { parseApiDateTime } from "@/utils/date.utils";
 import type {
   DeviceConnectionStatus,
   DeviceMapItem,
@@ -50,11 +51,8 @@ export const getDevicesForMapAction = async (): Promise<DeviceMapItem[]> => {
         city: device.environment?.city?.name || "Sin ciudad",
       },
       status,
-      lastMessage: brokerStatusUpdatedAt
-        ? new Date(brokerStatusUpdatedAt)
-        : lastConnection
-          ? new Date(lastConnection)
-          : null,
+      lastMessage:
+        parseApiDateTime(brokerStatusUpdatedAt) ?? parseApiDateTime(lastConnection),
       ownerId:
         device.environment?.ownerId ||
         device.environment?.owner_id ||

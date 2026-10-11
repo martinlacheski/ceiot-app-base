@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { DevicePresenceBadge } from "@/app/components/devices/DevicePresenceBadge";
 import type { Device } from "@/app/types/device.types";
 import type { Environment } from "@/app/types/environment.types";
+import { parseApiDateTime } from "@/utils/date.utils";
 import { Button } from "@/components/ui/button";
 import { deviceLabel } from "./overviewModel";
 import { LoadingState, RefreshErrorNotice, type InventoryLabel } from "./OverviewStates";
@@ -26,8 +27,8 @@ const INTERACTIVE_ROW_CLASS = `${ROW_CLASS} transition-colors hover:bg-accent fo
 
 function lastConnectionLabel(device: Device) {
   if (!device.lastConnection) return "Sin conexiones registradas";
-  const date = new Date(device.lastConnection);
-  if (Number.isNaN(date.getTime())) return "Sin conexiones registradas";
+  const date = parseApiDateTime(device.lastConnection);
+  if (!date) return "Sin conexiones registradas";
   return formatDistanceToNow(date, { addSuffix: true, locale: es });
 }
 

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PendingInvitationEditDialog } from "./PendingInvitationEditDialog";
+import { toLocalDateTimePayload } from "./accessStart.utils";
 
 const showConfirmDialogMock = vi.fn();
 
@@ -59,7 +60,8 @@ describe("PendingInvitationEditDialog", () => {
     await act(async () => confirm?.());
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave).toHaveBeenCalledWith({ accessStartsAt: "2026-05-28T14:30:00" });
+    expect(onSave).toHaveBeenCalledWith({ accessStartsAt: toLocalDateTimePayload(new Date(2026, 4, 28, 14, 30)) });
+    expect(onSave.mock.calls[0][0].accessStartsAt).toMatch(/^2026-05-28T14:30:00[+-]\d\d:\d\d$/);
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
