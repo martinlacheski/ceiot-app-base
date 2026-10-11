@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { appApi } from "@/api/appApi";
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
 import { useAuthStore } from "@/auth/store/auth.store";
 import { API_BASE_URL } from "@/lib/apiBaseUrl";
 import { useMountEffect } from "../hooks/useMountEffect";
@@ -12,6 +12,7 @@ import {
   latestLimit,
   patchHistoryPage,
   patchLatestPage,
+  patchLiveState,
   rollingRangeOf,
   type PatchOutcome,
   type ReadingValues,
@@ -34,6 +35,7 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
   if (event.kind === "telemetry") {
     keys.push(
       ["telemetry", "latest", id],
+      ["telemetry", "live", id],
       ["telemetry", "history", id],
       ["telemetry", "daily", id],
       ["telemetry", "detailed", id],
@@ -45,8 +47,8 @@ export function queryKeysForPulse(event: PulseEvent): QueryKey[] {
 /**
  * Queries a reading-carrying telemetry pulse still refreshes: server-side
  * aggregates, the device's own detail and the device lists (the same report
- * persists last connection, rssi and GPS on the device row). The history/latest
- * pages are not here: `applyReading` patches them in place.
+ * persists last connection, rssi and GPS on the device row). The history, latest
+ * and live caches are not here: `applyReading` patches them in place.
  */
 function queryKeysAfterReading(deviceId: string): QueryKey[] {
   return [
@@ -61,14 +63,14 @@ function queryKeysAfterReading(deviceId: string): QueryKey[] {
 }
 
 /**
- * Fold the reading into every cached history/latest page of the device and
- * return the keys that could not be patched and must be refetched instead.
+ * Fold the reading into every cached history/latest page and the live state of
+ * the device, and return the keys that could not be patched and must be refetched instead.
  */
 export function applyReading(queryClient: QueryClient, deviceId: string, time: string, values: ReadingValues): QueryKey[] {
   const reading = { time, values };
   const now = Date.now();
   const refetch: QueryKey[] = [];
-  const patchAll = (prefix: QueryKey, patch: (key: QueryKey, page: TelemetryPage | undefined) => PatchOutcome) => {
+  const patchAll = <T>(prefix: QueryKey, patch: (key: QueryKey, data: T | undefined) => PatchOutcome<T>) => {
     for (const query of queryClient.getQueryCache().findAll({ queryKey: prefix })) {
       const key = query.queryKey;
       // A response already in flight may predate the reading and would overwrite the patch.
@@ -76,13 +78,14 @@ export function applyReading(queryClient: QueryClient, deviceId: string, time: s
         refetch.push(key);
         continue;
       }
-      const outcome = patch(key, query.state.data as TelemetryPage | undefined);
+      const outcome = patch(key, query.state.data as T | undefined);
       if (outcome.status === "patched") queryClient.setQueryData(key, outcome.page);
       else if (outcome.status === "invalidate") refetch.push(key);
     }
   };
-  patchAll(["telemetry", "history", deviceId], (key, page) => patchHistoryPage(page, reading, rollingRangeOf(key), now));
-  patchAll(["telemetry", "latest", deviceId], (key, page) => patchLatestPage(page, reading, latestLimit(key)));
+  patchAll<TelemetryPage>(["telemetry", "history", deviceId], (key, page) => patchHistoryPage(page, reading, rollingRangeOf(key), now));
+  patchAll<TelemetryPage>(["telemetry", "latest", deviceId], (key, page) => patchLatestPage(page, reading, latestLimit(key)));
+  patchAll<LiveTelemetry>(["telemetry", "live", deviceId], (_key, live) => patchLiveState(live, reading));
   return refetch;
 }
 

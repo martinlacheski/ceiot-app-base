@@ -54,6 +54,19 @@ export interface TelemetryPage {
   pages?: number;
 }
 
+/** Latest known state of a device: the Redis live cache, or the newest stored row as fallback. */
+export interface LiveTelemetry {
+  source: "redis" | "database";
+  /** Time of the latest reading; null when the device never reported one. */
+  time: string | null;
+  values: TelemetryItem["values"];
+  /** Last health fields the device reported (`wifi_rssi`, `firmware_version`, `uptime`, ...). */
+  health: Record<string, unknown>;
+  /** Broker presence last seen by the runtime ("online"/"offline"), Redis only. */
+  presence: string | null;
+  sensors: TelemetrySensor[];
+}
+
 export interface DailyStat {
   min: number;
   max: number;

@@ -24,6 +24,7 @@ const {
   environmentRefetch: vi.fn(),
   telemetry: {
     latest: undefined as unknown,
+    live: undefined as unknown,
     history: undefined as unknown,
     historyByDevice: {} as Record<string, unknown>,
   },
@@ -165,6 +166,23 @@ const readings = {
   sensors,
 };
 
+/** Live state of the selected device: the newest fixture reading plus its health. */
+const liveState = {
+  source: "redis",
+  time: readings.items[0].time,
+  values: readings.items[0].values,
+  health: { wifi_rssi: -55, firmware_version: "2.1.0" },
+  presence: "online",
+  sensors,
+};
+
+/** Telemetry query result by the kind in its key (`["telemetry", kind, ...]`). */
+const telemetryState = (queryKey: unknown[]) => {
+  if (queryKey[1] === "latest") return telemetry.latest;
+  if (queryKey[1] === "live") return telemetry.live;
+  return telemetry.history;
+};
+
 /** A minute after the newest fixture reading. */
 const NOW = Date.parse("2026-10-10T12:31:00Z");
 const HOUR = 60 * 60 * 1000;
@@ -186,7 +204,7 @@ const renderPage = () => render(
 );
 
 const queryConfigs = () => useQueryMock.mock.calls.map(([config]) => config as QueryConfig);
-const lastTelemetryQuery = (kind: "latest" | "history") =>
+const lastTelemetryQuery = (kind: "latest" | "live" | "history") =>
   queryConfigs().filter((config) => config.queryKey[0] === "telemetry" && config.queryKey[1] === kind).at(-1)!;
 const lastEnvironmentQueries = () =>
   (useQueriesMock.mock.calls.at(-1)![0] as { queries: QueryConfig[] }).queries;
@@ -207,7 +225,7 @@ const useEstablishmentDevices = () => {
   useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
     if (queryKey[0] === "environments") return state(environments, { refetch: environmentRefetch });
     if (queryKey[0] === "devices") return state(establishmentDevices, { refetch: deviceRefetch });
-    return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+    return telemetryState(queryKey);
   });
 };
 
@@ -233,6 +251,7 @@ describe("OverviewPage operational dashboard", () => {
     useLivePulseStatus.getState().setConnected(true);
     auth.user = { id: "user-1", isAdmin: false, permissions: ["telemetry:read"] };
     telemetry.latest = state(readings);
+    telemetry.live = state(liveState);
     telemetry.history = state(readings);
     Element.prototype.scrollIntoView = vi.fn();
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -249,7 +268,7 @@ describe("OverviewPage operational dashboard", () => {
         return state(devices, { refetch: deviceRefetch });
       }
       if (queryKey[0] === "telemetry") {
-        return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+        return telemetryState(queryKey);
       }
       return state(undefined);
     });
@@ -267,6 +286,7 @@ describe("OverviewPage operational dashboard", () => {
     expect(keys).toContainEqual(["environments", "operational-overview"]);
     expect(keys).toContainEqual(["devices", "operational-overview"]);
     expect(lastTelemetryQuery("latest").queryKey.slice(0, 3)).toEqual(["telemetry", "latest", "device-online"]);
+    expect(lastTelemetryQuery("live").queryKey).toEqual(["telemetry", "live", "device-online"]);
     expect(lastTelemetryQuery("history").queryKey).toEqual(["telemetry", "history", "device-online", "24h"]);
     expect(keys.some((key) => String(key[0]).includes("revenue"))).toBe(false);
     expect(screen.queryByText(/ingresos|comisi[oó]n|transacciones|excel|pdf/i)).not.toBeInTheDocument();
@@ -276,6 +296,7 @@ describe("OverviewPage operational dashboard", () => {
     const dashboardQueries = () => [
       queryConfigs().filter((config) => config.queryKey[1] === "operational-overview").at(-1)!,
       lastTelemetryQuery("latest"),
+      lastTelemetryQuery("live"),
       lastTelemetryQuery("history"),
     ];
 
@@ -302,6 +323,7 @@ describe("OverviewPage operational dashboard", () => {
       renderPage();
 
       expect(lastTelemetryQuery("latest").placeholderData).toBe(keepPreviousData);
+      expect(lastTelemetryQuery("live").placeholderData).toBe(keepPreviousData);
       expect(lastTelemetryQuery("history").placeholderData).toBe(keepPreviousData);
     });
 
@@ -563,7 +585,7 @@ describe("OverviewPage operational dashboard", () => {
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: string[] }) => {
       if (queryKey[0] === "devices") return state(refreshed, { refetch: deviceRefetch });
       if (queryKey[0] === "environments") return state(environments, { refetch: environmentRefetch });
-      return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+      return telemetryState(queryKey);
     });
     rerender(
       <MemoryRouter>
@@ -621,6 +643,12 @@ describe("OverviewPage operational dashboard", () => {
     expect(items[1]).toHaveTextContent("Humedad");
     expect(items[1]).toHaveTextContent("51,25 %");
     expect(screen.getByText(/^Última lectura hace /)).toBeInTheDocument();
+    const health = screen.getByRole("list", { name: "Estado del dispositivo" });
+    expect(health).toHaveTextContent("WiFi Buena");
+    expect(health).toHaveTextContent("Firmware 2.1.0");
+    // The strip reads the live state; the latest rows load only for the records table.
+    expect(lastTelemetryQuery("live").enabled).toBe(true);
+    expect(lastTelemetryQuery("latest").enabled).toBe(false);
 
     fireEvent.click(within(items[1]).getByRole("button"));
 
@@ -634,6 +662,7 @@ describe("OverviewPage operational dashboard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tabla" }));
 
     expect(screen.getByRole("button", { name: "Tabla" })).toHaveAttribute("aria-pressed", "true");
+    expect(lastTelemetryQuery("latest").enabled).toBe(true);
     expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
     const readingsArea = screen.getByRole("region", { name: "Lecturas" });
     const table = within(readingsArea).getByRole("table");
@@ -652,6 +681,7 @@ describe("OverviewPage operational dashboard", () => {
 
   it("shows empty chart and records states when the device has no readings", () => {
     telemetry.latest = state({ items: [], total: 0, sensors: [] });
+    telemetry.live = state({ ...liveState, time: null, values: {}, sensors: [], health: {} });
     telemetry.history = state({ items: [], total: 0, sensors: [] });
 
     renderPage();
@@ -672,6 +702,7 @@ describe("OverviewPage operational dashboard", () => {
 
     expect(screen.getByText("Tu usuario no tiene permiso para ver lecturas.")).toBeInTheDocument();
     expect(lastTelemetryQuery("latest").enabled).toBe(false);
+    expect(lastTelemetryQuery("live").enabled).toBe(false);
     expect(lastTelemetryQuery("history").enabled).toBe(false);
     expect(screen.queryByTestId("environment-chart")).not.toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Valores actuales" })).not.toBeInTheDocument();
@@ -717,7 +748,7 @@ describe("OverviewPage operational dashboard", () => {
         });
       }
       if (queryKey[0] === "devices") return state(devices, { refetch: deviceRefetch });
-      return queryKey[1] === "latest" ? telemetry.latest : telemetry.history;
+      return telemetryState(queryKey);
     });
 
     renderPage();

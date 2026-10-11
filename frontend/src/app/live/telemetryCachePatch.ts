@@ -10,7 +10,7 @@
  */
 import type { QueryKey } from "@tanstack/react-query";
 
-import type { TelemetryItem, TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { LiveTelemetry, TelemetryItem, TelemetryPage } from "@/app/types/environmentalSensor.types";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -24,13 +24,13 @@ export const ROLLING_RANGE_MS: Record<string, number> = {
 
 export type ReadingValues = TelemetryItem["values"];
 
-export type PatchOutcome =
-  | { status: "patched"; page: TelemetryPage }
+export type PatchOutcome<T = TelemetryPage> =
+  | { status: "patched"; page: T }
   | { status: "unchanged" }
   | { status: "invalidate" };
 
-const UNCHANGED: PatchOutcome = { status: "unchanged" };
-const INVALIDATE: PatchOutcome = { status: "invalidate" };
+const UNCHANGED = { status: "unchanged" } as const;
+const INVALIDATE = { status: "invalidate" } as const;
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,7 +58,7 @@ export function latestLimit(key: QueryKey): number {
 }
 
 /** Every sensor and variable of the reading is described by the page metadata. */
-function describes(page: TelemetryPage, values: ReadingValues): boolean {
+function describes(page: Pick<TelemetryPage, "sensors">, values: ReadingValues): boolean {
   return Object.entries(values).every(([sensorKey, variables]) => {
     const sensor = page.sensors.find((entry) => entry.key === sensorKey);
     return sensor !== undefined
@@ -144,4 +144,23 @@ export function patchLatestPage(page: TelemetryPage | undefined, reading: Teleme
   if (inserted === "invalid") return INVALIDATE;
   if (inserted === "duplicate") return UNCHANGED;
   return settle(page, reading, inserted, 0, limit);
+}
+
+/**
+ * Fold a reading into the cached live state of a device (`["telemetry", "live", id]`):
+ * the time moves forward and the reading's variables replace the known ones, sensor by
+ * sensor, so values the reading does not carry stay on screen. Health is not in the pulse
+ * and stays as last fetched.
+ */
+export function patchLiveState(live: LiveTelemetry | undefined, reading: TelemetryItem): PatchOutcome<LiveTelemetry> {
+  if (!live) return UNCHANGED;
+  const at = epoch(reading.time);
+  if (Number.isNaN(at)) return INVALIDATE;
+  if (live.time !== null && at <= epoch(live.time)) return UNCHANGED;
+  if (!describes(live, reading.values)) return INVALIDATE;
+  const values = { ...live.values };
+  for (const [sensorKey, variables] of Object.entries(reading.values)) {
+    values[sensorKey] = { ...values[sensorKey], ...variables };
+  }
+  return { status: "patched", page: { ...live, time: reading.time, values } };
 }

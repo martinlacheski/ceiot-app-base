@@ -2,7 +2,7 @@ import { ArrowUpRight, Building2, Cpu, Link as LinkIcon } from "lucide-react";
 import { Link } from "react-router";
 
 import type { Device } from "@/app/types/device.types";
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +29,12 @@ export interface LatestReadingsState {
   isError: boolean;
 }
 
+export interface LiveReadingsState {
+  live?: LiveTelemetry;
+  isLoading: boolean;
+  isError: boolean;
+}
+
 interface ReadingsPanelProps {
   devicesStatus: "loading" | "error" | "ready";
   devices: Device[];
@@ -47,8 +53,10 @@ interface ReadingsPanelProps {
   canReadTelemetry: boolean;
   /** History of the active view: the selected device or the selected establishment. */
   readings: SeriesReadingsState;
-  /** Recent raw readings of the selected device (current values and records table). */
+  /** Recent raw readings of the selected device (records table). */
   latest: LatestReadingsState;
+  /** Live state of the selected device (current values strip). */
+  current: LiveReadingsState;
 }
 
 const SELECT_CLASS = "h-9 w-full min-w-0 rounded-md border bg-background px-3 text-sm";
@@ -108,7 +116,9 @@ function ReadingsToolbar(props: ReadingsPanelProps & { selectedDevice: Device })
 }
 
 function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidden: HiddenSeries }) {
-  const { selectedDevice, environments, view, display, onSelectVariable, canReadTelemetry, readings, latest, hidden } = props;
+  const {
+    selectedDevice, environments, view, display, onSelectVariable, canReadTelemetry, readings, latest, current, hidden,
+  } = props;
 
   if (!canReadTelemetry) return <TelemetryPermissionNotice />;
   if (view === "environment" && environments.length === 0) {
@@ -131,7 +141,7 @@ function ReadingsBody(props: ReadingsPanelProps & { selectedDevice: Device; hidd
       )}
       {view === "device" && (
         <CurrentValuesStrip
-          {...latest}
+          {...current}
           selectedVariable={readings.variable?.code}
           onSelectVariable={onSelectVariable}
         />

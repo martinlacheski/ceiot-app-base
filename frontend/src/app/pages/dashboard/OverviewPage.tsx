@@ -99,9 +99,18 @@ export default function OverviewPage() {
   const telemetryEnabled = Boolean(deviceId && canReadTelemetry);
 
   // Same key prefixes as the device detail page so the live pulse patches the dashboard too.
+  // The records table is the only consumer of the latest rows: fetch them only while it is shown.
   const latestQuery = useQuery({
     queryKey: ["telemetry", "latest", deviceId, RECENT_READINGS_LIMIT],
     queryFn: () => environmentalSensorService.getLatest(deviceId!, RECENT_READINGS_LIMIT),
+    enabled: telemetryEnabled && view === "device" && display === "table",
+    placeholderData: keepPreviousData,
+    ...refreshOptions,
+  });
+  // Current values come from the Redis live state; the pulse patches this cache too.
+  const liveQuery = useQuery({
+    queryKey: ["telemetry", "live", deviceId],
+    queryFn: () => environmentalSensorService.getLive(deviceId!),
     enabled: telemetryEnabled,
     placeholderData: keepPreviousData,
     ...refreshOptions,
@@ -237,6 +246,7 @@ export default function OverviewPage() {
             canReadTelemetry={canReadTelemetry}
             readings={readings}
             latest={{ page: latestQuery.data, isLoading: latestQuery.isLoading, isError: latestQuery.isError }}
+            current={{ live: liveQuery.data, isLoading: liveQuery.isLoading, isError: liveQuery.isError }}
           />
         </div>
       </div>

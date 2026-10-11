@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
 import {
   isReadingValues,
   latestLimit,
   patchHistoryPage,
   patchLatestPage,
+  patchLiveState,
   ROLLING_RANGE_MS,
   rollingRangeOf,
 } from "./telemetryCachePatch";
@@ -233,5 +234,58 @@ describe("patchLatestPage", () => {
     expect(patchLatestPage(page([], 0), reading(), 2)).toEqual({ status: "patched", page: expect.any(Object) });
     expect(patchLatestPage({ items: [], total: 0, sensors: [] }, reading(), 2)).toEqual({ status: "invalidate" });
     expect(patchLatestPage(undefined, reading(), 2)).toEqual({ status: "unchanged" });
+  });
+});
+
+describe("patchLiveState", () => {
+  const bmp = { key: "bmp280", sensorCode: "BMP280", sensorName: "BMP280",
+    variables: [{ code: "pressure", name: "Presión", unit: "hPa" }] };
+  const live = (overrides: Partial<LiveTelemetry> = {}): LiveTelemetry => ({
+    source: "redis",
+    time: "2026-10-10T11:59:00Z",
+    values: { dht22: { temperature: 20, relative_humidity: 50 }, bmp280: { pressure: 1000 } },
+    health: { wifi_rssi: -60 },
+    presence: "online",
+    sensors: [...sensors, bmp],
+    ...overrides,
+  });
+
+  it("moves the time forward and merges the reading into the known values", () => {
+    const outcome = patchLiveState(live(), { time: "2026-10-10T12:00:00Z", values: { dht22: { temperature: 25 } } });
+
+    expect(outcome).toEqual({
+      status: "patched",
+      page: live({
+        time: "2026-10-10T12:00:00Z",
+        values: { dht22: { temperature: 25, relative_humidity: 50 }, bmp280: { pressure: 1000 } },
+      }),
+    });
+  });
+
+  it("starts from an empty state that had no reading yet", () => {
+    const outcome = patchLiveState(live({ time: null, values: {}, source: "database" }), reading());
+
+    expect(outcome.status).toBe("patched");
+    expect(outcome.status === "patched" && outcome.page.values).toEqual(reading().values);
+  });
+
+  it("ignores readings that are not newer than the cached state", () => {
+    expect(patchLiveState(live(), { time: "2026-10-10T11:59:00+00:00", values: { dht22: { temperature: 1 } } }))
+      .toEqual({ status: "unchanged" });
+    expect(patchLiveState(live(), { time: "2026-10-10T11:00:00Z", values: { dht22: { temperature: 1 } } }))
+      .toEqual({ status: "unchanged" });
+  });
+
+  it("does nothing without a cached state", () => {
+    expect(patchLiveState(undefined, reading())).toEqual({ status: "unchanged" });
+  });
+
+  it("refetches when the reading has an unknown sensor or variable, or an unreadable time", () => {
+    expect(patchLiveState(live(), { time: "2026-10-10T12:00:00Z", values: { bme680: { gas: 3 } } }))
+      .toEqual({ status: "invalidate" });
+    expect(patchLiveState(live(), { time: "2026-10-10T12:00:00Z", values: { dht22: { dew_point: 3 } } }))
+      .toEqual({ status: "invalidate" });
+    expect(patchLiveState(live(), { time: "not a time", values: { dht22: { temperature: 3 } } }))
+      .toEqual({ status: "invalidate" });
   });
 });

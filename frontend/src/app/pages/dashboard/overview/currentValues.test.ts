@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
-import { collectCurrentValues } from "./currentValues";
+import type { LiveTelemetry, TelemetryPage } from "@/app/types/environmentalSensor.types";
+import { collectCurrentValues, collectLiveValues, deviceHealth, wifiQuality } from "./currentValues";
 
 const TEMPERATURE = { code: "temperature", name: "Temperatura", unit: "°C" };
 const HUMIDITY = { code: "relative_humidity", name: "Humedad", unit: "%" };
@@ -42,5 +42,52 @@ describe("collectCurrentValues", () => {
       lastTime: undefined,
     });
     expect(collectCurrentValues(undefined)).toEqual({ values: [], lastTime: undefined });
+  });
+});
+
+describe("collectLiveValues", () => {
+  const live: LiveTelemetry = {
+    source: "redis",
+    time: "2026-10-10T12:30:00Z",
+    values: { dht22: { temperature: 23.4, relative_humidity: null } },
+    health: {},
+    presence: "online",
+    sensors: page.sensors,
+  };
+
+  it("reads every described sensor variable from the single live state", () => {
+    expect(collectLiveValues(live)).toEqual({
+      values: [
+        { id: "dht22:temperature", sensorName: "DHT22", variable: TEMPERATURE, value: 23.4 },
+        { id: "dht22:relative_humidity", sensorName: "DHT22", variable: HUMIDITY, value: null },
+        { id: "bmp280:temperature", sensorName: "BMP280", variable: TEMPERATURE, value: null },
+      ],
+      lastTime: "2026-10-10T12:30:00Z",
+    });
+  });
+
+  it("has no last time without a reading and handles a missing state", () => {
+    expect(collectLiveValues({ ...live, time: null, values: {}, sensors: [] })).toEqual({ values: [], lastTime: undefined });
+    expect(collectLiveValues(undefined)).toEqual({ values: [], lastTime: undefined });
+  });
+});
+
+describe("device health", () => {
+  it("labels the WiFi signal strength", () => {
+    expect(wifiQuality(-45)).toBe("Excelente");
+    expect(wifiQuality(-50)).toBe("Excelente");
+    expect(wifiQuality(-51)).toBe("Buena");
+    expect(wifiQuality(-60)).toBe("Buena");
+    expect(wifiQuality(-70)).toBe("Regular");
+    expect(wifiQuality(-71)).toBe("Débil");
+  });
+
+  it("keeps only the usable WiFi RSSI and firmware version", () => {
+    expect(deviceHealth({ wifi_rssi: -58, firmware_version: "1.4.2", uptime: 3600 })).toEqual({
+      wifi: { rssi: -58, quality: "Buena" },
+      firmware: "1.4.2",
+    });
+    expect(deviceHealth({ wifi_rssi: "bad", firmware_version: "" })).toEqual({});
+    expect(deviceHealth(undefined)).toEqual({});
   });
 });

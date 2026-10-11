@@ -46,6 +46,7 @@ describe("queryKeysForPulse", () => {
         ["devices", "detail", "dev-1"],
         ["device", "detail", "dev-1"],
         ["telemetry", "latest", "dev-1"],
+        ["telemetry", "live", "dev-1"],
         ["telemetry", "history", "dev-1"],
         ["telemetry", "daily", "dev-1"],
         ["telemetry", "detailed", "dev-1"],
@@ -136,6 +137,15 @@ describe("useLivePulse", () => {
     const historyKey = ["telemetry", "history", "dev-1", "24h"];
     const latestKey = ["telemetry", "latest", "dev-1", 10];
     const singleLatestKey = ["telemetry", "latest", "dev-1"];
+    const liveKey = ["telemetry", "live", "dev-1"];
+    const cachedLive = () => ({
+      source: "redis",
+      time: "2026-05-01T11:59:00+00:00",
+      values: { dht22: { temperature: 20 } },
+      health: { wifi_rssi: -61 },
+      presence: "online",
+      sensors,
+    });
     const times = (key: unknown[]) =>
       (queryClient.getQueryData(key) as { items: { time: string }[] }).items.map((entry) => entry.time);
 
@@ -144,6 +154,7 @@ describe("useLivePulse", () => {
       queryClient.setQueryData(historyKey, cachedPage());
       queryClient.setQueryData(latestKey, cachedPage());
       queryClient.setQueryData(singleLatestKey, cachedPage());
+      queryClient.setQueryData(liveKey, cachedLive());
     });
 
     const pulse = (pulseEvent: PulseEvent) => {
@@ -162,6 +173,24 @@ describe("useLivePulse", () => {
       expect(times(singleLatestKey)).toEqual(["2026-05-01T12:00:00+00:00"]);
       const keys = invalidatedKeys();
       expect(keys.some((key) => key[0] === "telemetry" && (key[1] === "history" || key[1] === "latest"))).toBe(false);
+    });
+
+    it("patches the cached live state of the device instead of refetching it", () => {
+      pulse(withValues());
+
+      expect(queryClient.getQueryData(liveKey)).toEqual({
+        ...cachedLive(),
+        time: "2026-05-01T12:00:00+00:00",
+        values: { dht22: { temperature: 21.5 } },
+      });
+      expect(invalidatedKeys()).not.toContainEqual(liveKey);
+    });
+
+    it("refetches the live state when the reading has a sensor it does not describe", () => {
+      pulse(withValues({ values: { bme280: { pressure: 1013 } } }));
+
+      expect(invalidatedKeys()).toContainEqual(liveKey);
+      expect(queryClient.getQueryData(liveKey)).toEqual(cachedLive());
     });
 
     it("refreshes the device lists (the report updates the device row) but not the establishments", () => {

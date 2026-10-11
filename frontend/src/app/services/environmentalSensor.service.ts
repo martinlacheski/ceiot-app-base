@@ -1,5 +1,11 @@
 import { appApi } from "@/api/appApi";
-import type { DailyTelemetry, DeviceSensor, SensorCatalogModel, TelemetryPage } from "../types/environmentalSensor.types";
+import type {
+  DailyTelemetry,
+  DeviceSensor,
+  LiveTelemetry,
+  SensorCatalogModel,
+  TelemetryPage,
+} from "../types/environmentalSensor.types";
 
 export interface DeviceSensorCreate {
   sensorId: string;
@@ -38,6 +44,11 @@ export const environmentalSensorService = {
     const params = new URLSearchParams();
     if (limit !== undefined) params.set("limit", String(limit));
     const { data } = await appApi.get<TelemetryPage>(`/devices/${deviceId}/telemetry/latest`, { params });
+    return data;
+  },
+  /** Current values and health of a device, from the Redis live cache (database fallback). */
+  async getLive(deviceId: string): Promise<LiveTelemetry> {
+    const { data } = await appApi.get<LiveTelemetry>(`/devices/${deviceId}/telemetry/live`);
     return data;
   },
   async getHistory(deviceId: string, start: string, end: string, page = 1, perPage = 1000): Promise<TelemetryPage> {

@@ -45,4 +45,11 @@ describe("environmentalSensorService", () => {
     expect(Object.fromEntries((vi.mocked(appApi.get).mock.calls[0][1] as { params: URLSearchParams }).params))
       .toEqual({ start: "s", end: "e", utc_offset_minutes: "-180" });
   });
+
+  it("reads the live state of a device (Redis, with database fallback)", async () => {
+    const live = { source: "redis", time: "t", values: {}, health: {}, presence: "online", sensors: [] };
+    vi.mocked(appApi.get).mockResolvedValue({ data: live });
+    await expect(environmentalSensorService.getLive("device-1")).resolves.toEqual(live);
+    expect(appApi.get).toHaveBeenCalledWith("/devices/device-1/telemetry/live");
+  });
 });

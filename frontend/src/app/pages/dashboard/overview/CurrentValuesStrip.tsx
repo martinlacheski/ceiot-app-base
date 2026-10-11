@@ -2,13 +2,14 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 import { formatTelemetryValue } from "@/app/components/devices/historyTelemetryColumns";
-import type { TelemetryPage } from "@/app/types/environmentalSensor.types";
+import type { LiveTelemetry } from "@/app/types/environmentalSensor.types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { collectCurrentValues } from "./currentValues";
+import { collectLiveValues, deviceHealth } from "./currentValues";
 
 interface CurrentValuesStripProps {
-  page?: TelemetryPage;
+  /** Live state of the device (Redis cache, database fallback). */
+  live?: LiveTelemetry;
   isLoading: boolean;
   isError: boolean;
   selectedVariable?: string;
@@ -21,16 +22,17 @@ function lastReadingLabel(time: string): string {
   return `Última lectura ${formatDistanceToNow(date, { addSuffix: true, locale: es })}`;
 }
 
-/** Latest value of every sensor variable as one wrapping row of small items. */
-export function CurrentValuesStrip({ page, isLoading, isError, selectedVariable, onSelectVariable }: CurrentValuesStripProps) {
+/** Latest value of every sensor variable, plus compact device health, as one wrapping row of small items. */
+export function CurrentValuesStrip({ live, isLoading, isError, selectedVariable, onSelectVariable }: CurrentValuesStripProps) {
   if (isLoading) return <Skeleton aria-label="Cargando valores actuales" className="h-8 w-full max-w-md" />;
-  if (isError && !page) {
+  if (isError && !live) {
     return <p role="alert" className="text-sm text-destructive">No se pudieron cargar los valores actuales.</p>;
   }
 
-  const { values, lastTime } = collectCurrentValues(page);
+  const { values, lastTime } = collectLiveValues(live);
   if (values.length === 0) return null;
-  const showSensor = (page?.sensors.length ?? 0) > 1;
+  const showSensor = (live?.sensors.length ?? 0) > 1;
+  const { wifi, firmware } = deviceHealth(live?.health);
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -57,6 +59,12 @@ export function CurrentValuesStrip({ page, isLoading, isError, selectedVariable,
         ))}
       </ul>
       {lastTime && <p className="text-xs text-muted-foreground">{lastReadingLabel(lastTime)}</p>}
+      {(wifi || firmware) && (
+        <ul aria-label="Estado del dispositivo" className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {wifi && <li title={`Señal WiFi: ${wifi.rssi} dBm`}>WiFi {wifi.quality}</li>}
+          {firmware && <li>Firmware {firmware}</li>}
+        </ul>
+      )}
     </div>
   );
 }
