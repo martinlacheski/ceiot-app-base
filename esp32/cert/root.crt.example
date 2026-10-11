@@ -1,0 +1,3 @@
+-----BEGIN CERTIFICATE-----
+PLACEHOLDER: project CA certificate (mqtt/pki/ca/ca.crt, created by mqtt/pki/crear-ca.sh), copied here as root.crt by provisioning/provision.py prepare
+-----END CERTIFICATE-----

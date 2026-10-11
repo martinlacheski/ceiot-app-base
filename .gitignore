@@ -15,14 +15,25 @@ odd/
 *.crt
 *.csr
 *.srl
-mqtt/certs/
-mqtt/data/
-mqtt/log/
-mqtt/pki/ca/
-mqtt/pki/devices/
-redis/data/
-seaweedfs/data/
-esp32/cert/
+# Generated certificates, keys and service data: the folders are versioned
+# (placeholders *.example and .gitkeep) so a fresh clone has the layout, but
+# their real contents never are.
+mqtt/certs/*
+!mqtt/certs/*.example
+mqtt/data/*
+!mqtt/data/.gitkeep
+mqtt/log/*
+!mqtt/log/.gitkeep
+mqtt/pki/ca/*
+!mqtt/pki/ca/.gitkeep
+mqtt/pki/devices/*
+!mqtt/pki/devices/.gitkeep
+redis/data/*
+!redis/data/.gitkeep
+seaweedfs/data/*
+!seaweedfs/data/.gitkeep
+esp32/cert/*
+!esp32/cert/*.example
 provisioning/build/
 provisioning/.env.local
 backend/postgres_data/

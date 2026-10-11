@@ -1,0 +1,3 @@
+-----BEGIN CERTIFICATE-----
+PLACEHOLDER: EMQX broker server certificate (CN = emqx, SAN emqx/localhost/127.0.0.1 plus LAN_BIND_IP), issued here by mqtt/pki/emitir-certificado-broker.sh
+-----END CERTIFICATE-----

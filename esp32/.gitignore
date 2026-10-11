@@ -17,5 +17,7 @@ sdkconfig.old
 .DS_Store
 Thumbs.db
 
-# Device mTLS material (never commit keys)
-cert/
+# Device mTLS material (never commit keys); only the *.example placeholders
+# are versioned.
+cert/*
+!cert/*.example

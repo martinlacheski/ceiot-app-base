@@ -1,0 +1,3 @@
+-----BEGIN CERTIFICATE-----
+PLACEHOLDER: device certificate with CN = <SERIAL> (mqtt/pki/devices/<SERIAL>/client.crt, issued by mqtt/pki/emitir-certificado-dispositivo.sh), copied here by provisioning/provision.py prepare
+-----END CERTIFICATE-----

@@ -1,0 +1,6 @@
+{
+  "mqtt_uri": "192.168.1.50",
+  "mqtt_port": "8883",
+  "mqtt_use_tls": "1",
+  "sensor": "auto"
+}

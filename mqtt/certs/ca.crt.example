@@ -1,0 +1,3 @@
+-----BEGIN CERTIFICATE-----
+PLACEHOLDER: project CA certificate (copy of mqtt/pki/ca/ca.crt), installed here by mqtt/pki/emitir-certificado-broker.sh
+-----END CERTIFICATE-----
