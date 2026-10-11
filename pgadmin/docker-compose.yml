@@ -1,5 +1,5 @@
 services:
-  # Dev-only database explorer (profile "tools"; not part of the default stack).
+  # Dev-only database explorer (no profile: starts with the default stack).
   # Loopback only. Login comes from pgadmin/.env (PGADMIN_DEFAULT_EMAIL /
   # PGADMIN_DEFAULT_PASSWORD): the image refuses to start without them, so
   # there is no weak default. The wrapper renders the preconfigured server and
