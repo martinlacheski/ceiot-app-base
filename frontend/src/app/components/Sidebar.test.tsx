@@ -13,15 +13,46 @@ describe("Sidebar", () => {
     vi.clearAllMocks();
   });
 
-  it("shows Sensores and Variables as top-level entries, outside Ajustes, to catalog readers", () => {
+  it("groups Tipos de dispositivo, Sensores and Variables inside Ajustes for catalog readers", async () => {
+    const user = userEvent.setup();
     const state = { user: { id: "a1", fullName: "Admin", permissions: ["sensor_catalog:read"] }, logout: vi.fn(), isAdmin: () => true };
     vi.mocked(useAuthStore).mockImplementation((selector) => typeof selector === "function" ? selector(state as never) : state as never);
     render(<MemoryRouter><Sidebar isCollapsed={false} onToggle={() => {}} /></MemoryRouter>);
-    // Visible without opening "Ajustes": they are root entries of the sidebar.
+
+    // Hidden while "Ajustes" is collapsed: they are no longer root entries.
+    expect(screen.queryByRole("link", { name: "Tipos de dispositivo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sensores" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Variables" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Firmwares" })).toHaveAttribute("href", "/admin/firmware");
+
+    await user.click(screen.getByRole("button", { name: /Ajustes/i }));
+
+    expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toHaveAttribute("href", "/admin/device-types");
     expect(screen.getByRole("link", { name: "Sensores" })).toHaveAttribute("href", "/admin/sensors");
     expect(screen.getByRole("link", { name: "Variables" })).toHaveAttribute("href", "/admin/variables");
-    expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toHaveAttribute("href", "/admin/device-types");
-    expect(screen.getByRole("link", { name: "Firmwares" })).toHaveAttribute("href", "/admin/firmware");
+    const settingsLinks = within(screen.getByRole("navigation"))
+      .getAllByRole("link")
+      .map((link) => link.textContent);
+    const start = settingsLinks.findIndex((label) => label?.includes("Tipos de Establecimientos"));
+    expect(settingsLinks.slice(start, start + 4)).toEqual([
+      expect.stringContaining("Tipos de Establecimientos"),
+      expect.stringContaining("Tipos de dispositivo"),
+      expect.stringContaining("Sensores"),
+      expect.stringContaining("Variables"),
+    ]);
+  });
+
+  it("keeps Sensores and Variables out of Ajustes without the catalog permission", async () => {
+    const user = userEvent.setup();
+    const state = { user: { id: "a1", fullName: "Admin", permissions: [] }, logout: vi.fn(), isAdmin: () => true };
+    vi.mocked(useAuthStore).mockImplementation((selector) => typeof selector === "function" ? selector(state as never) : state as never);
+    render(<MemoryRouter><Sidebar isCollapsed={false} onToggle={() => {}} /></MemoryRouter>);
+
+    await user.click(screen.getByRole("button", { name: /Ajustes/i }));
+
+    expect(screen.getByRole("link", { name: "Tipos de dispositivo" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Sensores" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Variables" })).not.toBeInTheDocument();
   });
 
   it("pone Mapa inmediatamente después de Inicio para un usuario común", () => {
@@ -154,7 +185,7 @@ describe("Sidebar", () => {
     const links = within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent);
-    expect(links.slice(0, 12)).toEqual([
+    expect(links.slice(0, 11)).toEqual([
       expect.stringContaining("Inicio"),
       expect.stringContaining("Mapa"),
       expect.stringContaining("Mi perfil"),
@@ -162,7 +193,6 @@ describe("Sidebar", () => {
       expect.stringContaining("Dispositivos"),
       expect.stringContaining("Vista de dispositivos"),
       expect.stringContaining("Historial de dispositivos"),
-      expect.stringContaining("Tipos de dispositivo"),
       expect.stringContaining("Documentos"),
       expect.stringContaining("Emuladores"),
       expect.stringContaining("Firmwares"),

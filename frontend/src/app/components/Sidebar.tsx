@@ -96,13 +96,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             to: "/app/devices",
           },
           { icon: History, label: "Historial de dispositivos", to: "/app/devices/history" },
-          { icon: CircuitBoard, label: "Tipos de dispositivo", to: "/admin/device-types" },
-          ...(user?.permissions?.includes("sensor_catalog:read")
-            ? [
-                { icon: Cpu, label: "Sensores", to: "/admin/sensors" },
-                { icon: Gauge, label: "Variables", to: "/admin/variables" },
-              ]
-            : []),
           { icon: FileText, label: "Documentos", to: "/admin/documents" },
           { icon: Radio, label: "Emuladores", to: "/admin/emulator" },
           { icon: HardDriveDownload, label: "Firmwares", to: "/admin/firmware" },
@@ -132,6 +125,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 label: "Tipos de Establecimientos",
                 to: "/admin/environments/types",
               },
+              { icon: CircuitBoard, label: "Tipos de dispositivo", to: "/admin/device-types" },
+              ...(user?.permissions?.includes("sensor_catalog:read")
+                ? [
+                    { icon: Cpu, label: "Sensores", to: "/admin/sensors" },
+                    { icon: Gauge, label: "Variables", to: "/admin/variables" },
+                  ]
+                : []),
               {
                 icon: MapPin,
                 label: "Localización",
