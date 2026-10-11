@@ -44,13 +44,13 @@ Cada componente mantiene su configuración en su propio archivo `.env`:
 
 | Servicio | Puerto en tu máquina | Destino dentro de Docker |
 | --- | ---: | --- |
-| Frontend | `15173` | `frontend:80` |
-| Landing | `14321` | `landing:80` |
-| Backend | `18000` | `backend:8000` |
-| PostgreSQL | `15432` | `postgresql:5432` |
-| MQTT TCP | `11883` | `emqx:1883` |
-| MQTT TLS | `18883` | `emqx:8883` |
-| MQTT WebSocket | `28083` | `emqx:8083` |
+| Frontend | `5173` | `frontend:80` |
+| Landing | `4321` | `landing:80` |
+| Backend | `8000` | `backend:8000` |
+| PostgreSQL | `5432` | `postgresql:5432` |
+| MQTT TCP | `1883` | `emqx:1883` |
+| MQTT TLS | `8883` | `emqx:8883` |
+| MQTT WebSocket | `8083` | `emqx:8083` |
 
 Los contenedores se conectan a `postgresql:5432` y `emqx:1883`; los puertos
 publicados se usan solamente para conectarte desde tu máquina. Compose arma las
