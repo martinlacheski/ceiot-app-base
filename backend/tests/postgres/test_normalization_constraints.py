@@ -99,8 +99,8 @@ async def test_insert_trigger_resolves_device_id_from_serial_and_keeps_orphans_n
         ids = await _seed_hierarchy(connection, suffix)
         type_id = await connection.scalar(text("SELECT id FROM device_type LIMIT 1"))
         await connection.execute(
-            text("INSERT INTO device (id, serial, name, status, is_active, enabled, broker_connected, device_type_id, environment_id) "
-                 "VALUES (:id, :s, 'n', 'PAIRED', true, true, false, :t, :e)"),
+            text("INSERT INTO device (id, serial, name, status, is_active, enabled, device_type_id, environment_id) "
+                 "VALUES (:id, :s, 'n', 'PAIRED', true, true, :t, :e)"),
             {"id": ids["device"], "s": serial, "t": type_id, "e": ids["env"]},
         )
         for who in (serial, f"IOT-ORPHAN-{suffix}"):

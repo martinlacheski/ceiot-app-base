@@ -22,7 +22,7 @@ from app.api.tax.identification_type.models import IdentificationType  # noqa: F
 from app.api.environment.environment.models import Environment, EnvironmentUser  # noqa: F401
 from app.api.environment.environment_type.models import EnvironmentType  # noqa: F401
 from app.api.device.device_type.models import DeviceTypeCatalog  # noqa: F401
-from app.api.device.models import Device, DeviceLocationReport  # noqa: F401
+from app.api.device.models import Device, DeviceLocationReport, DeviceState  # noqa: F401
 from app.api.device.operations.models import DeviceOperation  # noqa: F401
 from app.api.sensor.models import SensorReading, Telemetry  # noqa: F401
 from app.api.sensor_catalog.models import Variable, Sensor, SensorVariable, DeviceSensor  # noqa: F401

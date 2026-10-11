@@ -260,7 +260,6 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
         status=DeviceStatus.PAIRED,
         is_active=True,
         enabled=True,
-        broker_connected=False,
     )
     active_device_two = Device(
         serial="SERIAL-002",
@@ -269,7 +268,6 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
         status=DeviceStatus.ACTIVE,
         is_active=True,
         enabled=True,
-        broker_connected=False,
     )
     maintenance_device = Device(
         serial="SERIAL-003",
@@ -278,7 +276,6 @@ def test_public_map_locations_returns_sanitized_establishment_projection(client:
         status=DeviceStatus.MAINTENANCE,
         is_active=True,
         enabled=True,
-        broker_connected=True,
     )
 
     session.add(country)
@@ -379,7 +376,6 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
             status=DeviceStatus.ACTIVE,
             is_active=True,
             enabled=True,
-            broker_connected=False,
         )
     )
     session.add(
@@ -390,7 +386,6 @@ def test_public_map_locations_filters_non_public_ready_records(client: TestClien
             status=DeviceStatus.MAINTENANCE,
             is_active=True,
             enabled=True,
-            broker_connected=True,
         )
     )
     session.add(

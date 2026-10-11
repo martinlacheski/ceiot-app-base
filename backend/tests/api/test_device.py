@@ -11,7 +11,7 @@ from app.api.device.device_type.constants import (
 )
 from app.api.device.device_type.models import DeviceTypeCatalog
 from app.api.device.service import DeviceService
-from app.api.device.models import Device, DeviceStatus
+from app.api.device.models import Device, DeviceState, DeviceStatus
 from app.api.device.repository import DeviceRepository
 from app.api.sensor_catalog.models import Sensor
 from app.api.auth.models import User
@@ -503,8 +503,7 @@ def test_device_detail_returns_nullable_mac_and_gps_fields(
         status=DeviceStatus.NEW,
         is_active=True,
         mac_address="AA:BB:CC:DD:EE:FF",
-        gps_latitude=-27.362137,
-        gps_longitude=-55.900874,
+        state=DeviceState(gps_latitude=-27.362137, gps_longitude=-55.900874),
     )
     session.add(device)
     session.commit()

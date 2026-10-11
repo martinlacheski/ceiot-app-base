@@ -80,10 +80,13 @@ async def world(postgres_rls_config) -> AsyncIterator[World]:
         dtype = (await c.execute(text("SELECT id FROM device_type WHERE code = 'environmental'"))).scalar_one()
         for dev, env, serial in (("dev_a", "env_a", f"AIA-{sfx}"), ("dev_b", "env_b", f"AIB-{sfx}")):
             await c.execute(text(
-                "INSERT INTO device (id, serial, name, status, is_active, enabled, broker_connected, environment_id, device_type_id, "
-                "ip_address, mac_address, wifi_ssid, gps_latitude, gps_longitude) "
-                "VALUES (:i, :s, :n, 'ACTIVE', true, true, false, :e, :t, '10.9.9.9', 'AA:BB', 'SECRET-WIFI', -32.9, -60.6)"),
+                "INSERT INTO device (id, serial, name, status, is_active, enabled, environment_id, device_type_id, "
+                "mac_address) VALUES (:i, :s, :n, 'ACTIVE', true, true, :e, :t, 'AA:BB')"),
                 {"i": ids[dev], "s": serial, "n": f"Equipo {serial}", "e": ids[env], "t": dtype})
+            await c.execute(text(
+                "INSERT INTO device_state (device_id, broker_connected, last_connection, ip_address, wifi_ssid, "
+                "gps_latitude, gps_longitude) VALUES (:i, true, :t, '10.9.9.9', 'SECRET-WIFI', -32.9, -60.6)"),
+                {"i": ids[dev], "t": NOW})
         dht22 = (await c.execute(text("SELECT id FROM sensor WHERE code = 'dht22'"))).scalar_one()
         for dev, key in (("dev_a", "dht22_1"), ("dev_b", "dht22_1")):
             await c.execute(text("INSERT INTO device_sensor (id, device_id, sensor_id, key) VALUES (:i, :d, :s, :k)"),
@@ -155,6 +158,8 @@ async def test_view_resolves_names_and_units_without_leaking_sensitive_columns(r
     assert set(environments.columns) == set(VIEWS["environments"])  # no address/phone/coordinates
     devices = await _rows(engine, world.owner_a, "SELECT * FROM ai_read.devices LIMIT 10")
     assert set(devices.columns) == set(VIEWS["devices"])
+    # online / last_connection come from device_state (migration 0025).
+    assert [(r["online"], r["last_connection"]) for r in devices.rows] == [(True, NOW)]
     assert not any("SECRET" in str(v) or "10.9.9.9" in str(v) for r in devices.rows + environments.rows for v in r.values())
 
 

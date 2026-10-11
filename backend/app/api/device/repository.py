@@ -3,7 +3,9 @@ from typing import Optional, Dict, Any, List, Literal
 import uuid
 from datetime import date, datetime
 from sqlalchemy import String, and_, case, cast, false, func, literal, or_, update
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import select
@@ -24,6 +26,7 @@ from app.api.device.models import (
     Device,
     DeviceCreate,
     DeviceLocationReport,
+    DeviceState,
     DeviceUpdate,
     DeviceStatus,
     normalize_model_override,
@@ -151,7 +154,7 @@ class DeviceRepository:
             selectinload(Device.environment).selectinload(Environment.type),
             selectinload(Device.environment).selectinload(Environment.city).selectinload(
                 LocationCity.state).selectinload(LocationState.country)
-        )
+        ).outerjoin(DeviceState, DeviceState.device_id == Device.id)  # 1:1, never multiplies rows
 
         if is_active is not None:
             query = query.where(Device.is_active == is_active)
@@ -265,11 +268,11 @@ class DeviceRepository:
             )
             effective_location = case(
                 (
-                    Device.gps_latitude.is_not(None)
-                    & Device.gps_longitude.is_not(None),
-                    cast(Device.gps_latitude, String)
+                    DeviceState.gps_latitude.is_not(None)
+                    & DeviceState.gps_longitude.is_not(None),
+                    cast(DeviceState.gps_latitude, String)
                     + literal(",")
-                    + cast(Device.gps_longitude, String),
+                    + cast(DeviceState.gps_longitude, String),
                 ),
                 else_=Environment.location,
             )
@@ -311,17 +314,17 @@ class DeviceRepository:
                 else_=Device.description,
             )
             displayed_last_connection = case(
-                (Device.last_connection.is_(None), "Nunca"),
+                (DeviceState.last_connection.is_(None), "Nunca"),
                 else_=formatted_datetime(
-                    Device.last_connection,
+                    DeviceState.last_connection,
                     utc_offset_minutes,
                     timezone_aware=True,
                 ),
             )
             mobile_last_connection = case(
-                (Device.last_connection.is_(None), "Sin registros"),
+                (DeviceState.last_connection.is_(None), "Sin registros"),
                 else_=formatted_datetime(
-                    Device.last_connection,
+                    DeviceState.last_connection,
                     utc_offset_minutes,
                     timezone_aware=True,
                 ),
@@ -408,7 +411,7 @@ class DeviceRepository:
             "status": Device.status,
             "enabled": Device.enabled,
             "isActive": Device.is_active,
-            "lastConnection": Device.last_connection,
+            "lastConnection": DeviceState.last_connection,
         }
         if sort_by == "brokerConnected":
             if connected_serials is None:
@@ -650,21 +653,22 @@ class DeviceRepository:
         result = await self.session.exec(statement)
         return result.all()
 
-    async def update_last_connection(self, device_id: uuid.UUID) -> None:
-        """Actualiza last_connection al timestamp actual"""
+    async def _upsert_state(self, db_device: Device, values: Dict[str, Any]) -> DeviceState:
+        """Write runtime state with ``INSERT ... ON CONFLICT (device_id) DO UPDATE``.
 
-        statement = select(Device).where(Device.id == device_id)
-        result = await self.session.exec(statement)
-        device = result.first()
-        if device:
-            device.last_connection = utc_now()
-            # Si estaba NEW o UNPAIRED y se conecta, quizás cambia a ACTIVE?
-            # (Solo si está paired, pero eso es lógica de negocio más compleja. Por ahora solo timestamp)
-            if device.status == DeviceStatus.PAIRED:
-                device.status = DeviceStatus.ACTIVE
-
-            self.session.add(device)
-            await self.session.commit()
+        Only ``device_state`` is written (never the device row), and concurrent first reports
+        of the same device cannot collide. The returned row also becomes ``db_device.state``.
+        """
+        values = {**values, "updated_at": utc_now()}
+        dialect = self.session.get_bind().dialect.name
+        insert = postgresql.insert if dialect == "postgresql" else sqlite.insert
+        statement = insert(DeviceState).values(device_id=db_device.id, **values)
+        statement = statement.on_conflict_do_update(
+            index_elements=[DeviceState.device_id], set_=values
+        ).returning(DeviceState).execution_options(populate_existing=True)
+        state = (await self.session.exec(statement)).scalar_one()
+        set_committed_value(db_device, "state", state)
+        return state
 
     async def update_broker_presence(self, serial: str, is_connected: bool) -> Device | None:
         normalized = DeviceService.normalize_serial(serial)
@@ -675,14 +679,9 @@ class DeviceRepository:
             return None
 
         now = utc_now()
-        device.broker_connected = is_connected
-        device.broker_status_updated_at = now
-        if is_connected:
-            device.broker_connected_at = now
-        else:
-            device.broker_disconnected_at = now
-
-        self.session.add(device)
+        values: Dict[str, Any] = {"broker_connected": is_connected, "broker_status_updated_at": now}
+        values["broker_connected_at" if is_connected else "broker_disconnected_at"] = now
+        await self._upsert_state(device, values)
         await self.session.commit()
         return device
 
@@ -701,26 +700,35 @@ class DeviceRepository:
         gps_updated_at: Optional[datetime] = None,
         touch_last_connection: bool = True,
     ) -> None:
+        """Record one runtime report: the volatile values go to ``device_state``.
+
+        The device row only changes on real changes of the device itself, which bump its
+        ``updated_at``: a new MAC address, or the PAIRED -> ACTIVE transition of the first
+        report after pairing.
+        """
         now = utc_now()
 
-        if mac_address:
+        if mac_address and db_device.mac_address != mac_address:
             db_device.mac_address = mac_address
 
+        values: Dict[str, Any] = {}
         if firmware_version:
-            db_device.firmware_version = firmware_version
+            values["firmware_version"] = firmware_version
         if ip_address:
-            db_device.ip_address = ip_address
+            values["ip_address"] = ip_address
         if rssi is not None:
-            db_device.rssi = rssi
+            values["rssi"] = rssi
         if wifi_ssid:
-            db_device.wifi_ssid = wifi_ssid
+            values["wifi_ssid"] = wifi_ssid
         if last_reset_reason:
-            db_device.last_reset_reason = last_reset_reason
+            values["last_reset_reason"] = last_reset_reason
 
         if gps_latitude is not None and gps_longitude is not None:
-            db_device.gps_latitude = gps_latitude
-            db_device.gps_longitude = gps_longitude
-            db_device.gps_updated_at = gps_updated_at or now
+            values.update(
+                gps_latitude=gps_latitude,
+                gps_longitude=gps_longitude,
+                gps_updated_at=gps_updated_at or now,
+            )
             self.session.add(
                 DeviceLocationReport(
                     device_id=db_device.id,
@@ -731,9 +739,11 @@ class DeviceRepository:
             )
 
         if touch_last_connection:
-            db_device.last_connection = now
+            values["last_connection"] = now
             if db_device.status == DeviceStatus.PAIRED:
                 db_device.status = DeviceStatus.ACTIVE
 
+        if values:
+            await self._upsert_state(db_device, values)
         self.session.add(db_device)
         await self.session.commit()

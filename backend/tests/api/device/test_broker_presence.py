@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.api.auth.models import User
-from app.api.device.models import Device
+from app.api.device.models import Device, DeviceState
 from app.core.emqx_presence import PresenceSnapshot, get_emqx_presence_client
 from app.core.security import create_access_token
 from app.main import app
@@ -22,8 +22,8 @@ def test_list_and_detail_report_live_presence_and_unavailable(
     session.commit()
     serials = ["IOT-0000-0011", "IOT-0000-0012"]
     devices = [
-        Device(serial=serials[0], name="Presence online", broker_connected=False),
-        Device(serial=serials[1], name="Presence offline", broker_connected=True),
+        Device(serial=serials[0], name="Presence online", state=DeviceState(broker_connected=False)),
+        Device(serial=serials[1], name="Presence offline", state=DeviceState(broker_connected=True)),
     ]
     session.add_all(devices)
     session.commit()

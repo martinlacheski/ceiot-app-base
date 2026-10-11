@@ -31,7 +31,7 @@ def test_every_model_datetime_column_is_timezone_aware() -> None:
 
 def test_converted_columns_use_the_aware_utc_type() -> None:
     columns = {(table, column): kind for table, column, kind in _datetime_columns()}
-    for key in (("user", "last_seen_at"), ("device", "last_connection"),
+    for key in (("user", "last_seen_at"), ("device_state", "last_connection"),
                 ("scoped_guest_relation", "access_starts_at"), ("firmware_update", "download_expires_at")):
         assert key in columns, key
     assert isinstance(User.__table__.c["last_seen_at"].type, UTCDateTime)

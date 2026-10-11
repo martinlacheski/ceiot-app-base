@@ -10,7 +10,7 @@ from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.device.firmware.models import FirmwareRelease, FirmwareUpdate
-from app.api.device.models import Device
+from app.api.device.models import Device, DeviceState
 from app.api.device.operations.models import DeviceOperation
 from app.api.device.service import DeviceService
 from app.core.security import create_access_token
@@ -78,8 +78,7 @@ def seed_device(session: Session, *, online: bool = True, firmware_version: str 
     device = Device(
         serial=DeviceService.generate_serial(),
         name="Sensor",
-        broker_connected=online,
-        firmware_version=firmware_version,
+        state=DeviceState(broker_connected=online, firmware_version=firmware_version),
     )
     session.add(device)
     session.commit()

@@ -16,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.auth.models import User
 from app.api.device.device_type.models import DeviceTypeCatalog
-from app.api.device.models import Device, DeviceStatus
+from app.api.device.models import Device, DeviceState, DeviceStatus
 from app.api.device.operations.models import (
     DeviceOperation,
     DeviceOperationStatus,
@@ -127,9 +127,11 @@ async def search_graph(postgres_rls_config) -> AsyncIterator[SearchGraph]:
         status=DeviceStatus.MAINTENANCE,
         enabled=False,
         is_active=False,
-        gps_latitude=12.345678,
-        gps_longitude=-76.54321,
-        last_connection=datetime(2026, 1, 2, 2, 30),
+        state=DeviceState(
+            gps_latitude=12.345678,
+            gps_longitude=-76.54321,
+            last_connection=datetime(2026, 1, 2, 2, 30),
+        ),
         environment_id=environment.id,
         device_type_id=device_type.id,
     )

@@ -4,7 +4,7 @@ from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from pydantic import AliasChoices, Field as PydanticField
-from sqlalchemy import Column, DateTime
+from sqlalchemy import Column, DateTime, false
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.api.device.device_type.constants import (
     DEFAULT_DEVICE_TYPE_ID,
@@ -40,26 +40,52 @@ class DeviceBase(SQLModel):
     # Read it through ``effective_model`` (or ``effective_model_expression()`` in SQL).
     model: Optional[str] = Field(default=None)
     batch: Optional[str] = Field(default=None)
+    # Identifies the hardware unit (reported by the device, but not volatile state).
+    mac_address: Optional[str] = Field(default=None)
+    manufacture_date: Optional[date] = Field(default=None)
+    status: DeviceStatus = Field(default=DeviceStatus.NEW)
+    is_active: bool = Field(default=True)
+    enabled: bool = Field(default=True)
+    environment_id: Optional[uuid.UUID] = Field(
+        default=None, foreign_key="environment.id")
+
+
+class DeviceState(SQLModel, table=True):
+    """Last-known runtime state of a device (1:1), upserted by the MQTT runtime.
+
+    Kept out of ``device`` so the per-message runtime writes never touch the device row
+    (``device.updated_at`` only moves on real edits). A device that never reported has no row:
+    readers go through ``Device``'s read-only properties, which fall back to NULL / False.
+    """
+
+    __tablename__ = "device_state"
+
+    device_id: uuid.UUID = Field(foreign_key="device.id", primary_key=True, ondelete="CASCADE")
     firmware_version: Optional[str] = Field(default=None)
     ip_address: Optional[str] = Field(default=None)
-    mac_address: Optional[str] = Field(default=None)
     rssi: Optional[int] = Field(default=None)
     wifi_ssid: Optional[str] = Field(default=None)
     last_reset_reason: Optional[str] = Field(default=None)
     gps_latitude: Optional[float] = Field(default=None)
     gps_longitude: Optional[float] = Field(default=None)
     gps_updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
-    manufacture_date: Optional[date] = Field(default=None)
-    status: DeviceStatus = Field(default=DeviceStatus.NEW)
-    is_active: bool = Field(default=True)
-    enabled: bool = Field(default=True)
     last_connection: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
-    broker_connected: bool = Field(default=False)
+    broker_connected: bool = Field(default=False, sa_column_kwargs={"server_default": false()})
     broker_connected_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     broker_disconnected_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     broker_status_updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
-    environment_id: Optional[uuid.UUID] = Field(
-        default=None, foreign_key="environment.id")
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
+
+
+def _state_property(name: str, default=None) -> property:
+    """A read-only ``Device`` attribute backed by its ``DeviceState`` column (``default`` when
+    the device never reported). Writers go through ``DeviceRepository`` upserts."""
+
+    def read(device: "Device"):
+        state = device.state
+        return default if state is None else getattr(state, name)
+
+    return property(read, doc=f"``device_state.{name}`` (read-only).")
 
 
 class Device(DeviceBase, table=True):
@@ -83,6 +109,30 @@ class Device(DeviceBase, table=True):
     location_reports: List["DeviceLocationReport"] = Relationship(
         sa_relationship_kwargs={"lazy": "noload"}, back_populates="device"
     )
+    # Loaded with every device (selectin: one extra query per load, no outer join on the device
+    # query, so pagination counts and FOR UPDATE stay unaffected). The database cascades deletes.
+    state: Optional[DeviceState] = Relationship(
+        sa_relationship_kwargs={
+            "lazy": "selectin",
+            "uselist": False,
+            "cascade": "all, delete-orphan",
+            "passive_deletes": True,
+        }
+    )
+
+    firmware_version = _state_property("firmware_version")
+    ip_address = _state_property("ip_address")
+    rssi = _state_property("rssi")
+    wifi_ssid = _state_property("wifi_ssid")
+    last_reset_reason = _state_property("last_reset_reason")
+    gps_latitude = _state_property("gps_latitude")
+    gps_longitude = _state_property("gps_longitude")
+    gps_updated_at = _state_property("gps_updated_at")
+    last_connection = _state_property("last_connection")
+    broker_connected = _state_property("broker_connected", False)
+    broker_connected_at = _state_property("broker_connected_at")
+    broker_disconnected_at = _state_property("broker_disconnected_at")
+    broker_status_updated_at = _state_property("broker_status_updated_at")
 
     @property
     def effective_model(self) -> Optional[str]:

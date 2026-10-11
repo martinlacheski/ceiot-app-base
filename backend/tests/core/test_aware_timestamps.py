@@ -12,13 +12,14 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from app.api.access.service import GuestAccessService
 from app.api.auth.models import User
 from app.api.auth.service import AuthService
 from app.api.device.firmware.models import FirmwareRelease, FirmwareUpdate
 from app.api.device.firmware.service import FirmwareService
-from app.api.device.models import Device, DeviceStatus
+from app.api.device.models import Device, DeviceLocationReport, DeviceStatus
 from app.api.device.repository import DeviceRepository
 from app.core.dependencies import _touch_last_seen
 from app.core.mqtt.handlers import _parse_reported_at
@@ -144,36 +145,31 @@ def test_reported_gps_time_is_parsed_as_aware_utc():
 
 
 @pytest.mark.asyncio
-async def test_runtime_report_writes_aware_utc_timestamps():
-    device = Device(id=uuid.uuid4(), serial="SER-1", name="d", status=DeviceStatus.PAIRED)
-    session = _FakeSession()
+async def test_runtime_report_writes_aware_utc_timestamps(session, async_session):
+    seeded = Device(id=uuid.uuid4(), serial="IOT-AWAR-0001", name="d", status=DeviceStatus.PAIRED)
+    session.add(seeded)
+    session.commit()
+    repository = DeviceRepository(async_session)
+    device = await repository.get_by_serial(seeded.serial)
 
-    await DeviceRepository(session).register_runtime_report(device, gps_latitude=1.0, gps_longitude=2.0)
+    await repository.register_runtime_report(device, gps_latitude=1.0, gps_longitude=2.0)
 
     assert _aware_utc(device.last_connection)
     assert _aware_utc(device.gps_updated_at)
-    report = next(item for item in session.added if item is not device)
+    assert _aware_utc(device.state.updated_at)
+    report = (await async_session.exec(
+        select(DeviceLocationReport).where(DeviceLocationReport.device_id == device.id))).one()
     assert _aware_utc(report.reported_at) and _aware_utc(report.created_at)
 
 
 @pytest.mark.asyncio
-async def test_broker_presence_writes_aware_utc_timestamps():
-    device = Device(id=uuid.uuid4(), serial="SER-1", name="d")
-    session = _FakeSession(first=device)
+async def test_broker_presence_writes_aware_utc_timestamps(session, async_session):
+    session.add(Device(id=uuid.uuid4(), serial="IOT-AWAR-0002", name="d"))
+    session.commit()
 
-    await DeviceRepository(session).update_broker_presence("SER-1", True)
+    device = await DeviceRepository(async_session).update_broker_presence("IOT-AWAR-0002", True)
 
     assert _aware_utc(device.broker_status_updated_at) and _aware_utc(device.broker_connected_at)
-
-
-@pytest.mark.asyncio
-async def test_last_connection_touch_is_aware_utc():
-    device = Device(id=uuid.uuid4(), serial="SER-1", name="d")
-    session = _FakeSession(first=device)
-
-    await DeviceRepository(session).update_last_connection(device.id)
-
-    assert _aware_utc(device.last_connection)
 
 
 # --- API output ---------------------------------------------------------------------------------

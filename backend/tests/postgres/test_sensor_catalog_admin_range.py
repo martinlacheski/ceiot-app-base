@@ -29,7 +29,7 @@ async def test_edited_dht22_range_drops_value_above_new_max(postgres_rls_config)
 
             device = Device(serial=serial, name="Edited range test device",
                 device_type_id=DEFAULT_DEVICE_TYPE_ID, status=DeviceStatus.NEW,
-                is_active=True, enabled=True, broker_connected=False)
+                is_active=True, enabled=True)
             session.add(device)
             await session.flush()
             session.add(DeviceSensor(device_id=device.id, sensor_id=sensor.id, key="dht22"))

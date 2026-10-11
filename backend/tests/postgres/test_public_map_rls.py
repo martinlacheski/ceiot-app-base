@@ -68,7 +68,6 @@ async def public_map_rows(postgres_rls_config) -> AsyncIterator[PublicMapRows]:
         status=DeviceStatus.PAIRED,
         enabled=True,
         is_active=True,
-        broker_connected=False,
     )
 
     async with AsyncSession(admin_engine, expire_on_commit=False) as session:
