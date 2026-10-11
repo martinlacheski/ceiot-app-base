@@ -140,7 +140,7 @@ ambientes.
 | MQTT TCP | `1883` | `MQTT_LISTENER_TCP` (`mqtt/.env`) | `emqx:1883` |
 | MQTT TLS (mTLS) | `8883` | `MQTT_LISTENER_TLS` (`mqtt/.env`) | `emqx:8883` |
 | MQTT WebSocket | `8083` | `MQTT_LISTENER_WS` (`mqtt/.env`) | `emqx:8083` |
-| Panel de EMQX | <http://localhost:28183> | `EMQX_DASHBOARD_PORT` (`mqtt/.env`) | `emqx:18083` |
+| Panel de EMQX | <http://localhost:28183> | `EMQX_DASHBOARD_PORT` (`mqtt/.env`, opcional) | `emqx:18083` |
 | Mailpit | <http://localhost:8025> | `MAILPIT_UI_PORT` | `mailpit:8025` |
 | pgAdmin | <http://localhost:15050> (login en `pgadmin/.env`) | `PGADMIN_PORT` | `pgadmin:80` |
 | RedisInsight | <http://localhost:15540> | `REDISINSIGHT_PORT` | `redisinsight:5540` |
