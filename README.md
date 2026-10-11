@@ -6,6 +6,9 @@ son accesibles únicamente desde tu máquina, a través de la interfaz local.
 
 ## Arranque
 
+En un clon nuevo, generá primero los certificados del broker MQTT siguiendo
+[`docs/certificados-mqtt.md`](docs/certificados-mqtt.md).
+
 Ejecutá este comando desde la raíz del proyecto:
 
 ```bash
