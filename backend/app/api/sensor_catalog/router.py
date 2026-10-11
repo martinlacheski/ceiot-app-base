@@ -1,7 +1,9 @@
 """Sensor catalogs, installed device sensors, and current-device telemetry."""
 
 import uuid
-from datetime import UTC, datetime
+import math
+from datetime import UTC, datetime, timedelta
+from typing import Literal
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,8 +23,10 @@ from app.api.sensor_catalog.permissions import SensorCatalogPermissions as Permi
 from app.api.sensor_catalog.schemas import (DeviceSensorCreate, DeviceSensorPatch, DeviceSensorRead, next_sensor_key,
     SensorRead, SensorVariableRead, VariableRead, VariableAdminRead, VariableCreate, VariablePatch,
     SensorAdminRead, SensorAdminVariableRead, SensorCreate, SensorPatch)
-from app.api.sensor_catalog.telemetry import (DailyTelemetry, LiveTelemetry, TelemetryPage, daily_sensor_descriptions,
-                                              daily_telemetry, sensor_descriptions)
+from app.api.sensor_catalog.telemetry import (AGGREGATE_BUCKETS, AggregateTelemetry, DailyTelemetry, LiveTelemetry,
+                                              TelemetryPage, aggregate_sensor_descriptions, aggregate_telemetry,
+                                              daily_sensor_descriptions, daily_telemetry, resolve_bucket,
+                                              sensor_descriptions)
 from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_current_user
 from app.core.live import read_device_state
 from app.core.redis import get_live_redis
@@ -518,3 +522,43 @@ async def telemetry_daily(device_id: uuid.UUID, session: AuthedAsyncDBSession,
     access_start = await _resolve_access_start(device_id, session, current_user)
     days = await daily_telemetry(session, device_id, start, end, utc_offset_minutes, access_start)
     return DailyTelemetry(days=days, sensors=await daily_sensor_descriptions(session, days, device_id))
+
+
+# One week of one-minute buckets: an explicit fine bucket over a long range is refused.
+MAX_AGGREGATE_BUCKETS = 7 * 24 * 60
+
+
+@device_router.get('/{device_id}/telemetry/aggregate', response_model=AggregateTelemetry,
+            dependencies=[Depends(PermissionChecker(Permissions.TELEMETRY_READ))])
+async def telemetry_aggregate(device_id: uuid.UUID, session: AuthedAsyncDBSession,
+                              current_user: User = Depends(get_current_user),
+                              start: datetime = Query(...), end: datetime = Query(...),
+                              bucket: Literal['auto', '1m', '5m', '15m', '1h', '6h', '1d'] = Query('auto'),
+                              utc_offset_minutes: int = Query(0, ge=-840, le=840,
+                                  description='Browser offset from UTC in minutes (local = UTC + offset)'),
+                              max_points: int = Query(500, ge=1, le=5000,
+                                  description='Upper bound of buckets when bucket=auto')):
+    """avg/min/max/count per time bucket for every sensor variable, aggregated in SQL.
+
+    ``1d`` and ``6h`` buckets (and every other level) start at the user's local midnight.
+    The bucket follows the requested window; a guest only sees data from their grant on.
+    """
+    start = start.astimezone(UTC) if start.tzinfo else start.replace(tzinfo=UTC)
+    end = end.astimezone(UTC) if end.tzinfo else end.replace(tzinfo=UTC)
+    if start >= end:
+        raise HTTPException(422, 'start must be less than end')
+    if end - start > timedelta(days=MAX_DAILY_RANGE_DAYS):
+        raise HTTPException(422, f'The range cannot exceed {MAX_DAILY_RANGE_DAYS} days')
+    span = (end - start).total_seconds()
+    resolved = resolve_bucket(bucket, span, max_points)
+    seconds = AGGREGATE_BUCKETS[resolved]
+    if math.ceil(span / seconds) > MAX_AGGREGATE_BUCKETS:
+        raise HTTPException(422, f'Too many buckets: choose a bucket larger than {resolved} for this range')
+    access_start = await _resolve_access_start(device_id, session, current_user)
+    if access_start is not None:
+        start = max(start, as_utc(access_start))
+    items = []
+    if start < end:
+        items = await aggregate_telemetry(session, device_id, start, end, seconds, utc_offset_minutes, access_start)
+    return AggregateTelemetry(bucket=resolved, bucket_seconds=seconds, start=start, end=end, items=items,
+                              sensors=await aggregate_sensor_descriptions(session, items, device_id))
