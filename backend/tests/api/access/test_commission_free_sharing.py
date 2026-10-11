@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import HTTPException
@@ -139,8 +139,8 @@ def test_date_only_updates_change_access_dates(
     scope_type: ScopeType,
 ):
     seed = seed_router_graph(session)
-    original_date = datetime(2024, 2, 3, 4, 5, 6)
-    updated_date = datetime(2026, 7, 8, 9, 10, 11)
+    original_date = datetime(2024, 2, 3, 4, 5, 6, tzinfo=UTC)
+    updated_date = datetime(2026, 7, 8, 9, 10, 11, tzinfo=UTC)
     relation = ScopedGuestRelation(
         owner_user_id=seed["owner"].id,
         guest_user_id=seed["guest"].id,
@@ -187,7 +187,7 @@ def test_omitted_date_updates_preserve_access_dates(
     scope_type: ScopeType,
 ):
     seed = seed_router_graph(session)
-    original_date = datetime(2024, 2, 3, 4, 5, 6)
+    original_date = datetime(2024, 2, 3, 4, 5, 6, tzinfo=UTC)
     relation = ScopedGuestRelation(
         owner_user_id=seed["owner"].id,
         guest_user_id=seed["guest"].id,
@@ -234,7 +234,7 @@ def test_acceptance_preserves_access_date(
     scope_type: ScopeType,
 ):
     seed = seed_router_graph(session)
-    selected_date = datetime(2025, 7, 8, 9, 10, 11)
+    selected_date = datetime(2025, 7, 8, 9, 10, 11, tzinfo=UTC)
     invitation = ScopedGuestInvitation(
         owner_user_id=seed["owner"].id,
         email=seed["guest"].email,
@@ -303,8 +303,8 @@ async def test_public_device_access_never_uses_financial_configuration(
 @pytest.mark.asyncio
 async def test_access_start_uses_earliest_applicable_relation(session: Session, async_session):
     seed = seed_service_graph(session)
-    environment_start = datetime(2025, 7, 8, 9, 10, 11)
-    device_start = datetime(2025, 8, 9, 10, 11, 12)
+    environment_start = datetime(2025, 7, 8, 9, 10, 11, tzinfo=UTC)
+    device_start = datetime(2025, 8, 9, 10, 11, 12, tzinfo=UTC)
     session.add(
         ScopedGuestRelation(
             owner_user_id=seed["owner"].id,

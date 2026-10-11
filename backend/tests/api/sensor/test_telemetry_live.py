@@ -155,7 +155,7 @@ async def test_guest_never_sees_state_older_than_their_access_start(client, seed
     )
 
     async def access_after_the_reading(*args, **kwargs):
-        return datetime(2026, 5, 2)  # naive UTC, like the access grant
+        return datetime(2026, 5, 2, tzinfo=timezone.utc)  # aware UTC, like the access grant
 
     monkeypatch.setattr(module, "_resolve_access_start", access_after_the_reading)
     _use_redis(redis)

@@ -10,6 +10,7 @@ from app.core import live
 from app.core.db import system_session
 from app.core.mqtt.client import get_mqtt_client
 from app.core.redis import get_redis
+from app.core.time import as_utc
 
 _MAX_TIME_REQUEST_ID_LENGTH = 64
 
@@ -139,7 +140,7 @@ def _is_valid_gps_coordinate(latitude: float, longitude: float) -> bool:
 
 def _parse_reported_at(value) -> datetime | None:
     if isinstance(value, datetime):
-        return value
+        return as_utc(value)
     if not isinstance(value, str):
         return None
 
@@ -149,9 +150,7 @@ def _parse_reported_at(value) -> datetime | None:
 
     try:
         parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-        if parsed.tzinfo is not None:
-            return parsed.astimezone(timezone.utc).replace(tzinfo=None)
-        return parsed
+        return as_utc(parsed)
     except ValueError:
         logger.warning("⚠️ Timestamp GPS inválido recibido: %s", value)
         return None

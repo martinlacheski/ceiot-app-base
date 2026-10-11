@@ -10,6 +10,7 @@ from app.api.environment.environment_type.models import EnvironmentType
 from app.api.environment.environment_type.models import EnvironmentTypeRead
 from app.core.utils import CamelModel
 from app.api.location.models import LocationCityRead
+from app.core.time import UTCDateTime
 
 if TYPE_CHECKING:
     from app.api.environment.invitation.models import EnvironmentInvitation
@@ -42,7 +43,7 @@ class Environment(EnvironmentBase, table=True):
     is_public_map_visible: bool = Field(default=False)
     latitude: Optional[float] = Field(default=None)
     longitude: Optional[float] = Field(default=None)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
@@ -123,7 +124,7 @@ class EnvironmentUser(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id")
     is_owner: bool = Field(default=False)
     is_active: bool = Field(default=True)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     
     environment: "Environment" = Relationship(back_populates="users")
     user: "User" = Relationship()

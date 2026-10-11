@@ -36,7 +36,7 @@ VIEWS: dict[str, dict[str, tuple[str, str]]] = {
         "enabled": ("boolean", "habilitado para operar"),
         "is_active": ("boolean", "registro activo"),
         "online": ("boolean", "conectado al broker ahora"),
-        "last_connection": ("timestamp", "última conexión conocida"),
+        "last_connection": ("timestamptz", "última conexión conocida"),
     },
     "environments": {
         "id": ("uuid", "id del ambiente"),

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from sqlmodel import Field, SQLModel, Relationship, text, func
-from app.core.time import utc_now
+from app.core.time import UTCDateTime, utc_now
 
 if TYPE_CHECKING:
     from app.api.environment.environment.models import Environment
@@ -16,9 +16,9 @@ class EnvironmentInvitationBase(SQLModel):
 class EnvironmentInvitation(EnvironmentInvitationBase, table=True):
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=utc_now, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
-    processed_at: Optional[datetime] = Field(default=None)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime, sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
+    processed_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     
     environment: "Environment" = Relationship(back_populates="invitations")
 

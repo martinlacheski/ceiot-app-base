@@ -1,6 +1,6 @@
 import logging
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from fastapi import HTTPException, status
 
@@ -19,7 +19,7 @@ from app.api.access.schemas import (
 from app.api.auth.models import User
 from app.core.db import system_session
 from app.core.email import EmailService
-from app.core.time import utc_now, utc_start_of_day
+from app.core.time import as_utc, utc_now, utc_start_of_day
 
 
 logger = logging.getLogger(__name__)
@@ -723,8 +723,7 @@ class GuestAccessService:
             return utc_now()
 
         if isinstance(access_starts_at, datetime):
-            if access_starts_at.tzinfo is not None:
-                return access_starts_at.astimezone(UTC).replace(tzinfo=None)
-            return access_starts_at
+            # A naive value is a UTC wall clock (legacy clients); an aware one keeps its instant.
+            return as_utc(access_starts_at)
 
         return utc_start_of_day(access_starts_at)

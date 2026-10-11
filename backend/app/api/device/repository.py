@@ -39,6 +39,7 @@ from app.core.search import (
     ilike_pattern,
 )
 from app.core.labels_es import DEVICE_STATUS_LABELS, codes_matching_label
+from app.core.time import utc_now
 
 
 class DeviceStateChangedError(Exception):
@@ -297,6 +298,7 @@ class DeviceRepository:
                 else_=formatted_datetime(
                     Device.last_connection,
                     utc_offset_minutes,
+                    timezone_aware=True,
                 ),
             )
             mobile_last_connection = case(
@@ -304,6 +306,7 @@ class DeviceRepository:
                 else_=formatted_datetime(
                     Device.last_connection,
                     utc_offset_minutes,
+                    timezone_aware=True,
                 ),
             )
 
@@ -637,7 +640,7 @@ class DeviceRepository:
         result = await self.session.exec(statement)
         device = result.first()
         if device:
-            device.last_connection = datetime.now()
+            device.last_connection = utc_now()
             # Si estaba NEW o UNPAIRED y se conecta, quizás cambia a ACTIVE?
             # (Solo si está paired, pero eso es lógica de negocio más compleja. Por ahora solo timestamp)
             if device.status == DeviceStatus.PAIRED:
@@ -654,7 +657,7 @@ class DeviceRepository:
         if not device:
             return None
 
-        now = datetime.utcnow()
+        now = utc_now()
         device.broker_connected = is_connected
         device.broker_status_updated_at = now
         if is_connected:
@@ -681,7 +684,7 @@ class DeviceRepository:
         gps_updated_at: Optional[datetime] = None,
         touch_last_connection: bool = True,
     ) -> None:
-        now = datetime.utcnow()
+        now = utc_now()
 
         if mac_address:
             db_device.mac_address = mac_address

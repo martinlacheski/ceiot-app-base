@@ -6,6 +6,7 @@ from sqlmodel import Field, SQLModel, Column, JSON, text, Relationship, func
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.core.security import validate_password_policy
+from app.core.time import UTCDateTime, utc_now
 
 # Import related models for foreign keys (if needed for type checking, or use strings)
 # We will use string forward references for relationships to avoid circular imports if any.
@@ -32,11 +33,11 @@ class User(SQLModel, table=True):
 
     permissions: list[str] = Field(default=[], sa_column=Column(JSON))
     # default_factory: evaluated per row (a plain `datetime.now()` would be frozen at import time).
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     # Activity, written only by UserRepository.touch_login / touch_seen (never bumps updated_at).
-    last_login_at: Optional[datetime] = Field(default=None)
-    last_seen_at: Optional[datetime] = Field(default=None)
+    last_login_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
+    last_seen_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     is_active: bool = Field(default=True)
     is_verified: bool = Field(default=False, sa_column_kwargs={
                               "server_default": text("false")})
@@ -126,7 +127,7 @@ class UserUpdate(SQLModel):
     username: Optional[str] = None
     password: Optional[str] = None
     permissions: Optional[List[str]] = None
-    updated_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=utc_now)
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     is_admin: Optional[bool] = None
@@ -153,7 +154,7 @@ class UserPasswordUpdate(SQLModel):
     old_password: Optional[str] = None
     new_password: str
     confirm_password: str
-    updated_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     _validate_new_password = field_validator("new_password")(
         validate_password_policy

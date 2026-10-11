@@ -246,7 +246,7 @@ def test_create_environment_scoped_invitation_preserves_selected_access_start(
     )
 
     assert response.status_code == 201
-    assert response.json()["accessStartsAt"] == "2026-05-27T00:00:00"
+    assert response.json()["accessStartsAt"] == "2026-05-27T00:00:00Z"
 
 
 def test_create_environment_scoped_invitation_preserves_selected_access_datetime(
@@ -266,7 +266,7 @@ def test_create_environment_scoped_invitation_preserves_selected_access_datetime
     )
 
     assert response.status_code == 201
-    assert response.json()["accessStartsAt"] == "2026-05-27T14:35:00"
+    assert response.json()["accessStartsAt"] == "2026-05-27T14:35:00Z"
 
 
 def test_update_environment_scoped_invitation_preserves_access_start_when_omitted(
@@ -296,7 +296,7 @@ def test_update_environment_scoped_invitation_preserves_access_start_when_omitte
     payload = response.json()
     assert payload["id"] == str(invitation.id)
     assert payload["scopeType"] == ScopeType.ENVIRONMENT.value
-    assert payload["accessStartsAt"] == "2026-05-27T14:35:00"
+    assert payload["accessStartsAt"] == "2026-05-27T14:35:00Z"
 
 
 def test_update_environment_scoped_invitation_allows_explicit_null_to_reset_access_start(
@@ -388,7 +388,7 @@ def test_update_device_scoped_invitation_uses_device_route_contract(
 
     assert response.status_code == 200
     assert response.json()["scopeType"] == ScopeType.DEVICE.value
-    assert response.json()["accessStartsAt"] == "2026-06-01T09:15:00"
+    assert response.json()["accessStartsAt"] == "2026-06-01T09:15:00Z"
 
 
 def test_update_scoped_invitation_returns_404_for_wrong_scope(

@@ -58,6 +58,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0019_add_firmware_release_and_update.py",
         "0020_drop_sensorreading_device_type.py",
         "0021_catalog_created_at.py",
+        "0022_timestamptz_everywhere.py",
     ]
 
 

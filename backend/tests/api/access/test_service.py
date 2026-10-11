@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -378,7 +378,7 @@ async def test_service_preserves_selected_invitation_datetime_and_acceptance_cop
 ):
     seed = seed_service_graph(session)
     service = GuestAccessService(GuestAccessRepository(async_session))
-    selected_datetime = datetime(2026, 5, 27, 14, 35, 0)
+    selected_datetime = datetime(2026, 5, 27, 14, 35, 0, tzinfo=UTC)
 
     invitation = await service.create_guest_invitation(
         scope_type=ScopeType.DEVICE,

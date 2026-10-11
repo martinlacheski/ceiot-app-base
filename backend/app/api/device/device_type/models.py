@@ -8,7 +8,7 @@ from sqlalchemy import CheckConstraint, Column, ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel, func
 
-from app.core.time import utc_now
+from app.core.time import UTCDateTime, utc_now
 from app.core.utils import CamelModel
 from app.api.sensor_catalog.schemas import SensorVariableRead
 
@@ -57,9 +57,10 @@ class DeviceTypeCatalog(DeviceTypeBase, table=True):
         sa_column=Column(JSONB, nullable=False, server_default="{}"),
     )
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
     updated_at: Optional[datetime] = Field(
         default=None,
+        sa_type=UTCDateTime,
         sa_column_kwargs={"onupdate": func.now()},
     )
 

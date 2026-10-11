@@ -27,7 +27,7 @@ from app.core.dependencies import AuthedAsyncDBSession, PermissionChecker, get_c
 from app.core.live import read_device_state
 from app.core.redis import get_live_redis
 from app.core.search import ILIKE_ESCAPE, ilike_pattern
-from app.core.time import utc_now
+from app.core.time import as_utc, utc_now
 
 catalog_router = APIRouter()
 device_router = APIRouter()
@@ -37,12 +37,6 @@ def _admin_write(user: User = Depends(PermissionChecker(Permissions.WRITE))):
     if not user.is_admin:
         raise HTTPException(403, 'Only an administrator can manage the sensor catalog')
     return user
-
-
-def _as_utc_naive(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value
-    return value.astimezone(UTC).replace(tzinfo=None)
 
 
 async def _resolve_access_start(
@@ -69,7 +63,7 @@ async def _resolve_access_start(
             detail="No tienes acceso contextual a este dispositivo",
         )
 
-    access_starts_at = _as_utc_naive(access_starts_at)
+    access_starts_at = as_utc(access_starts_at)
     if access_starts_at > utc_now():
         raise HTTPException(
             status_code=403,
@@ -461,7 +455,7 @@ async def live_telemetry(device_id: uuid.UUID, session: AuthedAsyncDBSession,
     start = await _resolve_access_start(device_id, session, current_user)
     state = await read_device_state(redis, device_id)
     if state is not None and state.telemetry_at is not None:
-        reported = _as_utc_naive(state.telemetry_at)
+        reported = as_utc(state.telemetry_at)
         if start is None or reported >= start:
             sensors = await sensor_descriptions(
                 session, [SimpleNamespace(values=state.values)], {device_id})
@@ -492,7 +486,7 @@ async def telemetry_history(device_id: uuid.UUID, session: AuthedAsyncDBSession,
     if start > end:
         raise HTTPException(422, 'start must be less than or equal to end')
     if access_start is not None:
-        start = max(start, access_start.replace(tzinfo=UTC))
+        start = max(start, as_utc(access_start))
     predicates = [Telemetry.device_id == device_id, Telemetry.time >= start, Telemetry.time <= end]
     total = (await session.execute(select(func.count()).select_from(Telemetry)
         .where(*predicates))).scalar_one()

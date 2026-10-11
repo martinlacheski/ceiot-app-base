@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlalchemy import Column, Enum as SAEnum, Index, func, text
 from sqlmodel import Field, SQLModel
-from app.core.time import utc_now
+from app.core.time import UTCDateTime, utc_now
 
 
 class ScopeType(str, Enum):
@@ -53,11 +53,12 @@ class ScopedGuestRelation(SQLModel, table=True):
     guest_user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     scope_type: ScopeType = Field(sa_column=Column(scope_type_sa_enum, nullable=False, index=True))
     scope_id: uuid.UUID = Field(index=True)
-    access_starts_at: datetime = Field(default_factory=utc_now, nullable=False)
+    access_starts_at: datetime = Field(default_factory=utc_now, nullable=False, sa_type=UTCDateTime)
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
     updated_at: Optional[datetime] = Field(
         default=None,
+        sa_type=UTCDateTime,
         sa_column_kwargs={"onupdate": func.now()},
     )
 
@@ -73,16 +74,17 @@ class ScopedGuestInvitation(SQLModel, table=True):
     email: str = Field(index=True)
     scope_type: ScopeType = Field(sa_column=Column(scope_type_sa_enum, nullable=False, index=True))
     scope_id: uuid.UUID = Field(index=True)
-    access_starts_at: datetime = Field(default_factory=utc_now, nullable=False)
+    access_starts_at: datetime = Field(default_factory=utc_now, nullable=False, sa_type=UTCDateTime)
     status: InvitationStatus = Field(
         default=InvitationStatus.PENDING,
         sa_column=Column(invitation_status_sa_enum, nullable=False),
     )
     is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
     updated_at: Optional[datetime] = Field(
         default=None,
+        sa_type=UTCDateTime,
         sa_column_kwargs={"onupdate": func.now()},
     )
-    processed_at: Optional[datetime] = Field(default=None)
+    processed_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
 

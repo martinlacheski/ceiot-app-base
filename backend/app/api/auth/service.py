@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from fastapi import HTTPException, status
 from typing import Optional, Dict, Any
 import uuid
@@ -20,6 +19,7 @@ from app.core.sorting import SortSpec
 
 from app.core.config import settings
 from app.core.permissions import ALL_PERMISSIONS, BASIC_PERMISSIONS
+from app.core.time import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class AuthService:
     # Registra un login exitoso; un fallo se loguea y nunca rompe el login
     async def record_login(self, user_id: uuid.UUID) -> None:
         try:
-            await self.repo.touch_login(user_id, datetime.now())
+            await self.repo.touch_login(user_id, utc_now())
         except Exception:
             logger.warning("Could not record last login of user %s", user_id, exc_info=True)
             try:
@@ -279,7 +279,7 @@ class AuthService:
 
         user.password = hash_password(new_password)
         user.must_change_password = False
-        user.updated_at = datetime.now()
+        user.updated_at = utc_now()
 
         # Once OAuth user sets a password, they're no longer purely OAuth
         if user.is_social_auth:
@@ -373,7 +373,7 @@ class AuthService:
             user.password = hash_password(new_password)
             # Opcional: invalidar tokens anteriores o marcar que ya no debe cambiar contraseña si estaba pendiente
             user.must_change_password = False
-            user.updated_at = datetime.now()
+            user.updated_at = utc_now()
 
             self.repo.db.add(user)
             await self.repo.db.commit()

@@ -490,7 +490,7 @@ def test_owner_can_manage_device_guest_relations_without_financial_fields(
     assert create_response.status_code == 201
     assert create_response.json()["scopeType"] == ScopeType.DEVICE.value
     assert update_response.status_code == 200
-    assert update_response.json()["accessStartsAt"] == "2026-06-01T00:00:00"
+    assert update_response.json()["accessStartsAt"] == "2026-06-01T00:00:00Z"
     relation = session.exec(
         select(ScopedGuestRelation).where(
             ScopedGuestRelation.scope_type == ScopeType.DEVICE,
@@ -795,7 +795,7 @@ def test_owner_can_invite_device_guest_by_email_without_registered_user(
     assert response.status_code == 201
     assert response.json()["scopeType"] == ScopeType.DEVICE.value
     assert response.json()["email"] == "future-device-guest@example.com"
-    assert response.json()["accessStartsAt"] == "2026-05-27T00:00:00"
+    assert response.json()["accessStartsAt"] == "2026-05-27T00:00:00Z"
     assert response.json()["status"] == "pending"
     assert EmailServiceSpy.sent == [
         {

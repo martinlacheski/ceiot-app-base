@@ -13,6 +13,7 @@ from app.core.utils import CamelModel
 from app.api.sensor_catalog.schemas import DeviceSensorCreate
 
 from app.api.environment.environment.models import Environment
+from app.core.time import UTCDateTime, utc_now
 
 
 class DeviceStatus(str, Enum):
@@ -44,16 +45,16 @@ class DeviceBase(SQLModel):
     last_reset_reason: Optional[str] = Field(default=None)
     gps_latitude: Optional[float] = Field(default=None)
     gps_longitude: Optional[float] = Field(default=None)
-    gps_updated_at: Optional[datetime] = Field(default=None)
+    gps_updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     manufacture_date: Optional[date] = Field(default=None)
     status: DeviceStatus = Field(default=DeviceStatus.NEW)
     is_active: bool = Field(default=True)
     enabled: bool = Field(default=True)
-    last_connection: Optional[datetime] = Field(default=None)
+    last_connection: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     broker_connected: bool = Field(default=False)
-    broker_connected_at: Optional[datetime] = Field(default=None)
-    broker_disconnected_at: Optional[datetime] = Field(default=None)
-    broker_status_updated_at: Optional[datetime] = Field(default=None)
+    broker_connected_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
+    broker_disconnected_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
+    broker_status_updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     environment_id: Optional[uuid.UUID] = Field(
         default=None, foreign_key="environment.id")
 
@@ -67,7 +68,7 @@ class Device(DeviceBase, table=True):
         index=True,
     )
     updated_at: Optional[datetime] = Field(
-        default=None, sa_column_kwargs={"onupdate": func.now()})
+        default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
@@ -107,8 +108,8 @@ class DeviceLocationReport(SQLModel, table=True):
     device_id: uuid.UUID = Field(foreign_key="device.id", index=True)
     latitude: float
     longitude: float
-    reported_at: datetime
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    reported_at: datetime = Field(sa_type=UTCDateTime)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
 
     device: "Device" = Relationship(back_populates="location_reports")
 

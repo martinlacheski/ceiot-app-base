@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
@@ -157,7 +157,7 @@ def test_device_detail_includes_updated_at(
     session.commit()
     headers = {"Authorization": f"Bearer {make_token(user.id)}"}
     serial = DeviceService.generate_serial()
-    updated_at = datetime(2026, 9, 23, 12, 34, 56)
+    updated_at = datetime(2026, 9, 23, 12, 34, 56, tzinfo=UTC)
 
     create_response = client.post(
         "/api/devices",

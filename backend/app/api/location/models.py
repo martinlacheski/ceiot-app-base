@@ -4,6 +4,7 @@ from typing import List, Optional
 from sqlalchemy import Column, DateTime, Index, text
 from sqlmodel import Field, SQLModel, Relationship, func
 from app.core.utils import CamelModel
+from app.core.time import UTCDateTime
 
 
 # Base Classes
@@ -28,7 +29,7 @@ class LocationCountry(LocationCountryBase, table=True):
 
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
@@ -42,7 +43,7 @@ class LocationState(LocationStateBase, table=True):
 
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),
@@ -57,7 +58,7 @@ class LocationCity(LocationCityBase, table=True):
 
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     is_active: bool = Field(default=True)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False, server_default=func.now()),

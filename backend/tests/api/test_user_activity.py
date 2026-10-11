@@ -1,7 +1,7 @@
 """last_login_at / last_seen_at: recorded on login and (throttled) on authenticated requests."""
 
 import time
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -36,7 +36,7 @@ def test_successful_login_sets_last_login_and_last_seen(
     client: TestClient, session: Session, test_user: User
 ):
     assert test_user.last_login_at is None and test_user.last_seen_at is None
-    before = datetime.now()
+    before = datetime.now(UTC)
 
     response = _login(client, test_user)
 
@@ -158,7 +158,7 @@ def test_authenticated_requests_touch_last_seen_at_most_every_15_minutes(
 
         # Fuera de la ventana: se vuelve a escribir.
         test_user_row = _reload(session, test_user)
-        test_user_row.last_seen_at = datetime.now() - timedelta(minutes=16)
+        test_user_row.last_seen_at = datetime.now(UTC) - timedelta(minutes=16)
         session.add(test_user_row)
         session.commit()
         stale = _reload(session, test_user).last_seen_at
@@ -206,12 +206,12 @@ async def test_touch_seen_keeps_the_loaded_user_usable_and_clean(async_session, 
 
 @pytest.mark.asyncio
 async def test_repository_touches_do_not_bump_updated_at(async_session, session, test_user):
-    stamp = datetime(2026, 1, 2, 3, 4, 5)
+    stamp = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
     test_user.updated_at = stamp
     session.add(test_user)
     session.commit()
     repo = UserRepository(async_session)
-    now = datetime(2026, 9, 20, 12, 0, 0)
+    now = datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
 
     await repo.touch_login(test_user.id, now)
     assert _reload(session, test_user).updated_at == stamp
@@ -225,7 +225,7 @@ async def test_repository_touches_do_not_bump_updated_at(async_session, session,
 @pytest.mark.asyncio
 async def test_repository_touches_keep_null_updated_at(async_session, session, test_user):
     repo = UserRepository(async_session)
-    now = datetime(2026, 9, 20, 12, 0, 0)
+    now = datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
 
     await repo.touch_login(test_user.id, now)
     await repo.touch_seen(test_user.id, now + timedelta(minutes=30))
@@ -236,7 +236,7 @@ async def test_repository_touches_keep_null_updated_at(async_session, session, t
 @pytest.mark.asyncio
 async def test_touch_seen_is_a_conditional_update(async_session, session, test_user):
     repo = UserRepository(async_session)
-    now = datetime(2026, 9, 20, 12, 0, 0)
+    now = datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
 
     assert await repo.touch_seen(test_user.id, now) is True  # NULL -> se escribe
     assert await repo.touch_seen(test_user.id, now + timedelta(minutes=14)) is False

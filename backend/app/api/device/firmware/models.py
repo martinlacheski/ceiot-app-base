@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import CheckConstraint, UniqueConstraint
 from sqlmodel import Field, SQLModel, func
 
-from app.core.time import utc_now
+from app.core.time import UTCDateTime, utc_now
 
 
 class FirmwareUpdateState(str, Enum):
@@ -58,7 +58,7 @@ class FirmwareRelease(SQLModel, table=True):
     size: int
     notes: Optional[str] = Field(default=None)
     created_by: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id")
-    created_at: datetime = Field(default_factory=utc_now)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
     active: bool = Field(default=True)
 
 
@@ -85,13 +85,13 @@ class FirmwareUpdate(SQLModel, table=True):
     running_version: Optional[str] = Field(default=None)
     target_version: str
     created_by: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id")
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: Optional[datetime] = Field(default=None, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    updated_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
     # The token is the only credential of `GET /firmware/download/{token}` (the device has no
     # user token): unguessable, unique, valid until `download_expires_at`.
     download_token: Optional[str] = Field(default=None, unique=True, index=True)
-    download_expires_at: Optional[datetime] = Field(default=None)
-    downloaded_at: Optional[datetime] = Field(default=None)
+    download_expires_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
+    downloaded_at: Optional[datetime] = Field(default=None, sa_type=UTCDateTime)
     # The device history record of the outcome (`deviceoperation.id`). `deviceoperation` is a
     # hypertable keyed by (time, id), so this is a plain reference, not a foreign key; it makes
     # the record idempotent (written once, then only its status changes).

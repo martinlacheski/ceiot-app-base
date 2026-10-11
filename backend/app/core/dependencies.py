@@ -1,6 +1,6 @@
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Annotated, AsyncGenerator
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -13,6 +13,7 @@ from app.core.db import get_session, get_async_session, async_engine
 from app.core.security import decode_token
 from app.api.auth.models import User
 from app.api.auth.repository import UserRepository
+from app.core.time import as_utc, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +80,8 @@ async def _touch_last_seen(repo: UserRepository, user: User) -> None:
     The conditional UPDATE in the repository is the guard against concurrent double writes.
     Never fails the request.
     """
-    now = datetime.now()
-    if user.last_seen_at is not None and now - user.last_seen_at < LAST_SEEN_INTERVAL:
+    now = utc_now()
+    if user.last_seen_at is not None and now - as_utc(user.last_seen_at) < LAST_SEEN_INTERVAL:
         return
     try:
         if await repo.touch_seen(user.id, now, LAST_SEEN_INTERVAL):

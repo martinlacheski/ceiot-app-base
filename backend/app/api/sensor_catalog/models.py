@@ -9,6 +9,7 @@ from pydantic import field_validator
 from sqlalchemy import CheckConstraint, Column, ForeignKey, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, SQLModel
+from app.core.time import UTCDateTime
 
 
 def utc_now() -> datetime:
@@ -24,8 +25,8 @@ class Variable(SQLModel, table=True):
     unit: str
     description: str | None = None
     is_active: bool = True
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
 
 
 class Sensor(SQLModel, table=True):
@@ -37,8 +38,8 @@ class Sensor(SQLModel, table=True):
     manufacturer: str
     description: str | None = None
     is_active: bool = True
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now, sa_column_kwargs={"onupdate": func.now()})
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
 
 
 class SensorVariable(SQLModel, table=True):
@@ -68,10 +69,10 @@ class DeviceSensor(SQLModel, table=True):
     key: str
     config: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False, server_default="{}"))
     is_active: bool = True
-    installed_at: datetime = Field(default_factory=utc_now)
-    removed_at: datetime | None = None
-    created_at: datetime = Field(default_factory=utc_now)
-    updated_at: datetime = Field(default_factory=utc_now, sa_column_kwargs={"onupdate": func.now()})
+    installed_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    removed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    created_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime)
+    updated_at: datetime = Field(default_factory=utc_now, sa_type=UTCDateTime, sa_column_kwargs={"onupdate": func.now()})
 
     @field_validator("key")
     @classmethod
