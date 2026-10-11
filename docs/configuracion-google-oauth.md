@@ -14,7 +14,7 @@ Esta guía permite habilitar el botón **Google** con credenciales OAuth propias
 6. Agregá como URI de redirección autorizada la URL pública exacta del callback del backend:
 
    ```text
-   http://localhost:18000/api/auth/google/callback
+   http://localhost:8000/api/auth/google/callback
    ```
 
    Esa URL es el ejemplo local predeterminado. No uses la ruta del frontend `/auth/social-callback` como callback autorizado en Google.
@@ -29,8 +29,8 @@ El operador —no el agente ni el navegador— debe guardar estos valores reales
 GOOGLE_OAUTH_ENABLED=true
 GOOGLE_CLIENT_ID=<client-id-del-cliente-web>
 GOOGLE_CLIENT_SECRET=<client-secret-del-cliente-web>
-BACKEND_PUBLIC_BASE_URL=http://localhost:18000
-VITE_FRONTEND_URL=http://localhost:15173
+BACKEND_PUBLIC_BASE_URL=http://localhost:8000
+VITE_FRONTEND_URL=http://localhost:5173
 ```
 
 Las dos URLs son ejemplos únicamente para el entorno local con esos puertos. En producción —o si usás puertos distintos— configurá los orígenes públicos reales que controla el operador.

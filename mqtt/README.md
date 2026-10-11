@@ -95,7 +95,7 @@ volver a emitirlo cada vez que cambia esa IP.
 
    ```dotenv
    LAN_BIND_IP=192.168.1.100
-   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.100:18000
+   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.100:8000
    ```
 
 3. Emita el certificado del broker. Sin argumentos, el script toma
@@ -328,7 +328,7 @@ docker compose exec backend python3 /tmp/emulador-dispositivo.py \
 ```
 
 (Dentro de la red de Docker el broker se alcanza como `emqx:8883`; desde el
-host se usa `localhost:18883`, el puerto TLS publicado por
+host se usa `localhost:8883` (`MQTT_LISTENER_TLS`), el puerto TLS publicado por
 `mqtt/docker-compose.yml`.)
 
 ### Uso
@@ -365,7 +365,7 @@ temperatura 18-28°C, humedad 35-65%, presión 995-1025hPa por defecto).
 
 Argumentos: `--serial` (obligatorio), `--cert-dir` (default
 `mqtt/pki/devices/<serial>/`), `--host` (default `localhost`), `--port`
-(default `18883`), `--interval`, `--count`, `--sensors`, `--pedir-hora`,
+(default `8883`), `--interval`, `--count`, `--sensors`, `--pedir-hora`,
 `--firmware-version` (default `emulador`) y los de OTA de abajo. Ver
 `python3 tools/emulador-dispositivo.py --help` para el detalle completo.
 
@@ -395,7 +395,7 @@ Cada `ota/status` repite el `request_id` del comando y lleva
 `FIRMWARE_DOWNLOAD_BASE_URL` (o `BACKEND_PUBLIC_BASE_URL`, o
 `BACKEND_HOST_URL`). Si apunta a una IP de la LAN que no es la del equipo, o a
 un host interno de Docker, el emulador no la alcanza: pasá
-`--ota-url-base http://localhost:18000` (reemplaza solo esquema y host; el
+`--ota-url-base http://localhost:8000` (reemplaza solo esquema y host; el
 token del path se conserva). Con la IP de la LAN correcta en `.env` no hace
 falta.
 
@@ -403,17 +403,17 @@ falta.
 # Equipo que acepta y completa la actualización (el admin la inicia desde
 # el detalle del dispositivo en la web)
 python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
-  --ota-url-base http://localhost:18000
+  --ota-url-base http://localhost:8000
 
 # Imagen corrupta en tránsito: failed con sha256_mismatch
 python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
-  --ota-url-base http://localhost:18000 --ota-fail-at verifying
+  --ota-url-base http://localhost:8000 --ota-fail-at verifying
 
 # Corte de conexión a mitad de la descarga: el broker publica el LWT y el
 # backend marca el intento failed / interrupted; reconecta a los 5 s con la
 # versión anterior
 python3 tools/emulador-dispositivo.py --serial IOT-DEM0-0001 --ota \
-  --ota-url-base http://localhost:18000 --ota-disconnect-at downloading
+  --ota-url-base http://localhost:8000 --ota-disconnect-at downloading
 ```
 
 Opciones: `--ota-fail-at downloading|verifying` (falla simulada a mitad de la

@@ -104,9 +104,10 @@ En modo Mailpit el backend ignora host, puerto, credenciales y banderas SMTP ext
 | `MAIL_VALIDATE_CERTS` | Validación de certificados SMTP; predeterminado `true`. |
 | `MAIL_FROM_NAME` | Marca visible y asunto; predeterminado `Monitoreo Ambiental IoT`. Si conservás un valor legado en el entorno, actualizalo manualmente. |
 | `CONTACT_RECIPIENT` | Destino opcional del formulario; si falta, usa `MAIL_FROM`. |
-| `MAILPIT_UI_PORT` | Puerto local de la UI al activar el perfil `local-mail`; predeterminado `8025`. |
 
-El remitente SMTP siempre es `MAIL_FROM`; en contactos, el correo del visitante se configura sólo como `Reply-To`. Guardá los valores del operador manualmente en `backend/.env`. Para la landing local, agregá `http://localhost:14321` a `BACKEND_CORS_ORIGINS` y ajustá `BACKEND_TRUSTED_HOSTS` a los hosts realmente usados. El rate limit del contacto es local al proceso y `X-Forwarded-For` requiere una política de proxy confiable antes de producción.
+El remitente SMTP siempre es `MAIL_FROM`; en contactos, el correo del visitante se configura sólo como `Reply-To`. Guardá los valores del operador manualmente en `backend/.env`. Para la landing local, agregá `http://localhost:4321` a `BACKEND_CORS_ORIGINS` y ajustá `BACKEND_TRUSTED_HOSTS` a los hosts realmente usados. El rate limit del contacto es local al proceso y `X-Forwarded-For` requiere una política de proxy confiable antes de producción.
+
+El puerto de la UI de Mailpit (`MAILPIT_UI_PORT`, predeterminado `8025`, perfil `local-mail`) no se configura en `backend/.env`: Compose lo toma de la shell, de un `.env` en la raíz del repositorio o de `mailpit/.env`.
 
 ## RAG sobre documentos (administración)
 

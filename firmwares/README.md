@@ -86,7 +86,7 @@ ofrecerse pero no se borra.
 
 La imagen se descarga desde el backend con una URL de un solo uso que vence a
 los 10 minutos (`FIRMWARE_DOWNLOAD_BASE_URL` en `backend/.env`, por ejemplo
-`http://192.168.1.100:18000`). El equipo verifica el tamaño y el SHA-256
+`http://192.168.1.50:8000`). El equipo verifica el tamaño y el SHA-256
 recibidos por MQTT con mTLS antes de instalar.
 
 ### Desde el propio equipo

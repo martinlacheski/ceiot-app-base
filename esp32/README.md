@@ -168,8 +168,8 @@ right after each connection. `firmware_version` is `PROJECT_VER` from
 `esp32/CMakeLists.txt`.
 
 Broker settings (`main/mqtt/mqtt_config_logic.c`, host-tested): what the MQTT
-page saved in NVS `storage`, else the defaults: **mTLS on port 18883 to
-`192.168.1.100`**. A freshly flashed board (no `storage` namespace yet) uses
+page saved in NVS `storage`, else the defaults: **mTLS on port 8883 to
+`192.168.1.100`** (a placeholder host). A freshly flashed board (no `storage` namespace yet) uses
 those defaults, so with its certificates in `esp32/cert/` and a serial it
 connects without visiting the web UI. The serial comes from `storage`, else
 from the `factory` snapshot. Without a serial there is no client id nor topic
@@ -184,8 +184,8 @@ host, port and TLS flag from it on the first boot, so the usual path is to let
 `provisioning/provision.py` write the stack values there (`LAN_BIND_IP` and
 `MQTT_LISTENER_TLS`, `8883` in the standard configuration; see
 `esp32/cert/provisioning.json.example`). Without that file, change them on the
-MQTT page or in `mqtt_config_logic.h`: `18883` matches a development stack that
-publishes the broker TLS listener on that port instead of the standard `8883`.
+MQTT page or in `mqtt_config_logic.h`, for example when the stack publishes the
+broker TLS listener on a port other than the standard `8883`.
 
 ## Time synchronization
 
@@ -198,8 +198,8 @@ following `backend/docs/mqtt-time-sync.md`:
 2. **HTTP**: if the clock is still unset, `GET {backend}/api/public/time`
    over plain HTTP (5 s timeout), retried every 60 s while unsynchronized.
    `{backend}` is the "URL del backend" of the MQTT page (NVS `storage` /
-   `backend_url`); empty means `http://<MQTT broker host>:18000`, the port
-   docker compose publishes for the backend (`LAN_BIND_IP` must expose it to
+   `backend_url`); empty means `http://<MQTT broker host>:8000`, the standard
+   `BACKEND_PORT` docker compose publishes for the backend (`LAN_BIND_IP` must expose it to
    the LAN, as for the firmware downloads).
 3. **MQTT**: the client starts once the clock is valid, **or** once NTP timed
    out and HTTP was tried, so it is never blocked forever. While the clock is
