@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UserForm } from "./UserForm";
 
 class ResizeObserverMock {
@@ -10,6 +16,31 @@ class ResizeObserverMock {
 
 vi.stubGlobal("ResizeObserver", ResizeObserverMock);
 
+// Custom basic set: proves the form reads the API instead of a hardcoded list.
+const PERMISSIONS_RESPONSE = {
+  groups: [
+    {
+      label: "Usuarios",
+      items: [
+        { value: "user:me", label: "Mi perfil" },
+        { value: "user:read", label: "Ver Usuarios" },
+      ],
+    },
+    {
+      label: "Sensores ambientales",
+      items: [
+        { value: "telemetry:read", label: "Ver telemetría" },
+        { value: "sensor_catalog:write", label: "Gestionar catálogo de sensores" },
+      ],
+    },
+  ],
+  basic_permissions: ["user:me", "telemetry:read"],
+};
+
+const permissionsQueryState: {
+  current: { data?: typeof PERMISSIONS_RESPONSE; isLoading?: boolean };
+} = { current: { data: PERMISSIONS_RESPONSE } };
+
 vi.mock("@tanstack/react-query", () => ({
   useQuery: ({ queryKey }: { queryKey: string[] }) => {
     const key = queryKey[0];
@@ -19,16 +50,7 @@ vi.mock("@tanstack/react-query", () => ({
     }
 
     if (key === "permissions") {
-      return {
-        data: {
-          groups: [
-            {
-              label: "Usuarios",
-              items: [{ value: "user:me", label: "Mi perfil" }],
-            },
-          ],
-        },
-      };
+      return permissionsQueryState.current;
     }
 
     return { data: undefined };
@@ -111,6 +133,10 @@ vi.mock("lucide-react", async () => {
 });
 
 describe("UserForm", () => {
+  beforeEach(() => {
+    permissionsQueryState.current = { data: PERMISSIONS_RESPONSE };
+  });
+
   it("muestra la guía exacta del teléfono al crear y editar", () => {
     const { rerender } = render(<UserForm mode="create" onSubmit={vi.fn()} />);
 
@@ -271,5 +297,120 @@ describe("UserForm", () => {
     const addressInput = screen.getByDisplayValue("Av. Siempre Viva 742");
     expect(addressInput).toHaveAttribute("readonly");
     expect(screen.queryByText("Ciudad")).not.toBeInTheDocument();
+  });
+  describe("permisos básicos", () => {
+    const checkbox = (label: string) =>
+      screen.getByRole("checkbox", { name: label });
+
+    const fillCreateForm = () => {
+      fireEvent.change(screen.getByPlaceholderText("Ingrese los nombres"), {
+        target: { value: "Ada" },
+      });
+      fireEvent.change(screen.getByPlaceholderText("Ingrese los apellidos"), {
+        target: { value: "Lovelace" },
+      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Ingrese el número de documento"),
+        { target: { value: "12345678" } },
+      );
+      fireEvent.change(
+        screen.getByPlaceholderText("Ingrese el correo electrónico"),
+        { target: { value: "ada@example.com" } },
+      );
+      fireEvent.change(
+        screen.getByPlaceholderText("Ingrese el nombre de usuario"),
+        { target: { value: "ada" } },
+      );
+      fireEvent.change(screen.getByPlaceholderText("Ingrese la contraseña"), {
+        target: { value: "Secreta123" },
+      });
+      fireEvent.change(screen.getByPlaceholderText("Confirme la contraseña"), {
+        target: { value: "Secreta123" },
+      });
+    };
+
+    it("al crear marca y bloquea exactamente los permisos básicos de la API", () => {
+      render(<UserForm mode="create" onSubmit={vi.fn()} />);
+
+      expect(checkbox("Mi perfil")).toBeChecked();
+      expect(checkbox("Mi perfil")).toBeDisabled();
+      expect(checkbox("Ver telemetría")).toBeChecked();
+      expect(checkbox("Ver telemetría")).toBeDisabled();
+      expect(checkbox("Ver Usuarios")).not.toBeChecked();
+      expect(checkbox("Ver Usuarios")).toBeEnabled();
+      expect(checkbox("Gestionar catálogo de sensores")).not.toBeChecked();
+      expect(checkbox("Gestionar catálogo de sensores")).toBeEnabled();
+    });
+
+    it("aplica los básicos cuando los permisos llegan después de montar", () => {
+      permissionsQueryState.current = { data: undefined, isLoading: true };
+      const { rerender } = render(<UserForm mode="create" onSubmit={vi.fn()} />);
+
+      expect(screen.getByRole("button", { name: "Crear Usuario" })).toBeDisabled();
+
+      permissionsQueryState.current = { data: PERMISSIONS_RESPONSE };
+      rerender(<UserForm mode="create" onSubmit={vi.fn()} />);
+
+      expect(checkbox("Ver telemetría")).toBeChecked();
+      expect(checkbox("Ver telemetría")).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Crear Usuario" })).toBeEnabled();
+    });
+
+    it("deseleccionar todos conserva los permisos básicos", () => {
+      render(<UserForm mode="create" onSubmit={vi.fn()} />);
+
+      fireEvent.click(checkbox("Gestionar catálogo de sensores"));
+      expect(checkbox("Gestionar catálogo de sensores")).toBeChecked();
+
+      const sensorGroup = screen.getByText("Sensores ambientales");
+      fireEvent.click(within(sensorGroup).getByText("Deseleccionar todos"));
+
+      expect(checkbox("Gestionar catálogo de sensores")).not.toBeChecked();
+      expect(checkbox("Ver telemetría")).toBeChecked();
+    });
+
+    it("al crear envía los permisos básicos", async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(<UserForm mode="create" onSubmit={onSubmit} />);
+
+      fillCreateForm();
+      fireEvent.click(screen.getByRole("button", { name: "Crear Usuario" }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+      expect([...onSubmit.mock.calls[0][0].permissions].sort()).toEqual(
+        ["telemetry:read", "user:me"],
+      );
+    });
+
+    it("al editar conserva los permisos guardados y agrega los básicos al enviar", async () => {
+      const onSubmit = vi.fn().mockResolvedValue(undefined);
+      render(
+        <UserForm
+          mode="edit"
+          defaultValues={{
+            email: "ada@example.com",
+            username: "ada",
+            firstName: "Ada",
+            lastName: "Lovelace",
+            identificationNumber: "12345678",
+            permissions: ["user:me", "user:read"],
+            isActive: true,
+            isAdmin: false,
+          }}
+          onSubmit={onSubmit}
+        />,
+      );
+
+      expect(checkbox("Ver Usuarios")).toBeChecked();
+      expect(checkbox("Ver telemetría")).toBeChecked();
+      expect(checkbox("Ver telemetría")).toBeDisabled();
+
+      fireEvent.click(screen.getByRole("button", { name: "Guardar Cambios" }));
+
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledOnce());
+      expect([...onSubmit.mock.calls[0][0].permissions].sort()).toEqual(
+        ["telemetry:read", "user:me", "user:read"],
+      );
+    });
   });
 });

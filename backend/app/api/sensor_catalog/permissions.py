@@ -10,12 +10,12 @@ class SensorCatalogPermissions:
 
 
 SENSOR_CATALOG_PERMISSIONS = {
-    "label": "Environmental sensors",
+    "label": "Sensores ambientales",
     "items": [
-        {"value": SensorCatalogPermissions.READ, "label": "View sensor catalog"},
-        {"value": SensorCatalogPermissions.WRITE, "label": "Manage sensor catalog"},
-        {"value": SensorCatalogPermissions.DEVICE_READ, "label": "View device sensors"},
-        {"value": SensorCatalogPermissions.DEVICE_WRITE, "label": "Manage device sensors"},
-        {"value": SensorCatalogPermissions.TELEMETRY_READ, "label": "View telemetry"},
+        {"value": SensorCatalogPermissions.READ, "label": "Ver catálogo de sensores"},
+        {"value": SensorCatalogPermissions.WRITE, "label": "Gestionar catálogo de sensores"},
+        {"value": SensorCatalogPermissions.DEVICE_READ, "label": "Ver sensores de dispositivos"},
+        {"value": SensorCatalogPermissions.DEVICE_WRITE, "label": "Gestionar sensores de dispositivos"},
+        {"value": SensorCatalogPermissions.TELEMETRY_READ, "label": "Ver telemetría"},
     ],
 }

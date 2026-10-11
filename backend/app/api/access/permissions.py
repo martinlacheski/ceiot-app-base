@@ -8,15 +8,15 @@ class AccessPermissions:
 
 
 ACCESS_PERMISSIONS = {
-    "label": "Access",
+    "label": "Accesos compartidos",
     "items": [
         {
             "value": AccessPermissions.READ,
-            "label": "Ver acceso contextual",
+            "label": "Ver accesos compartidos",
         },
         {
             "value": AccessPermissions.MANAGE,
-            "label": "Gestionar invitados y comisión por alcance",
+            "label": "Gestionar invitados",
         },
     ],
 }

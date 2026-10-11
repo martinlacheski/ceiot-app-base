@@ -1,9 +1,12 @@
 export const PERMISSIONS = {
   SENSOR_CATALOG: {
-    label: "Catálogo de sensores",
+    label: "Sensores ambientales",
     items: [
       { value: "sensor_catalog:read", label: "Ver catálogo de sensores" },
-      { value: "sensor_catalog:write", label: "Administrar catálogo de sensores" },
+      { value: "sensor_catalog:write", label: "Gestionar catálogo de sensores" },
+      { value: "device_sensor:read", label: "Ver sensores de dispositivos" },
+      { value: "device_sensor:write", label: "Gestionar sensores de dispositivos" },
+      { value: "telemetry:read", label: "Ver telemetría" },
     ],
   },
   USERS: {

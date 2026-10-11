@@ -44,20 +44,11 @@ import {
 
 const CREATE_USER_LABEL = "Crear Usuario";
 
-// Define mandatory permissions that cannot be unchecked
-const MANDATORY_PERMISSIONS = [
-  "user:me",
-  "user:password",
-  "location:read",
-  "identification_type:read",
-  "environment:read",
-  "environment:create",
-  "environment:update",
-  "environment:delete",
-  "device:read",
-  "device:pair",
-  "device:update",
-];
+const EMPTY_PERMISSIONS: string[] = [];
+
+/** Merges the basic (mandatory) permissions into a selection, without duplicates. */
+const withBasicPermissions = (permissions: string[], basic: string[]) =>
+  Array.from(new Set([...basic, ...permissions]));
 
 const getUserSchema = (mode: "create" | "edit") =>
   z
@@ -170,10 +161,16 @@ export function UserForm({
 
   const identificationTypes = identificationTypesData?.items ?? [];
 
-  const { data: permissionsData } = useQuery({
+  const { data: permissionsData, isLoading: isPermissionsLoading } = useQuery({
     queryKey: ["permissions"],
     queryFn: () => getPermissionsAction(),
   });
+
+  // Single source of truth: the basic set the API grants every standard user.
+  // They are always shown checked + locked and always included on submit, so
+  // create-mode defaults follow the API even when it resolves after mount.
+  const basicPermissions =
+    permissionsData?.basic_permissions ?? EMPTY_PERMISSIONS;
 
   // Normalize permissions to a list of groups
   const groups: any[] = useMemo(() => {
@@ -206,19 +203,7 @@ export function UserForm({
 
       isActive: defaultValues?.isActive ?? true,
       isAdmin: defaultValues?.isAdmin ?? false,
-      permissions: defaultValues?.permissions || [
-        "user:me",
-        "user:password",
-        "location:read",
-        "identification_type:read",
-        "environment:read",
-        "environment:create",
-        "environment:update",
-        "environment:delete",
-        "device:read",
-        "device:pair",
-        "device:update",
-      ],
+      permissions: defaultValues?.permissions || [],
       password: "",
       confirmPassword: "",
     },
@@ -226,12 +211,22 @@ export function UserForm({
 
   // Store permissions before admin toggle to restore them if untoggled
   const previousPermissionsRef = useRef<string[]>(
-    defaultValues?.permissions || ["user:me", "user:password"],
+    defaultValues?.permissions || [],
   );
 
   // Watch permissions to update UI dynamically
   // eslint-disable-next-line react-hooks/incompatible-library
-  const currentPermissions = form.watch("permissions");
+  const selectedPermissions = form.watch("permissions");
+  const currentPermissions = withBasicPermissions(
+    selectedPermissions ?? EMPTY_PERMISSIONS,
+    basicPermissions,
+  );
+
+  const handleFormSubmit = (values: UserFormValues) =>
+    onSubmit({
+      ...values,
+      permissions: withBasicPermissions(values.permissions, basicPermissions),
+    });
 
   // Watch password for requirements
   const password = form.watch("password") || "";
@@ -329,7 +324,7 @@ export function UserForm({
   return (
     <Form {...form}>
       <form
-        onSubmit={form.handleSubmit(onSubmit as any)}
+        onSubmit={form.handleSubmit(handleFormSubmit as any)}
         className="w-full min-w-0 space-y-4"
       >
         {/* Nombre y Apellido */}
@@ -760,11 +755,11 @@ export function UserForm({
                         let newPermissions: string[];
 
                         if (isGroupComplete) {
-                          // Deselect but keep mandatory ones
+                          // Deselect but keep the basic ones
                           newPermissions = currentPermissions.filter(
                             (p) =>
                               !groupValues.includes(p) ||
-                              MANDATORY_PERMISSIONS.includes(p),
+                              basicPermissions.includes(p),
                           );
                         } else {
                           // Select all
@@ -782,7 +777,7 @@ export function UserForm({
                   </h4>
                   <div className="space-y-2">
                     {group.items.map((permission: any) => {
-                      const isMandatory = MANDATORY_PERMISSIONS.includes(
+                      const isBasic = basicPermissions.includes(
                         permission.value,
                       );
 
@@ -799,10 +794,11 @@ export function UserForm({
                               >
                                 <FormControl>
                                   <Checkbox
-                                    checked={field.value?.includes(
-                                      permission.value,
-                                    )}
-                                    disabled={isMandatory}
+                                    checked={
+                                      isBasic ||
+                                      field.value?.includes(permission.value)
+                                    }
+                                    disabled={isBasic}
                                     onCheckedChange={(checked) => {
                                       return checked
                                         ? field.onChange([
@@ -850,7 +846,7 @@ export function UserForm({
           )}
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isPermissionsLoading}
             className={FULL_PAGE_FORM_ACTION_BUTTON_CLASS}
           >
             {isSubmitting && (
