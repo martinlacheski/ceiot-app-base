@@ -4,7 +4,10 @@ Esta guía sirve para quien acaba de clonar el repositorio y necesita crear
 todos los certificados que usa el stack local: la CA del proyecto, el
 certificado de servidor del broker EMQX y los certificados cliente de cada
 dispositivo. Ningún certificado ni clave se versiona, así que en un clon nuevo
-hay que generarlos antes del primer arranque.
+hay que generarlos antes del primer arranque. Las carpetas de destino sí se
+versionan: `mqtt/certs/` y `esp32/cert/` traen archivos `*.example` con el
+nombre de cada archivo real y una indicación de cómo se genera (no sirven como
+certificados), y `mqtt/pki/ca/` y `mqtt/pki/devices/` traen un `.gitkeep`.
 
 El detalle de la configuración de seguridad del broker (ACL, autenticación,
 revocación) está en [`mqtt/README.md`](../mqtt/README.md). El alta y grabación
@@ -24,7 +27,7 @@ mqtt/pki/crear-ca.sh
 # 3. Certificado del broker (toma LAN_BIND_IP de mqtt/.env si está definida)
 mqtt/pki/emitir-certificado-broker.sh
 
-# 4. Levantar el stack
+# 4. Levantar el stack (antes, crear los demás .env: ver README.md, "Arranque")
 scripts/levantar.sh --build
 
 # 5. Certificado de un dispositivo (o usar provisioning/provision.py, paso 4)
@@ -43,7 +46,8 @@ Después, compruebe el resultado con la sección [Verificar](#verificar).
 | `mqtt/certs/emqx.crt`, `emqx.key`, `ca.crt` | `emitir-certificado-broker.sh` | Contenedor `emqx` (montado en `/opt/emqx/certs`) | No |
 | `mqtt/pki/devices/<SERIAL>/client.crt`, `client.key`, `root.crt` | `emitir-certificado-dispositivo.sh` | Firmware (`/littlefs`) y emulador | No |
 | `provisioning/build/<SERIAL>/cert/` | `provisioning/provision.py` | Preparación del firmware | No |
-| `esp32/cert/` | `provisioning/provision.py` | Imagen LittleFS del último dispositivo preparado | No |
+| `esp32/cert/root.crt`, `client.crt`, `client.key`, `serial.txt`, `provisioning.json` | `provisioning/provision.py` | Imagen LittleFS del último dispositivo preparado | No |
+| `mqtt/certs/*.example`, `esp32/cert/*.example` | Versionados en el repositorio | Solo documentan qué archivo va en cada carpeta | Sí: son marcadores sin material criptográfico |
 
 El backend y `mqtt-runtime` **no usan certificados**: se conectan al listener
 TCP interno (`emqx:1883`) con el usuario `backend-services` y la contraseña
@@ -228,10 +232,13 @@ emulador sí.
 ## Seguridad
 
 - No commitee claves ni certificados. `.gitignore` cubre `*.key`, `*.pem`,
-  `*.crt`, `*.csr`, `*.srl`, `mqtt/certs/`, `mqtt/pki/ca/`,
-  `mqtt/pki/devices/`, `esp32/cert/`, `provisioning/build/` y todos los
-  `.env`. Antes de un commit, `git status` no debe listar ninguno de esos
-  archivos.
+  `*.crt`, `*.csr`, `*.srl`, el contenido de `mqtt/certs/`, `mqtt/pki/ca/`,
+  `mqtt/pki/devices/` y `esp32/cert/` (salvo los `*.example` y `.gitkeep`),
+  `provisioning/build/` y todos los `.env`. Antes de un commit, `git status`
+  no debe listar ninguno de esos archivos; `git check-ignore -v <archivo>`
+  confirma qué regla lo ignora.
+- Los `*.example` son marcadores de texto: nunca copie material real sobre
+  ellos.
 - `ca.key` nunca se copia al backend ni a otra máquina; guarde el respaldo
   fuera del repositorio.
 - No comparta `client.key` entre dispositivos: cada equipo tiene el suyo.

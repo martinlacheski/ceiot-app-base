@@ -32,13 +32,17 @@ The application image is `build/iot_device.bin`: the project name must stay
 ## Device certificates (mTLS)
 
 The broker requires a client certificate per device. The files are **never
-committed** (`esp32/cert/` is gitignored):
+committed**: the contents of `esp32/cert/` are gitignored except the
+`*.example` placeholders, which only show the expected file names and how each
+file is produced (they are not valid certificates and the build ignores them):
 
 | File | Content |
 | --- | --- |
 | `esp32/cert/root.crt` | CA that signed the broker certificate |
 | `esp32/cert/client.crt` | device certificate (CN = device serial) |
 | `esp32/cert/client.key` | device private key |
+| `esp32/cert/serial.txt` | device serial, `IOT-XXXX-XXXX` (optional) |
+| `esp32/cert/provisioning.json` | broker profile and sensor (optional) |
 
 See `mqtt/README.md` for how to issue them with the project PKI scripts.
 
@@ -174,9 +178,14 @@ the configuration AP starts so the serial can be set. Saving the serial or the
 broker settings from the web UI rebuilds and restarts the MQTT client
 (`mqtt_manager_request_reload()`): no restart needed.
 
-The default port matches the development stack, which publishes the broker
-TLS listener on `MQTT_LISTENER_TLS` (`18883`) on `LAN_BIND_IP`. For a broker on
-the standard port, change it on the MQTT page or in `mqtt_config_logic.h`.
+These compiled-in defaults only apply when nothing else is configured. A board
+flashed with a `provisioning.json` (see "Device certificates") takes the broker
+host, port and TLS flag from it on the first boot, so the usual path is to let
+`provisioning/provision.py` write the stack values there (`LAN_BIND_IP` and
+`MQTT_LISTENER_TLS`, `8883` in the standard configuration; see
+`esp32/cert/provisioning.json.example`). Without that file, change them on the
+MQTT page or in `mqtt_config_logic.h`: `18883` matches a development stack that
+publishes the broker TLS listener on that port instead of the standard `8883`.
 
 ## Time synchronization
 
