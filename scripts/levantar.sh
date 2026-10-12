@@ -66,7 +66,7 @@ for component in backend frontend landing timescaledb mqtt; do
   if [ ! -f "$component/.env" ]; then missing_env+=("$component"); fi
 done
 if [ "${#missing_env[@]}" -gt 0 ]; then
-  echo "Error: faltan archivos de configuración. Crealos a partir de las plantillas y completá los valores (ver README.md, sección \"Arranque\"):" >&2
+  echo "Error: faltan archivos de configuración. Crealos a partir de las plantillas y completá los valores (ver docs/puesta-en-marcha.md, sección \"Arranque\"):" >&2
   for component in "${missing_env[@]}"; do
     echo "  cp $component/.env.example $component/.env" >&2
   done

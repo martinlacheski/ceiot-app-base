@@ -27,7 +27,7 @@ mqtt/pki/crear-ca.sh
 # 3. Certificado del broker (toma LAN_BIND_IP de mqtt/.env si está definida)
 mqtt/pki/emitir-certificado-broker.sh
 
-# 4. Levantar el stack (antes, crear los demás .env: ver README.md, "Arranque")
+# 4. Levantar el stack (antes, crear los demás .env: ver docs/puesta-en-marcha.md, "Arranque")
 scripts/levantar.sh --build
 
 # 5. Certificado de un dispositivo (o usar provisioning/provision.py, paso 4)
