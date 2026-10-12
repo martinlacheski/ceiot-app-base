@@ -123,6 +123,18 @@ for name in "$app_user" "$admin_user"; do
     exit 2
   fi
 done
+if ! [[ "$db_name" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]]; then
+  echo "Error: DB_DATABASE debe ser un identificador simple (letras, números y _)." >&2
+  exit 2
+fi
+# Compose expands "$" and escapes in .env values; restricting passwords to
+# letters and digits guarantees the role gets exactly what the backend sends.
+for password in "$app_password" "$admin_password"; do
+  if ! [[ "$password" =~ ^[A-Za-z0-9]+$ ]]; then
+    echo "Error: DB_PASSWORD y ALEMBIC_DB_PASSWORD deben tener solo letras y números (genérelas con: openssl rand -hex 24)." >&2
+    exit 2
+  fi
+done
 if [ "$app_user" = "$admin_user" ]; then
   echo "Error: DB_USER y ALEMBIC_DB_USER deben ser usuarios distintos." >&2
   exit 2
@@ -260,9 +272,10 @@ DROP ROLE IF EXISTS $transition_role;
 CREATE ROLE $transition_role SUPERUSER LOGIN;
 SQL
   echo "Renombrando $app_user a $admin_user y creando $app_user sin privilegios..."
-  # Passwords travel through stdin only; log_statement is off for this session.
+  # Passwords travel through stdin only; statement logging (also on error) is off for this session.
   psql_as "$transition_role" postgres >/dev/null <<SQL
 SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
 SELECT count(pg_terminate_backend(pid)) FROM pg_stat_activity
 WHERE usename = '$app_user' AND backend_type = 'client backend' AND pid <> pg_backend_pid();
 BEGIN;
@@ -279,6 +292,7 @@ else
   echo "Reasegurando atributos y contraseña de $app_user..."
   psql_as "$admin_user" postgres <<SQL
 SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
 DROP ROLE IF EXISTS $transition_role;
 SELECT format('CREATE ROLE %I', '$app_user') WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '$app_user') \gexec
 ALTER ROLE "$app_user" WITH LOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOREPLICATION INHERIT PASSWORD $app_literal;
@@ -286,6 +300,8 @@ GRANT CONNECT ON DATABASE "$db_name" TO "$app_user";
 SQL
 fi
 
+# From here on the roles are already separated: a failure only needs a re-run.
+trap 'echo "Error: los roles ya quedaron separados, pero falló la reconstrucción o las migraciones. Corrija el problema y vuelva a ejecutar scripts/separar-roles-db.sh para terminar (es idempotente)." >&2' ERR
 echo "Reconstruyendo las imágenes del backend y aplicando las migraciones (scripts/levantar.sh)..."
 docker compose build backend mqtt-runtime
 scripts/levantar.sh

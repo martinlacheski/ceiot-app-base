@@ -20,8 +20,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 INIT_SCRIPT = REPO / "timescaledb/init/01-create-app-role.sh"
 TRANSITION_SCRIPT = REPO / "scripts/separar-roles-db.sh"
-APP_SECRET = "app'secret-0123"
-ADMIN_SECRET = "admin-secret-4567"
+APP_SECRET = "appSecret0123"
+ADMIN_SECRET = "adminSecret4567"
 
 
 def write_executable(path: Path, body: str) -> None:
@@ -123,6 +123,13 @@ class TransitionScriptTests(unittest.TestCase):
                "STUB_STATE": state}
         return subprocess.run([str(self.root / "scripts/separar-roles-db.sh"), *args], cwd=self.root, env=env,
                               capture_output=True, text=True, timeout=60)
+
+    def test_rejects_passwords_compose_would_rewrite(self):
+        # Compose expands "$" in .env values: the role would get a different password than the backend.
+        self.write_env(DB_PASSWORD="abc$def")
+        result = self.run_script("--dry-run")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("solo letras y números", result.stderr)
 
     def assert_no_secret(self, result):
         output = result.stdout + result.stderr
