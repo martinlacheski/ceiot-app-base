@@ -35,6 +35,30 @@ Códigos de salida de `scripts/backup.sh`: `0` backup verificado (o generado,
 con `--sin-verificar`), `1` backup inválido o error, `2` uso incorrecto y `75`
 otra ejecución en curso (ver [Ejecuciones superpuestas](#ejecuciones-superpuestas)).
 
+## Demo en vivo
+
+`scripts/demo-backup.sh` recorre el proceso paso a paso, con pausas para
+explicar cada etapa:
+
+1. Genera un backup real y lo verifica (dump, manifiesto, S3 y restauración
+   de prueba).
+2. Muestra qué quedó guardado: archivos, snapshot exportado, versión de
+   Alembic, filas de las tablas principales, políticas RLS y objetos S3.
+3. Daña dos copias temporales del backup para mostrar que la verificación lo
+   detecta:
+   - dump truncado: falla la comprobación de checksums y la restauración;
+   - manifiesto con un conteo alterado y checksums recalculados: el dump
+     restaura, pero la base restaurada no coincide con lo declarado.
+4. Borra las copias dañadas; el backup real queda en `backups/`.
+
+```bash
+scripts/demo-backup.sh                 # con pausas (Enter para avanzar)
+scripts/demo-backup.sh --sin-pausas    # de corrido
+scripts/demo-backup.sh --usar backups/<fecha>   # sin generar un backup nuevo
+```
+
+La demo sólo lee la base real. Cada verificación tarda unos segundos.
+
 ## Backup automático (cron)
 
 El backup se programa en el **crontab del usuario del host** que levanta el
