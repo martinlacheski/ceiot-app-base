@@ -37,6 +37,8 @@ esp32/cert/*
 provisioning/build/
 provisioning/.env.local
 backend/postgres_data/
+# Backups (scripts/backup.sh): application data, never versioned.
+backups/
 
 # Generated dependencies, caches, and build output
 **/node_modules/

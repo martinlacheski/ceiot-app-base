@@ -269,6 +269,29 @@ El arranque sólo crea un administrador cuando todavía no existe ninguno y el
 operador configuró `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL` y
 `BOOTSTRAP_ADMIN_PASSWORD`; nunca reemplaza administradores existentes.
 
+## Backups
+
+`scripts/backup.sh` respalda la base (dump consistente con `pg_dump` sobre un
+snapshot exportado), los roles (sin contraseñas) y los objetos S3 de
+documentos y firmware, y al terminar verifica el resultado restaurándolo en un
+contenedor PostgreSQL descartable, con la misma imagen y sin red:
+
+```bash
+scripts/backup.sh                              # backup + verificación
+scripts/verificar-backup.sh backups/<fecha>    # volver a verificar uno existente
+```
+
+Cada backup queda en `backups/<fecha UTC>/` (ignorado por git) con el dump,
+`manifest.json` (conteos exactos, huellas de contenido, hypertables, políticas
+RLS, roles, versiones de Alembic y de las extensiones) y `SHA256SUMS`. La
+verificación termina con `✅ Backup verificado` (código 0) sólo si el dump se
+restaura sin errores, la base restaurada coincide exactamente con el manifiesto
+y cada objeto S3 conserva su sha256; si no, informa `❌ Backup inválido` con
+los motivos (código 1). El backup sólo lee la base real.
+
+El detalle de lo que se verifica, las opciones, las limitaciones y los pasos
+para restaurar en la base real están en [`docs/backups.md`](docs/backups.md).
+
 ## Detener los servicios
 
 Para detener y retirar los contenedores sin borrar los datos de la base, ejecutá:
