@@ -64,6 +64,18 @@ if DATABASE_URL and "postgresql+asyncpg://" in DATABASE_URL:
 # Obtenemos el metadata de la base de datos
 target_metadata = SQLModel.metadata
 
+# Since 0028 telemetry is stored in the private ``telemetry_store`` schema and exposed through
+# views (``public.telemetry``, the SQLModel table, and ``public.telemetry_hourly``) maintained by
+# migrations: autogenerate must never create, drop or alter them as plain tables.
+UNMANAGED_TABLES = frozenset({"telemetry", "telemetry_hourly"})
+
+
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and name in UNMANAGED_TABLES:
+        return False
+    return True
+
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -91,6 +103,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         compare_type=True,  # Comparamos el tipo de datos
         compare_server_default=True,  # Comparamos el valor por defecto
+        include_object=include_object,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -122,7 +135,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection, target_metadata=target_metadata,
             compare_type=True,  # Comparamos el tipo de datos
-            compare_server_default=True  # Comparamos el valor por defecto
+            compare_server_default=True,  # Comparamos el valor por defecto
+            include_object=include_object,
         )
 
         with context.begin_transaction():

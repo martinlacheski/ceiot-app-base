@@ -14,6 +14,15 @@ from alembic.script import ScriptDirectory
 
 ROOT = Path(__file__).resolve().parents[2]
 REVISION = ROOT / "alembic/versions/0005_environmental_sensor_model.py"
+LIFECYCLE_REVISION = ROOT / "alembic/versions/0028_telemetry_lifecycle.py"
+
+
+def _load(path, name):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_revision_is_chained_and_reversible():
@@ -83,15 +92,16 @@ def test_downgrade_and_upgrade_round_trip_in_transaction(postgres_rls_config):
     if url.drivername == "postgresql+asyncpg":
         url = url.set(drivername="postgresql+psycopg")
     engine = sa.create_engine(url)
-    spec = importlib.util.spec_from_file_location("environmental_revision", REVISION)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module = _load(REVISION, "environmental_revision")
+    lifecycle = _load(LIFECYCLE_REVISION, "telemetry_lifecycle_revision")
     try:
         with engine.connect() as connection:
             transaction = connection.begin()
             try:
                 operations = Operations(MigrationContext.configure(connection))
+                with patch.object(lifecycle, "op", operations):
+                    # 0028 moved telemetry to telemetry_store behind a view: back to the 0005 table.
+                    lifecycle.downgrade()
                 with patch.object(module, "op", operations):
                     # The ai_read views (0012) depend on telemetry/device_sensor/...; peel
                     # them off inside this rolled-back transaction, as a real downgrade would.

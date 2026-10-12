@@ -308,6 +308,10 @@ El detalle de lo que se verifica, las opciones, la programación, la retención,
 las limitaciones y los pasos para restaurar en la base real están en
 [`docs/backups.md`](docs/backups.md).
 
+La compresión, la retención y los agregados horarios de la telemetría (y la
+limpieza de lecturas y operaciones viejas) se explican en
+[`docs/ciclo-de-vida-datos.md`](docs/ciclo-de-vida-datos.md).
+
 ## Detener los servicios
 
 Para detener y retirar los contenedores sin borrar los datos de la base, ejecutá:

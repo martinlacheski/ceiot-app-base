@@ -205,17 +205,85 @@ ORDER BY 1, 2, 3
 """
 
 
+HOUR_SECONDS = 3600
+
+# Hourly rollup path. Full hours come from ``telemetry_hourly`` (continuous aggregate, real time,
+# behind the same visibility predicate as ``telemetry``); the partial hours at the window edges come
+# from the raw rows, so the result equals ``_AGGREGATE_SQL`` exactly: hourly sums and counts
+# re-aggregate into any whole-hour bucket aligned to the hour (avg = sum / count, numeric).
+_ROLLUP_SQL = """
+WITH parts AS (
+    SELECT time_bucket(CAST(:bucket_seconds AS integer) * interval '1 second', h.bucket,
+                       CAST(:origin AS timestamptz)) AS bucket,
+           h.sensor_key, h.variable, h.sum_value, h.min_value, h.max_value, h.readings
+    FROM telemetry_hourly h
+    WHERE h.device_id = :device_id AND h.bucket >= :full_start AND h.bucket < :full_end@ACCESS_HOURLY@
+    UNION ALL
+    SELECT time_bucket(CAST(:bucket_seconds AS integer) * interval '1 second', t.time,
+                       CAST(:origin AS timestamptz)),
+           s.key, v.key,
+           CASE WHEN jsonb_typeof(v.value) = 'number' THEN (v.value #>> '{}')::numeric END,
+           CASE WHEN jsonb_typeof(v.value) = 'number' THEN (v.value #>> '{}')::numeric END,
+           CASE WHEN jsonb_typeof(v.value) = 'number' THEN (v.value #>> '{}')::numeric END,
+           1
+    FROM telemetry t
+    CROSS JOIN LATERAL jsonb_each(t."values") AS s(key, value)
+    CROSS JOIN LATERAL jsonb_each(CASE WHEN jsonb_typeof(s.value) = 'object' THEN s.value ELSE '{}'::jsonb END)
+        AS v(key, value)
+    WHERE t.device_id = :device_id AND jsonb_typeof(v.value) = 'number'
+      AND ((t.time >= :start AND t.time < :full_start) OR (t.time >= :full_end AND t.time <= :end))@ACCESS@
+)
+SELECT bucket, sensor_key, variable,
+       sum(sum_value) / sum(readings) AS avg_value, min(min_value) AS min_value, max(max_value) AS max_value,
+       sum(readings) AS readings
+FROM parts
+GROUP BY 1, 2, 3
+HAVING sum(readings) > 0
+ORDER BY 1, 2, 3
+"""
+
+
+def uses_hourly_rollup(bucket_seconds: int, utc_offset_minutes: int) -> bool:
+    """Whole-hour buckets starting at whole local hours can be built from hourly rollups."""
+    return bucket_seconds >= HOUR_SECONDS and bucket_seconds % HOUR_SECONDS == 0 and utc_offset_minutes % 60 == 0
+
+
+def _floor_hour(value: datetime) -> datetime:
+    return value.replace(minute=0, second=0, microsecond=0)
+
+
+def _ceil_hour(value: datetime) -> datetime:
+    floor = _floor_hour(value)
+    return floor if floor == value else floor + timedelta(hours=1)
+
+
 async def aggregate_telemetry(session: AsyncSession, device_id: uuid.UUID, start: datetime, end: datetime,
                               bucket_seconds: int, utc_offset_minutes: int = 0,
                               access_start: datetime | None = None) -> list[dict]:
-    """avg/min/max/count per time bucket, sensor key and variable, ascending by bucket start."""
-    params = {'device_id': device_id, 'start': _aware(start), 'end': _aware(end),
+    """avg/min/max/count per time bucket, sensor key and variable, ascending by bucket start.
+
+    Buckets of one hour or more (aligned to whole local hours) read the hourly continuous aggregate
+    for the full hours of the window and the raw rows for its partial edge hours; finer buckets
+    aggregate the raw rows.
+    """
+    start, end = _aware(start).astimezone(timezone.utc), _aware(end).astimezone(timezone.utc)
+    if access_start is not None:
+        access_start = _aware(access_start).astimezone(timezone.utc)
+        start = max(start, access_start)
+    params = {'device_id': device_id, 'start': start, 'end': end,
               'bucket_seconds': bucket_seconds, 'origin': bucket_origin(utc_offset_minutes)}
-    access = ''
+    access = access_hourly = ''
     if access_start is not None:
         access = ' AND t.time >= :access_start'
-        params['access_start'] = _aware(access_start)
-    rows = (await session.execute(text(_AGGREGATE_SQL.replace('@ACCESS@', access)), params)).all()
+        access_hourly = ' AND h.bucket >= :access_start'
+        params['access_start'] = access_start
+    full_start, full_end = _ceil_hour(start), _floor_hour(end)
+    if uses_hourly_rollup(bucket_seconds, utc_offset_minutes) and full_start < full_end:
+        params.update(full_start=full_start, full_end=full_end)
+        sql = _ROLLUP_SQL.replace('@ACCESS@', access).replace('@ACCESS_HOURLY@', access_hourly)
+    else:
+        sql = _AGGREGATE_SQL.replace('@ACCESS@', access)
+    rows = (await session.execute(text(sql), params)).all()
     buckets: dict[datetime, dict] = {}
     for bucket, sensor_key, variable, average, minimum, maximum, readings in rows:
         at = _aware(bucket).astimezone(timezone.utc)

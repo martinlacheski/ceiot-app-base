@@ -70,6 +70,38 @@ class StatsSqlTests(unittest.TestCase):
         self.assertNotIn("row_hash_sum", sql)
 
 
+class TelemetryStoreTests(unittest.TestCase):
+    """Migration 0028 moved telemetry to telemetry_store with jobs and a continuous aggregate."""
+
+    def test_the_private_telemetry_schema_is_described(self):
+        self.assertIn("telemetry_store", bm.SCHEMAS)
+        self.assertIn("'telemetry_store'", bm.catalog_sql())
+
+    def test_default_equivalent_acls_are_recorded_as_null(self):
+        # pg_dump omits an explicit ACL that equals the default; the restore has NULL.
+        sql = bm.catalog_sql()
+        self.assertIn("'acl', CASE WHEN c.relacl IS NULL OR c.relacl = acldefault('r', c.relowner)", sql)
+        self.assertIn("'acl', CASE WHEN n.nspacl IS NULL OR n.nspacl = acldefault('n', n.nspowner)", sql)
+
+    def test_custom_jobs_are_recorded_with_their_schedule(self):
+        self.assertIn("j.proc_schema NOT IN ('_timescaledb_functions', '_timescaledb_internal')", bm.TIMESCALE_SQL)
+        self.assertIn("'initial_start'", bm.TIMESCALE_SQL)
+        self.assertIn("'compressed_chunks'", bm.TIMESCALE_SQL.split("'continuous_aggregates'")[1])
+
+    def test_materialized_rows_of_each_continuous_aggregate_are_fingerprinted(self):
+        timescale = {"continuous_aggregates": {"telemetry_store.telemetry_hourly": {
+            "materialization_hypertable": "_timescaledb_internal._materialized_hypertable_4",
+            "time_column": "bucket"}}}
+        [sql] = bm.materialization_stats_sql(timescale)
+        self.assertIn('FROM "_timescaledb_internal"."_materialized_hypertable_4" AS t', sql)
+        self.assertIn('min(t."bucket")', sql)
+        self.assertIn("'row_hash_sum'", sql)
+
+    def test_no_continuous_aggregates_add_nothing(self):
+        self.assertEqual(bm.materialization_stats_sql(None), [])
+        self.assertEqual(bm.materialization_stats_sql({"continuous_aggregates": {}}), [])
+
+
 class CompareTests(unittest.TestCase):
     def test_identical_descriptions_have_no_differences(self):
         data = {"stats": {"public.device": {"rows": 5}}, "alembic_version": ["0027"]}

@@ -33,7 +33,8 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
-SCHEMAS = ("public", "ai_read")
+# telemetry_store: the telemetry hypertable and its continuous aggregate (migration 0028).
+SCHEMAS = ("public", "ai_read", "telemetry_store")
 MANIFEST_FORMAT = 1
 MANIFEST_FILE = "manifest.json"
 SUMS_FILE = "SHA256SUMS"
@@ -138,8 +139,16 @@ def _single_json(lines: list[str]) -> Any:
 # Database description
 
 
+# An ACL equal to the object's default (e.g. after ``REVOKE ALL ... FROM PUBLIC`` on a new
+# relation) is not dumped by pg_dump, so it is restored as NULL: both mean the same privileges and
+# are recorded as null.
+RELATION_ACL = "CASE WHEN c.relacl IS NULL OR c.relacl = acldefault('r', c.relowner) THEN NULL ELSE c.relacl::text END"
+SCHEMA_ACL = "CASE WHEN n.nspacl IS NULL OR n.nspacl = acldefault('n', n.nspowner) THEN NULL ELSE n.nspacl::text END"
+
+
 def catalog_sql() -> str:
     schemas = _schemas_array()
+    relation_acl, schema_acl = RELATION_ACL, SCHEMA_ACL
     return f"""
 SELECT json_build_object(
   'server_version', current_setting('server_version'),
@@ -154,13 +163,13 @@ SELECT json_build_object(
     SELECT json_object_agg(e.extname, json_build_object('version', e.extversion, 'schema', n.nspname))
     FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace),
   'schemas', (
-    SELECT json_object_agg(n.nspname, json_build_object('owner', pg_get_userbyid(n.nspowner), 'acl', n.nspacl::text))
+    SELECT json_object_agg(n.nspname, json_build_object('owner', pg_get_userbyid(n.nspowner), 'acl', {schema_acl}))
     FROM pg_namespace n WHERE n.nspname = ANY({schemas})),
   'relations', (
     SELECT json_object_agg(n.nspname || '.' || c.relname, json_build_object(
       'kind', c.relkind,
       'owner', pg_get_userbyid(c.relowner),
-      'acl', c.relacl::text,
+      'acl', {relation_acl},
       'rls_enabled', c.relrowsecurity,
       'rls_forced', c.relforcerowsecurity,
       'columns', (
@@ -272,14 +281,37 @@ SELECT json_build_object(
       'hypertable', j.hypertable_schema || '.' || j.hypertable_name,
       'schedule_interval', j.schedule_interval::text,
       'config', j.config,
-      'scheduled', j.scheduled)
-      ORDER BY j.hypertable_schema, j.hypertable_name, j.proc_name, j.config::text)
-    FROM timescaledb_information.jobs j WHERE j.hypertable_name IS NOT NULL),
+      'scheduled', j.scheduled,
+      'initial_start', j.initial_start::text,
+      'fixed_schedule', j.fixed_schedule)
+      ORDER BY j.hypertable_schema, j.hypertable_name, j.proc_schema, j.proc_name, j.config::text)
+    -- Policies of hypertables and caggs, and the custom jobs (the extension's own jobs excluded).
+    FROM timescaledb_information.jobs j
+    WHERE j.hypertable_name IS NOT NULL
+       OR j.proc_schema NOT IN ('_timescaledb_functions', '_timescaledb_internal')),
   'continuous_aggregates', (
     SELECT json_object_agg(c.view_schema || '.' || c.view_name, json_build_object(
       'materialized_only', c.materialized_only,
+      'compression_enabled', c.compression_enabled,
       'definition_md5', md5(c.view_definition),
-      'materialization_hypertable', c.materialization_hypertable_schema || '.' || c.materialization_hypertable_name))
+      'materialization_hypertable', c.materialization_hypertable_schema || '.' || c.materialization_hypertable_name,
+      'time_column', (
+        SELECT d.column_name FROM timescaledb_information.dimensions d
+        WHERE d.hypertable_schema = c.materialization_hypertable_schema
+          AND d.hypertable_name = c.materialization_hypertable_name AND d.dimension_type = 'Time'),
+      'compressed_chunks', (
+        SELECT count(*) FROM timescaledb_information.chunks ch
+        WHERE ch.hypertable_schema = c.materialization_hypertable_schema
+          AND ch.hypertable_name = c.materialization_hypertable_name AND ch.is_compressed),
+      'compression_settings', (
+        SELECT json_agg(json_build_object(
+          'column', s.attname,
+          'segmentby_index', s.segmentby_column_index,
+          'orderby_index', s.orderby_column_index,
+          'orderby_asc', s.orderby_asc) ORDER BY s.attname)
+        FROM timescaledb_information.compression_settings s
+        WHERE s.hypertable_schema = c.materialization_hypertable_schema
+          AND s.hypertable_name = c.materialization_hypertable_name)))
     FROM timescaledb_information.continuous_aggregates c)
 );
 """
@@ -313,6 +345,20 @@ def relation_stats_sql(
             order = 'md5(t::text) COLLATE "C"'
         fields.append(f"'ordered_md5', md5(coalesce(string_agg(md5(t::text), '' ORDER BY {order}), ''))")
     return f"SELECT json_build_object({', '.join(fields)}) FROM {source} AS t;"
+
+
+def materialization_stats_sql(timescale: dict[str, Any] | None) -> list[str]:
+    """Content of each continuous aggregate's materialization hypertable (what was materialized).
+
+    The aggregate view itself is counted with the relations (materialized rows plus the real-time
+    part); this pins the materialized rows, which outlive the raw retention.
+    """
+    statements = []
+    for name, info in sorted(((timescale or {}).get("continuous_aggregates") or {}).items()):
+        materialization = info.get("materialization_hypertable")
+        if materialization:
+            statements.append(relation_stats_sql(materialization, "r", [], info.get("time_column")))
+    return statements
 
 
 def _none_to(value: Any, default: Any) -> Any:
@@ -350,6 +396,7 @@ def collect_database(psql: Psql) -> dict[str, Any]:
         statements.append(
             relation_stats_sql(name, relation["kind"], relation["primary_key"], time_columns.get(name))
         )
+    statements.extend(materialization_stats_sql(timescale))
     if "public.alembic_version" in catalog["relations"]:
         statements.append(
             "SELECT json_build_object('alembic_version', "

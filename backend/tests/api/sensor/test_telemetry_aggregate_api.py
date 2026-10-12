@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api.router import router
-from app.api.sensor_catalog.telemetry import AGGREGATE_BUCKETS, resolve_bucket
+from app.api.sensor_catalog.telemetry import AGGREGATE_BUCKETS, resolve_bucket, uses_hourly_rollup
 from app.core.security import create_access_token
 
 MINUTE = 60
@@ -48,6 +48,21 @@ def test_auto_bucket_is_the_smallest_that_fits(span, max_points, expected):
 def test_explicit_bucket_is_kept():
     assert resolve_bucket("15m", DAY, 500) == "15m"
     assert resolve_bucket("1d", HOUR, 500) == "1d"
+
+
+@pytest.mark.parametrize(("bucket_seconds", "utc_offset_minutes", "expected"), [
+    (HOUR, 0, True),
+    (HOUR, -180, True),
+    (6 * HOUR, -180, True),
+    (DAY, 840, True),
+    (15 * MINUTE, 0, False),  # finer than an hour: raw rows
+    (HOUR, -210, False),      # half-hour offsets cut hourly rollups in two
+    (DAY, 345, False),
+    (90 * MINUTE, 0, False),  # not a whole number of hours
+])
+def test_hour_or_larger_buckets_on_whole_local_hours_use_the_hourly_rollup(
+        bucket_seconds, utc_offset_minutes, expected):
+    assert uses_hourly_rollup(bucket_seconds, utc_offset_minutes) is expected
 
 
 @pytest.fixture

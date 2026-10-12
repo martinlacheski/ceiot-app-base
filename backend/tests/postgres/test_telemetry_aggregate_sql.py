@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.api.sensor_catalog.telemetry import aggregate_telemetry
+from telemetry_rollup import refresh_hourly
 from test_device_history_environment_snapshot import history_rows
 
 pytestmark = pytest.mark.asyncio
@@ -51,6 +52,8 @@ async def _identity(session, user_id):
 async def test_hourly_buckets_stats_and_local_midnight_days(postgres_rls_config, rls_engine_factory, history_rows):
     admin = create_async_engine(postgres_rls_config.admin_url)
     ids = await _seed(admin, history_rows.device_id, history_rows.device_serial)
+    # Hour-or-larger buckets read the hourly rollup: materialize the seeded (past) window.
+    await refresh_hourly(postgres_rls_config.admin_url, START, END)
     try:
         role = rls_engine_factory()
         async with AsyncSession(role) as session:
@@ -93,4 +96,5 @@ async def test_hourly_buckets_stats_and_local_midnight_days(postgres_rls_config,
     finally:
         async with admin.begin() as connection:
             await connection.execute(text('DELETE FROM telemetry WHERE id = ANY(:ids)'), {"ids": ids})
+        await refresh_hourly(postgres_rls_config.admin_url, START, END)
         await admin.dispose()

@@ -20,19 +20,32 @@ async def test_migrated_catalog_hypertable_trigger_and_policies(postgres_rls_con
     try:
         async with admin.connect() as connection:
             tables = set((await connection.execute(text("SELECT tablename FROM pg_tables WHERE schemaname=current_schema()"))).scalars())
-            assert {"variable", "sensor", "sensor_variable", "device_sensor", "telemetry"} <= tables
-            assert (await connection.execute(text("SELECT count(*) FROM timescaledb_information.hypertables WHERE hypertable_name='telemetry'"))).scalar_one() == 1
+            assert {"variable", "sensor", "sensor_variable", "device_sensor"} <= tables
+            # 0028: the telemetry hypertable lives in the private telemetry_store schema (no RLS:
+            # TimescaleDB compression and continuous aggregates refuse it); public.telemetry is
+            # the security_barrier view that applies the former policy predicate.
+            assert (await connection.execute(text(
+                "SELECT count(*) FROM timescaledb_information.hypertables "
+                "WHERE hypertable_schema='telemetry_store' AND hypertable_name='telemetry'"
+            ))).scalar_one() == 1
+            assert (await connection.execute(text(
+                "SELECT relkind = 'v' AND reloptions @> ARRAY['security_barrier=true'] FROM pg_class "
+                "WHERE oid = 'public.telemetry'::regclass"
+            ))).scalar_one() is True
             # TimescaleDB replicates a hypertable's triggers onto each chunk
             # table (also non-internal), so once telemetry has chunks this
             # must be scoped to the hypertable itself, not counted globally.
+            triggers = (await connection.execute(text(
+                "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal "
+                "AND tgrelid = 'telemetry_store.telemetry'::regclass ORDER BY tgname"
+            ))).scalars().all()
+            # BEFORE triggers fire in name order: the write guard runs before the snapshot.
+            assert triggers == ["guard_telemetry_write", "set_telemetry_environment_id"]
             assert (await connection.execute(text(
-                "SELECT count(*) FROM pg_trigger "
-                "WHERE tgname='set_telemetry_environment_id' AND NOT tgisinternal "
-                "AND tgrelid = 'public.telemetry'::regclass"
-            ))).scalar_one() == 1
-            assert (await connection.execute(text("SELECT count(*) FROM pg_class WHERE relname='telemetry' AND relrowsecurity AND relforcerowsecurity"))).scalar_one() == 1
-            policies = set((await connection.execute(text("SELECT policyname FROM pg_policies WHERE tablename='telemetry'"))).scalars())
-            assert {"device_data_access", "device_data_system_write"} <= policies
+                "SELECT relrowsecurity OR relforcerowsecurity FROM pg_class "
+                "WHERE oid = 'telemetry_store.telemetry'::regclass"
+            ))).scalar_one() is False
+            assert (await connection.execute(text("SELECT count(*) FROM pg_policies WHERE tablename='telemetry'"))).scalar_one() == 0
             assert (await connection.execute(text("SELECT is_active FROM device_type WHERE code='relay_1'"))).scalar_one() is False
             assert (await connection.execute(text("SELECT is_active FROM device_type WHERE code='environmental'"))).scalar_one() is True
         role = rls_engine_factory()
