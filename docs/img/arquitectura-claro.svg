@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 948 520" width="948" height="520" font-family="Segoe UI, Ubuntu, Helvetica, Arial, sans-serif" role="img" aria-label="Arquitectura de Monitoreo Ambiental IoT">
+<title>Arquitectura de Monitoreo Ambiental IoT</title>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8c959f"/></marker></defs>
+<rect width="948" height="520" rx="14" fill="#ffffff"/>
+<rect x="206" y="20" width="726" height="488" rx="12" fill="none" stroke="#afb8c1" stroke-dasharray="6 5"/>
+<text x="222" y="40" font-size="12" font-weight="700" fill="#59636e" letter-spacing=".06em">DOCKER COMPOSE · RED app-network</text>
+<line x1="188.0" y1="254.0" x2="232.0" y2="254.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="347.7" y1="222.0" x2="479.3" y2="130.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="610.0" y1="109.4" x2="690.0" y2="120.2" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="525.0" y1="130.0" x2="525.0" y2="202.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="525.0" y1="262.0" x2="525.0" y2="334.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="563.1" y1="334.0" x2="710.7" y2="210.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="610.0" y1="339.1" x2="708.3" y2="308.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="610.0" y1="366.9" x2="690.0" y2="367.8" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="610.0" y1="393.8" x2="720.6" y2="430.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="461.3" y1="334.0" x2="365.7" y2="286.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="372.0" y1="391.4" x2="440.0" y2="380.1" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<line x1="352.2" y1="452.0" x2="460.7" y2="398.0" stroke="#8c959f" stroke-width="1.6" marker-end="url(#arrow)"/>
+<rect x="16" y="222" width="172" height="64" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="102.0" y="251.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">ESP32</text>
+<text x="102.0" y="269.0" text-anchor="middle" font-size="11.5" fill="#59636e">sensores ambientales</text>
+<rect x="232" y="222" width="140" height="64" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="302.0" y="251.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">EMQX 5.8</text>
+<text x="302.0" y="269.0" text-anchor="middle" font-size="11.5" fill="#59636e">broker MQTT</text>
+<rect x="440" y="66" width="170" height="64" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="525.0" y="95.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">mqtt-runtime</text>
+<text x="525.0" y="113.0" text-anchor="middle" font-size="11.5" fill="#59636e">ingesta (FastAPI)</text>
+<rect x="440" y="202" width="170" height="60" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/><line x1="450" y1="208" x2="600" y2="208" stroke="#d0d7de"/>
+<text x="525.0" y="229.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Redis 7</text>
+<text x="525.0" y="247.0" text-anchor="middle" font-size="11.5" fill="#59636e">estado · pub/sub</text>
+<rect x="440" y="334" width="170" height="64" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="525.0" y="363.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">backend</text>
+<text x="525.0" y="381.0" text-anchor="middle" font-size="11.5" fill="#59636e">FastAPI · REST + SSE</text>
+<rect x="690" y="60" width="220" height="150" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/><line x1="700" y1="66" x2="900" y2="66" stroke="#d0d7de"/>
+<text x="800.0" y="132.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">PostgreSQL 16</text>
+<text x="800.0" y="150.0" text-anchor="middle" font-size="11.5" fill="#59636e">TimescaleDB 2.30 · pgvector</text>
+<rect x="690" y="250" width="220" height="58" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4"/><line x1="700" y1="256" x2="900" y2="256" stroke="#d0d7de"/>
+<text x="800.0" y="276.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">SeaweedFS</text>
+<text x="800.0" y="294.0" text-anchor="middle" font-size="11.5" fill="#59636e">objetos S3</text>
+<rect x="690" y="340" width="220" height="58" rx="10" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1.4" stroke-dasharray="5 4"/>
+<text x="800.0" y="366.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">IA</text>
+<text x="800.0" y="384.0" text-anchor="middle" font-size="11.5" fill="#59636e">OpenRouter · bge-m3</text>
+<rect x="690" y="430" width="220" height="52" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="800.0" y="453.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Mailpit</text>
+<text x="800.0" y="471.0" text-anchor="middle" font-size="11.5" fill="#59636e">correo de desarrollo</text>
+<rect x="232" y="374" width="140" height="58" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="302.0" y="400.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">frontend</text>
+<text x="302.0" y="418.0" text-anchor="middle" font-size="11.5" fill="#59636e">React · dashboard</text>
+<rect x="232" y="452" width="140" height="50" rx="10" fill="#ddf4ff" stroke="#0969da" stroke-width="1.4"/>
+<text x="302.0" y="474.0" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">landing</text>
+<text x="302.0" y="492.0" text-anchor="middle" font-size="11.5" fill="#59636e">Astro</text>
+<rect x="154.5" y="198.0" width="111.0" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="210.0" y="212.0" text-anchor="middle" font-size="11.5" fill="#59636e">MQTT mTLS :8883</text>
+<rect x="387.4" y="156.2" width="38.4" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="406.6" y="170.2" text-anchor="middle" font-size="11.5" fill="#59636e">1883</text>
+<rect x="619.2" y="92.9" width="64.8" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="651.6" y="106.9" text-anchor="middle" font-size="11.5" fill="#59636e">lecturas</text>
+<rect x="536.8" y="156.0" width="104.4" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="589.0" y="170.0" text-anchor="middle" font-size="11.5" fill="#59636e">estado + pulso</text>
+<rect x="535.9" y="288.0" width="58.2" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="565.0" y="302.0" text-anchor="middle" font-size="11.5" fill="#59636e">pub/sub</text>
+<rect x="618.9" y="268.1" width="71.4" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="654.6" y="282.1" text-anchor="middle" font-size="11.5" fill="#59636e">SQL + RLS</text>
+<rect x="378.4" y="285.7" width="84.6" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="420.7" y="299.7" text-anchor="middle" font-size="11.5" fill="#59636e">órdenes OTA</text>
+<rect x="363.4" y="354.0" width="78.0" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="402.4" y="368.0" text-anchor="middle" font-size="11.5" fill="#59636e">REST + SSE</text>
+<rect x="375.8" y="424.8" width="84.6" height="19" rx="5" fill="#ffffff" stroke="#d0d7de"/><text x="418.1" y="438.8" text-anchor="middle" font-size="11.5" fill="#59636e">API pública</text>
+</svg>

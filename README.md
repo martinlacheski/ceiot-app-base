@@ -16,16 +16,10 @@
 🎓 **Monitoreo Ambiental IoT** es una plataforma IoT completa de monitoreo
 ambiental. Dispositivos ESP32 con sensores DHT11, DHT22, BMP280 o BME280
 publican sus lecturas por MQTT con TLS mutuo (mTLS); un backend en FastAPI las
-guarda en PostgreSQL con TimescaleDB, mantiene el estado en vivo en Redis y las
-muestra en un dashboard React que se actualiza en tiempo real. Suma
+guarda en PostgreSQL con TimescaleDB, mantiene el estado en vivo en Redis y las muestra en un dashboard React que se actualiza en tiempo real. Suma
 almacenamiento de objetos S3, actualizaciones de firmware OTA y un asistente
 de IA que responde preguntas sobre los datos y sobre documentos.
 
-Es el proyecto base de la materia **Arquitectura de Datos** de la Carrera de
-Especialización en Internet de las Cosas (CEIoT). La presentación de la clase 8
-("La vida de un dato") recorre cómo este repositorio aplica cada técnica: está
-en [`clase-08/practica`](https://github.com/martinlacheski/ceiot-arquitectura-datos/tree/main/clase-08/practica)
-del [repositorio de la materia](https://github.com/martinlacheski/ceiot-arquitectura-datos).
 
 ---
 
@@ -74,21 +68,12 @@ Cada técnica de la materia tiene un lugar concreto en el código:
 
 ## 🏗️ Arquitectura
 
-```mermaid
-flowchart LR
-    ESP32["ESP32 + sensores"] -->|"MQTT mTLS :8883"| EMQX["EMQX"]
-    EMQX --> RT["mqtt-runtime"]
-    RT --> PG[("PostgreSQL<br/>TimescaleDB + pgvector")]
-    RT -->|"estado + pulso"| REDIS[("Redis")]
-    REDIS -->|"pub/sub"| API["backend<br/>FastAPI"]
-    API <--> PG
-    API -->|"SSE + REST"| FE["frontend<br/>React"]
-    LANDING["landing<br/>Astro"] -->|"API pública"| API
-    API --> S3[("SeaweedFS<br/>S3")]
-    API --> IA["OpenRouter /<br/>embeddings"]
-    API --> MAIL["Mailpit"]
-    API -->|"órdenes OTA"| EMQX
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/img/arquitectura-oscuro.svg">
+    <img src="docs/img/arquitectura-claro.svg" alt="Arquitectura: ESP32 → EMQX → mqtt-runtime → PostgreSQL/Redis → backend → frontend, landing, SeaweedFS, IA y Mailpit" width="100%">
+  </picture>
+</p>
 
 Una lectura viaja así: el ESP32 la publica en EMQX, `mqtt-runtime` la guarda
 en la base y actualiza Redis, Redis avisa al backend y el backend se lo
@@ -220,7 +205,7 @@ ceiot-app-base/
 ## 📬 Contacto
 
 - **Autor**: Martín Lacheski
-- **GitHub**: [@martinlacheski](https://github.com/martinlacheski)
+- **Email**: martinlacheski@gmail.com
 
 ---
 
