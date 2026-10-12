@@ -4,11 +4,20 @@ services:
     ports:
       - 127.0.0.1:${DB_PORT:?DB_PORT is required}:5432
     environment:
-      POSTGRES_USER: ${DB_USER:?DB_USER is required}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      # Cluster superuser: owns every object and runs migrations, TimescaleDB
+      # jobs and backups (docs/roles-base-de-datos.md).
+      POSTGRES_USER: ${ALEMBIC_DB_USER:?ALEMBIC_DB_USER is required (see docs/roles-base-de-datos.md)}
+      POSTGRES_PASSWORD: ${ALEMBIC_DB_PASSWORD:?ALEMBIC_DB_PASSWORD is required}
       POSTGRES_DB: ${DB_DATABASE:?DB_DATABASE is required}
+      # Application login (no SUPERUSER/BYPASSRLS), created on the first start
+      # of an empty volume by init/01-create-app-role.sh.
+      DB_USER: ${DB_USER:?DB_USER is required}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      # Only this file: mounting the whole folder over docker-entrypoint-initdb.d
+      # would hide the image's own init scripts (CREATE EXTENSION timescaledb).
+      - ./init/01-create-app-role.sh:/docker-entrypoint-initdb.d/01-create-app-role.sh:ro
     healthcheck:
       test:
         - CMD-SHELL

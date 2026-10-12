@@ -4,7 +4,7 @@ services:
   # PGADMIN_DEFAULT_PASSWORD): the image refuses to start without them, so
   # there is no weak default. The wrapper renders the preconfigured server and
   # a passfile into the container's /tmp (never on host disk) from the
-  # timescaledb variables interpolated below.
+  # timescaledb variables interpolated below (the migration superuser).
   pgadmin:
     image: dpage/pgadmin4:9.18.0
     entrypoint: ["/usr/local/bin/pgadmin-entrypoint.sh"]
@@ -16,8 +16,10 @@ services:
     environment:
       PGADMIN_SERVER_JSON_FILE: /tmp/servers.json
       PGADMIN_DB_NAME: ${DB_DATABASE:?DB_DATABASE is required}
-      PGADMIN_DB_USER: ${DB_USER:?DB_USER is required}
-      PGADMIN_DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      # The cluster superuser: pgAdmin is an administration tool and must see
+      # everything (telemetry_store, every row regardless of RLS).
+      PGADMIN_DB_USER: ${ALEMBIC_DB_USER:?ALEMBIC_DB_USER is required}
+      PGADMIN_DB_PASSWORD: ${ALEMBIC_DB_PASSWORD:?ALEMBIC_DB_PASSWORD is required}
     ports:
       - 127.0.0.1:${PGADMIN_PORT:-15050}:80
     volumes:

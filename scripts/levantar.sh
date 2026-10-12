@@ -7,7 +7,9 @@
 #   seaweedfs/data) y avisa si las de EMQX no pertenecen al uid 1000.
 # - Aplica las migraciones de Alembic antes de levantar el resto: arranca
 #   PostgreSQL, espera a que esté sano y ejecuta `alembic upgrade head` en un
-#   contenedor descartable del backend. En una base vacía crea el esquema y los
+#   contenedor descartable del backend, como el superusuario ALEMBIC_DB_USER
+#   (la API y mqtt-runtime se conectan como DB_USER, sin privilegios; ver
+#   docs/roles-base-de-datos.md). En una base vacía crea el esquema y los
 #   catálogos iniciales (tipo de dispositivo "Ambiental", sensores y
 #   variables); si ya está al día, no hace nada.
 # - Siempre arranca el backend y mqtt-runtime con MAIL_TRANSPORT=mailpit
@@ -97,6 +99,24 @@ for var in BOOTSTRAP_ADMIN_USERNAME BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_PASSWO
 done
 if [ "${#missing_bootstrap[@]}" -gt 0 ]; then
   echo "Aviso: backend/.env no define ${missing_bootstrap[*]}. Solo hace falta en una base sin administrador (primer arranque); sin ellas el backend no arranca en ese caso." >&2
+fi
+
+# Two database roles (docs/roles-base-de-datos.md): ALEMBIC_DB_USER is the
+# superuser that runs the migrations below, DB_USER the unprivileged login of
+# the API and mqtt-runtime. Only presence and inequality are checked; values
+# are never printed.
+db_var() { grep -E "^[[:space:]]*$1=" timescaledb/.env | tail -n 1 | cut -d= -f2- | tr -d "\"' \r" || true; }
+missing_roles=()
+for var in ALEMBIC_DB_USER ALEMBIC_DB_PASSWORD; do
+  if [ -z "$(db_var "$var")" ]; then missing_roles+=("$var"); fi
+done
+if [ "${#missing_roles[@]}" -gt 0 ]; then
+  echo "Error: timescaledb/.env no define ${missing_roles[*]} (superusuario de migraciones). Ver docs/roles-base-de-datos.md; en una instalación existente, después de agregarlas ejecutá scripts/separar-roles-db.sh." >&2
+  exit 1
+fi
+if [ "$(db_var ALEMBIC_DB_USER)" = "$(db_var DB_USER)" ]; then
+  echo "Error: en timescaledb/.env, DB_USER (aplicación) y ALEMBIC_DB_USER (migraciones) deben ser usuarios distintos." >&2
+  exit 1
 fi
 
 # Read only the provider name from backend/.env (never print other values).

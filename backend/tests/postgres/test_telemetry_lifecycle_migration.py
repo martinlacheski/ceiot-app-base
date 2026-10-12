@@ -41,7 +41,7 @@ SERIAL = "IOT-LIFECYCLE-0001"
 
 @pytest.fixture
 def scratch_url():
-    dev_url = make_url(settings.DATABASE_URL)
+    dev_url = make_url(settings.ALEMBIC_DATABASE_URL)
     if dev_url.get_backend_name() != "postgresql":
         pytest.skip("requires PostgreSQL")
     dev_sync = dev_url.set(drivername="postgresql+psycopg")

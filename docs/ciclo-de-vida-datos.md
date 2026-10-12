@@ -55,8 +55,9 @@ ai_read.telemetry (asistente)          telemetry_store.telemetry_hourly (agregad
 
 - `telemetry_store.telemetry` es la hypertable de siempre (mismas columnas,
   índices, claves foráneas y trigger de snapshot de ambiente).
-- Nadie salvo su dueño (el rol de la aplicación que migra) tiene permisos sobre
-  el esquema, la tabla, sus chunks ni las tablas internas del agregado. La
+- Nadie salvo su dueño (el superusuario de migraciones, `iot_app_admin`) tiene
+  permisos sobre el esquema, la tabla, sus chunks ni las tablas internas del
+  agregado; tampoco el usuario de la aplicación (`iot_app`). La
   migración revoca además los permisos que los chunks habían copiado
   (`ai_readonly`, `ceiot_rls_test`), que permitían leerlos sin filtro.
 
@@ -69,10 +70,11 @@ ai_read.telemetry (asistente)          telemetry_store.telemetry_hourly (agregad
   `system_mqtt`/`system_admin`, administrador activo, miembro activo del
   ambiente del snapshot, invitado de ambiente o de dispositivo), más dos
   reglas:
-  - **Bypass de superusuario/BYPASSRLS**: como antes con RLS, el login de la
-    aplicación (superusuario en desarrollo) ve todo; el filtro aplica a los
-    roles sin bypass (`ai_readonly` vía `SET LOCAL ROLE`, roles de prueba, un
-    login de producción sin bypass).
+  - **Bypass de superusuario/BYPASSRLS**: como antes con RLS, un superusuario
+    (`iot_app_admin`: migraciones, pgAdmin) ve todo. Desde la migración `0029`
+    la API y mqtt-runtime se conectan como `iot_app`, sin bypass, así que el
+    filtro también les aplica (igual que a `ai_readonly` vía `SET LOCAL ROLE`).
+    Ver [Roles de la base de datos](roles-base-de-datos.md).
   - **Ventana del invitado por fila**: el invitado ve una fila sólo si
     `access_starts_at <= time` (antes la base le mostraba todo el historial y
     sólo la API recortaba). Es la misma regla que ya aplicaba
@@ -87,8 +89,9 @@ La vista es actualizable, así que la ingesta sigue insertando en `telemetry`. E
 trigger `guard_telemetry_write` (BEFORE INSERT/UPDATE/DELETE, corre antes del
 snapshot por orden alfabético) reemplaza a la política `device_data_system_write`:
 
-- un rol sin bypass sólo puede **insertar** con `app.current_user_id` igual a
-  `system_mqtt` o `system_admin`;
+- un rol sin bypass (como `iot_app`) sólo puede **insertar** con
+  `app.current_user_id` igual a `system_mqtt` o `system_admin` (la ingesta MQTT
+  corre como `system_mqtt`);
 - un rol sin bypass **nunca** actualiza ni borra (antes ninguna política lo
   permitía);
 - cualquier otro caso falla con SQLSTATE `42501`;
@@ -157,7 +160,7 @@ Del agregado: `segmentby = device_id`, `orderby = bucket DESC`.
 `deviceoperation` no usa retención por chunks: las filas `MOVE`/`UNPAIR` guardan
 el nombre que tenía el equipo en el ambiente que dejó (migración `0027`) y el
 historial depende de ellas. La limpieza la hace un job propio, que corre como su
-dueño (el rol de la aplicación, superusuario) y fija `app.current_user_id =
+dueño (el superusuario de migraciones, `iot_app_admin`) y fija `app.current_user_id =
 'system_admin'` en su transacción. Un dueño sin BYPASSRLS no borraría nada,
 porque `deviceoperation` no tiene política de DELETE.
 
@@ -197,7 +200,18 @@ consulta, en cualquiera de estas fuentes:
   demasiado, la salida es un resumen por (serial, ambiente) mantenido aparte, no
   el agregado por hora.
 
-## Permisos sobre hypertables con RLS
+## Roles y permisos sobre hypertables con RLS
+
+Quién se conecta como qué (detalle en [Roles de la base de datos](roles-base-de-datos.md)):
+
+| Rol | Uso | RLS y vistas |
+| --- | --- | --- |
+| `iot_app_admin` | Migraciones, trabajos de TimescaleDB (compresión, retención, refresco, poda), backups, pgAdmin | Superusuario: no lo filtra nada |
+| `iot_app` | API y mqtt-runtime | Sin bypass: las políticas y el predicado de las vistas filtran por `app.current_user_id` |
+| `ai_readonly` | SQL del asistente (`SET LOCAL ROLE`) | Solo `ai_read`; nunca permisos sobre tablas con RLS ni chunks |
+
+Los trabajos de TimescaleDB corren como su dueño, `iot_app_admin`, igual que la
+migración que los creó.
 
 TimescaleDB otorga `USAGE` sobre el esquema `_timescaledb_internal` a `PUBLIC`, y
 cada chunk copia los permisos (`GRANT`) de su hypertable **pero no su RLS**. Por
@@ -206,11 +220,26 @@ expone las filas **sin filtrar** a través de sus chunks. La verificación lo
 comprobó: el rol de prueba leyó 6.951 filas de `sensorreading` directamente de
 `_timescaledb_internal._hyper_1_16_chunk` mientras la tabla padre le devolvía 0.
 
-Regla: **nunca otorgar permisos sobre hypertables con RLS a roles sin bypass.**
-Los datos se exponen mediante vistas que filtran (como `public.telemetry`,
-`public.telemetry_hourly` y el esquema `ai_read` del asistente). El rol de
-desarrollo `ceiot_rls_test` tiene esos permisos sólo porque lo prepara la suite
-de pruebas; no es un rol de la aplicación y no debe existir en producción.
+Esa puerta no se puede cerrar quitando el esquema: con `REVOKE USAGE ON SCHEMA
+_timescaledb_internal FROM PUBLIC`, TimescaleDB 2.30.1 rechaza cualquier consulta
+de un rol que no sea dueño (incluso `SELECT 1 FROM pg_class` falla con
+`permission denied for schema _timescaledb_internal`, también bajo
+`ai_readonly`). Por eso la migración `0029` no lo revoca, y la regla es:
+
+- **Nunca otorgar permisos sobre hypertables con RLS a roles que ejecutan SQL no
+  confiable** (`ai_readonly`). Los datos se le exponen mediante vistas que filtran
+  (`ai_read`).
+- `iot_app` sí tiene permisos sobre `sensorreading` y `deviceoperation` (el ORM
+  las usa a través de la tabla padre, donde RLS filtra). Leer un chunk por
+  nombre exige SQL arbitrario, y quien ejecuta SQL arbitrario como `iot_app`
+  ya puede fijar cualquier `app.current_user_id`: RLS protege a la aplicación de
+  sus propios errores de consulta, no de una inyección SQL.
+- `iot_app` no tiene ningún permiso sobre `telemetry_store` ni sobre sus chunks:
+  la telemetría pasa siempre por `public.telemetry` y `public.telemetry_hourly`.
+
+El rol de pruebas `ceiot_rls_test` recibe exactamente los permisos de `iot_app`
+(la suite migra con `DB_APP_ROLE=ceiot_rls_test`); no es un rol de la aplicación
+y no debe existir en producción.
 
 ## Reglas operativas
 

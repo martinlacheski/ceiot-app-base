@@ -40,7 +40,7 @@ FUTURE_START = "2999-01-01 00:00:00"
 
 @pytest.fixture
 def scratch_url():
-    dev_url = make_url(settings.DATABASE_URL)
+    dev_url = make_url(settings.ALEMBIC_DATABASE_URL)
     if dev_url.get_backend_name() != "postgresql":
         pytest.skip("requires PostgreSQL")
     dev_sync = dev_url.set(drivername="postgresql+psycopg")

@@ -5,18 +5,21 @@ They target a dedicated ``<dev_db_name>_test`` database on the same
 PostgreSQL server: it is dropped and recreated at the start of every test
 session (so runs are always reproducible, and an interrupted previous run
 never leaks fixture rows into it), migrated to ``alembic`` head, and then
-used for both the admin (superuser/bypass-RLS) connection and the
-non-superuser ``NOBYPASSRLS`` role below.
+used for both the admin connection (the migration superuser,
+``ALEMBIC_DATABASE_URL``) and the non-superuser ``NOBYPASSRLS`` role below.
 
-The application development role may bypass RLS. This module therefore
-creates an idempotent login role with ``NOSUPERUSER NOBYPASSRLS`` and grants
-it access to the dedicated test database's objects. Tests are skipped with a
-clear reason when the configured database is not PostgreSQL, the current
-role cannot provision the test database, or the migration fails.
+``ceiot_rls_test`` stands in for the application login (``iot_app``): every
+migration run by the test suite targets it as ``DB_APP_ROLE``, so its
+privileges are exactly the ones migration 0029 grants the application in
+production (no extra grants are added here). Provisioning (CREATE DATABASE,
+the role) uses the migration superuser, never ``DATABASE_URL``: the
+application login cannot create databases. Tests are skipped with a clear
+reason when the configured database is not PostgreSQL, the migration role
+cannot provision the test database, or the migration fails.
 
 The role is cluster-wide (roles are not per-database in PostgreSQL) and is
 intentionally retained after the test session so interrupted and repeated
-runs remain safe. Its attributes and grants are reconciled on every run.
+runs remain safe. Its attributes are reconciled on every run.
 """
 
 from collections.abc import Callable
@@ -29,7 +32,7 @@ import subprocess
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -39,6 +42,10 @@ from app.core.config import settings
 
 RLS_TEST_ROLE = "ceiot_rls_test"
 TEST_DATABASE_SUFFIX = "_test"
+# Migration 0029 grants the application privileges to this role. Every alembic
+# subprocess started by these tests inherits it, so test migrations never grant
+# (or revoke) anything on the cluster's real application login.
+APP_ROLE_ENV = "DB_APP_ROLE"
 
 # tests/postgres/conftest.py -> tests/postgres -> tests -> backend root
 # (the directory that holds alembic.ini).
@@ -106,6 +113,7 @@ def _migrate_test_database(test_sync_url: URL) -> None:
     """
     child_env = dict(os.environ)
     child_env["ALEMBIC_DATABASE_URL"] = test_sync_url.render_as_string(hide_password=False)
+    child_env[APP_ROLE_ENV] = RLS_TEST_ROLE
     result = subprocess.run(
         ["alembic", "upgrade", "head"],
         cwd=str(BACKEND_ROOT),
@@ -120,38 +128,25 @@ def _migrate_test_database(test_sync_url: URL) -> None:
         )
 
 
-@pytest.fixture(scope="session")
-def postgres_rls_config() -> PostgresRLSConfig:
-    """Provision the dedicated test database and an idempotent, non-bypass role on it."""
-    role_password = secrets.token_urlsafe(32)
-    dev_url = make_url(settings.DATABASE_URL)
-    if dev_url.get_backend_name() != "postgresql":
-        pytest.skip("PostgreSQL RLS tests require a PostgreSQL DATABASE_URL")
+@pytest.fixture(scope="session", autouse=True)
+def _migrations_target_the_test_role():
+    """Point ``DB_APP_ROLE`` at the test role for every migration of this package."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(APP_ROLE_ENV, RLS_TEST_ROLE)
+        yield
 
-    # Every URL derived below points at the dedicated "<dev_db>_test"
-    # database, never at dev_url itself.
-    configured_url = _test_database_url(dev_url)
-    dev_sync_url = _sync_postgres_url(dev_url)
-    test_sync_url = _sync_postgres_url(configured_url)
 
+def admin_database_url() -> URL:
+    """The migration superuser's URL (the application login cannot create databases)."""
+    return make_url(settings.ALEMBIC_DATABASE_URL)
+
+
+def _reconcile_test_role(admin_sync_url: URL, role_password: str) -> None:
+    """Create or reset the login role before migrating (0029 grants to it)."""
+    engine = create_engine(admin_sync_url, pool_pre_ping=True)
     try:
-        _recreate_test_database(dev_sync_url, test_sync_url.database)
-        _migrate_test_database(test_sync_url)
-    except (OSError, SQLAlchemyError, RuntimeError) as exc:
-        pytest.skip(f"Cannot provision the dedicated PostgreSQL test database: {_redact(str(exc))}")
-
-    admin_engine = create_engine(test_sync_url, pool_pre_ping=True)
-    try:
-        with admin_engine.connect().execution_options(
-            isolation_level="AUTOCOMMIT"
-        ) as connection:
-            database_name = connection.scalar(text("SELECT current_database()"))
-            schema_name = connection.scalar(text("SELECT current_schema()")) or "public"
-            quote = connection.dialect.identifier_preparer.quote
-            quoted_database = quote(database_name)
-            quoted_schema = quote(schema_name)
-            quoted_role = quote(RLS_TEST_ROLE)
-
+        with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as connection:
+            quoted_role = connection.dialect.identifier_preparer.quote(RLS_TEST_ROLE)
             connection.exec_driver_sql(
                 f"""
                 DO $$
@@ -159,10 +154,7 @@ def postgres_rls_config() -> PostgresRLSConfig:
                     IF NOT EXISTS (
                         SELECT 1 FROM pg_roles WHERE rolname = '{RLS_TEST_ROLE}'
                     ) THEN
-                        CREATE ROLE {quoted_role} LOGIN
-                            PASSWORD '{role_password}'
-                            NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT
-                            NOREPLICATION NOBYPASSRLS;
+                        CREATE ROLE {quoted_role} NOLOGIN;
                     END IF;
                 END
                 $$
@@ -173,29 +165,30 @@ def postgres_rls_config() -> PostgresRLSConfig:
                 "NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT "
                 "NOREPLICATION NOBYPASSRLS"
             )
-            connection.exec_driver_sql(
-                f"GRANT CONNECT ON DATABASE {quoted_database} TO {quoted_role}"
-            )
-            connection.exec_driver_sql(
-                f"GRANT USAGE ON SCHEMA {quoted_schema} TO {quoted_role}"
-            )
-            connection.exec_driver_sql(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "
-                f"{quoted_schema} TO {quoted_role}"
-            )
-            # SECURITY DEFINER doors (rag_search): in production the application
-            # login owns them; this role stands in for it without BYPASSRLS.
-            connection.exec_driver_sql(
-                f"GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA {quoted_schema} TO {quoted_role}"
-            )
-            connection.exec_driver_sql(
-                f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA {quoted_schema} "
-                f"TO {quoted_role}"
-            )
-    except (OSError, SQLAlchemyError) as exc:
-        pytest.skip(f"Cannot provision PostgreSQL NOBYPASSRLS test role: {_redact(str(exc))}")
     finally:
-        admin_engine.dispose()
+        engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def postgres_rls_config() -> PostgresRLSConfig:
+    """Provision the dedicated test database, migrated with the test role as application role."""
+    role_password = secrets.token_urlsafe(32)
+    dev_url = admin_database_url()
+    if dev_url.get_backend_name() != "postgresql":
+        pytest.skip("PostgreSQL RLS tests require a PostgreSQL DATABASE_URL")
+
+    # Every URL derived below points at the dedicated "<dev_db>_test"
+    # database, never at dev_url itself.
+    configured_url = _test_database_url(dev_url)
+    dev_sync_url = _sync_postgres_url(dev_url)
+    test_sync_url = _sync_postgres_url(configured_url)
+
+    try:
+        _reconcile_test_role(dev_sync_url, role_password)
+        _recreate_test_database(dev_sync_url, test_sync_url.database)
+        _migrate_test_database(test_sync_url)
+    except (OSError, SQLAlchemyError, RuntimeError) as exc:
+        pytest.skip(f"Cannot provision the dedicated PostgreSQL test database: {_redact(str(exc))}")
 
     role_url = configured_url.set(
         username=RLS_TEST_ROLE,

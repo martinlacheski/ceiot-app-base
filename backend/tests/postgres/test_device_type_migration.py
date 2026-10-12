@@ -22,7 +22,7 @@ AMBIENTAL = uuid.UUID("6a8e2b8d-2f9d-4f8d-8b7b-5b8f8e4d2c32")
 
 @pytest.fixture
 def scratch_url():
-    dev_url = make_url(settings.DATABASE_URL)
+    dev_url = make_url(settings.ALEMBIC_DATABASE_URL)
     if dev_url.get_backend_name() != "postgresql":
         pytest.skip("requires PostgreSQL")
     dev_sync = dev_url.set(drivername="postgresql+psycopg")

@@ -27,10 +27,14 @@ services:
       # Local embeddings (optional profile `embeddings-local`); only used when
       # EMBEDDING_PROVIDER=local. Without the profile it is simply unreachable.
       EMBEDDING_LOCAL_URL: http://embeddings:80
+      # The application logs in as DB_USER (no SUPERUSER/BYPASSRLS: RLS
+      # applies); Alembic as the cluster superuser ALEMBIC_DB_USER. DB_APP_ROLE
+      # tells migration 0029 which role receives the application grants.
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
-      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
-        ${DB_PASSWORD:?}@postgresql:5432/${DB_DATABASE:?}"
+      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${ALEMBIC_DB_USER:?ALEMBIC_DB_USER is required (set it in timescaledb/.env)}:\
+        ${ALEMBIC_DB_PASSWORD:?ALEMBIC_DB_PASSWORD is required (set it in timescaledb/.env)}@postgresql:5432/${DB_DATABASE:?}"
+      DB_APP_ROLE: ${DB_USER:?}
     ports:
       # Always on loopback (frontend and tools on localhost). LAN_BIND_IP adds
       # the same port on the LAN IP so real devices can download firmware
@@ -87,10 +91,14 @@ services:
       # Local embeddings (optional profile `embeddings-local`); only used when
       # EMBEDDING_PROVIDER=local. Without the profile it is simply unreachable.
       EMBEDDING_LOCAL_URL: http://embeddings:80
+      # The application logs in as DB_USER (no SUPERUSER/BYPASSRLS: RLS
+      # applies); Alembic as the cluster superuser ALEMBIC_DB_USER. DB_APP_ROLE
+      # tells migration 0029 which role receives the application grants.
       DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:${DB_PASSWORD:?}\
         @postgresql:5432/${DB_DATABASE:?}"
-      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${DB_USER:?}:\
-        ${DB_PASSWORD:?}@postgresql:5432/${DB_DATABASE:?}"
+      ALEMBIC_DATABASE_URL: "postgresql+psycopg://${ALEMBIC_DB_USER:?ALEMBIC_DB_USER is required (set it in timescaledb/.env)}:\
+        ${ALEMBIC_DB_PASSWORD:?ALEMBIC_DB_PASSWORD is required (set it in timescaledb/.env)}@postgresql:5432/${DB_DATABASE:?}"
+      DB_APP_ROLE: ${DB_USER:?}
     depends_on:
       postgresql:
         condition: service_healthy

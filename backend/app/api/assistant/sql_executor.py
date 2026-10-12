@@ -6,8 +6,9 @@ Everything happens inside ONE transaction that is always rolled back:
 2. ``set_config('app.current_user_id', <identity>, true)`` (same GUC and
    semantics as ``get_authed_session``: ``system_admin`` for administrators,
    the user id otherwise),
-3. ``SET LOCAL ROLE ai_readonly`` (drops the login's superuser/BYPASSRLS, so RLS
-   applies to the identity above),
+3. ``SET LOCAL ROLE ai_readonly`` (the application login ``iot_app`` is a member
+   only to SET ROLE: the statement runs with ai_readonly's curated grants, and
+   RLS applies to the identity above),
 4. ``statement_timeout`` / ``lock_timeout`` / ``idle_in_transaction_session_timeout``
    and ``search_path = pg_catalog`` (everything is schema-qualified),
 5. the single statement, ``fetchmany(cap + 1)``, byte cap, ROLLBACK.

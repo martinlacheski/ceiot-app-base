@@ -26,12 +26,15 @@ Las variables de puerto se leen del entorno del shell o de un `.env` en la raíz
   lo dice en sus logs (`docker compose logs pgadmin`); no hay
   contraseña por defecto.
 - **Servidor preconfigurado** "IoT App (TimescaleDB)": host `postgresql`,
-  puerto `5432`, base y usuario tomados de `DB_DATABASE` y `DB_USER` de
-  `timescaledb/.env`. Al arrancar, el contenedor genera el `servers.json` y un
-  passfile (`0600`) en su `/tmp` a partir de `DB_PASSWORD`: la contraseña nunca
-  se escribe en el disco del host y no se pide al conectar.
+  puerto `5432`, base y usuario tomados de `DB_DATABASE` y `ALEMBIC_DB_USER`
+  de `timescaledb/.env` (el superusuario de migraciones: pgAdmin administra la
+  base y ve todo, sin filtro de RLS; ver `docs/roles-base-de-datos.md`). Al
+  arrancar, el contenedor genera el `servers.json` y un passfile (`0600`) en su
+  `/tmp` a partir de `ALEMBIC_DB_PASSWORD`: la contraseña nunca se escribe en el
+  disco del host y no se pide al conectar.
 - El servidor se importa solo la primera vez (con el volumen vacío). Si cambian
-  la base, el usuario o la contraseña de la base: `docker compose
+  la base, el usuario o la contraseña de la base (por ejemplo, después de
+  `scripts/separar-roles-db.sh`): `docker compose
   rm -sf pgadmin && docker volume rm iot-app-base_pgadmin-data` y volver a levantar.
 - **Persistencia**: volumen con nombre `pgadmin-data` (pgAdmin corre como uid
   5050 y un directorio bind creado por Docker quedaría de root, sin permisos de

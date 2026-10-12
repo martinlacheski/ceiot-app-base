@@ -66,6 +66,7 @@ def test_iot_schema_has_baseline_and_environmental_revision() -> None:
         "0026_environment_type_permissions.py",
         "0027_deviceoperation_device_name.py",
         "0028_telemetry_lifecycle.py",
+        "0029_app_role_grants.py",
     ]
 
 

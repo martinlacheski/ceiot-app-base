@@ -58,6 +58,8 @@ EMQX_BACKEND_PASSWORD=dummy-backend-password
 DB_PORT=15433
 DB_USER=dummy_user
 DB_PASSWORD=dummy_password
+ALEMBIC_DB_USER=dummy_admin
+ALEMBIC_DB_PASSWORD=dummy_admin_password
 DB_DATABASE=dummy_database
 DATABASE_URL=postgresql+psycopg://wrong:wrong@postgresql:15433/wrong
 ALEMBIC_DATABASE_URL=postgresql+psycopg://wrong:wrong@wrong-host:9999/wrong
@@ -323,7 +325,8 @@ class ComposeConfigTest(unittest.TestCase):
         # Server preconfiguration comes from the timescaledb variables.
         env = services["pgadmin"]["environment"]
         self.assertEqual(env["PGADMIN_DB_NAME"], "dummy_database")
-        self.assertEqual(env["PGADMIN_DB_USER"], "dummy_user")
+        # pgAdmin administers the database: it connects as the migration superuser.
+        self.assertEqual(env["PGADMIN_DB_USER"], "dummy_admin")
         self.assertEqual(env["PGADMIN_SERVER_JSON_FILE"], "/tmp/servers.json")
         self.assertNotIn("RI_REDIS_HOST", services["redisinsight"].get("environment", {}))
 
@@ -387,12 +390,20 @@ class ComposeConfigTest(unittest.TestCase):
         backend = config["services"]["backend"]
         postgresql = config["services"]["postgresql"]
 
-        expected_url = (
+        app_url = (
             "postgresql+psycopg://dummy_user:dummy_password"
             "@postgresql:5432/dummy_database"
         )
-        self.assertEqual(backend["environment"]["DATABASE_URL"], expected_url)
-        self.assertEqual(backend["environment"]["ALEMBIC_DATABASE_URL"], expected_url)
+        admin_url = (
+            "postgresql+psycopg://dummy_admin:dummy_admin_password"
+            "@postgresql:5432/dummy_database"
+        )
+        # The application logs in as the unprivileged DB_USER; migrations as the superuser.
+        for name in ("backend", "mqtt-runtime"):
+            environment = config["services"][name]["environment"]
+            self.assertEqual(environment["DATABASE_URL"], app_url, name)
+            self.assertEqual(environment["ALEMBIC_DATABASE_URL"], admin_url, name)
+            self.assertEqual(environment["DB_APP_ROLE"], "dummy_user", name)
         self.assertEqual(
             backend["depends_on"]["postgresql"]["condition"], "service_healthy"
         )
@@ -407,6 +418,38 @@ class ComposeConfigTest(unittest.TestCase):
         self.assertEqual(db_mounts[0]["type"], "volume")
         self.assertEqual(db_mounts[0]["source"], "postgres-data")
         self.assertIn("postgres-data", config["volumes"])
+
+    def test_postgresql_superuser_is_the_migration_role_and_creates_the_app_login(self):
+        postgresql = self.render_config()["services"]["postgresql"]
+        environment = postgresql["environment"]
+        self.assertEqual(environment["POSTGRES_USER"], "dummy_admin")
+        self.assertEqual(environment["POSTGRES_PASSWORD"], "dummy_admin_password")
+        self.assertEqual(environment["DB_USER"], "dummy_user")
+        self.assertEqual(environment["DB_PASSWORD"], "dummy_password")
+        init_mounts = [
+            mount for mount in postgresql["volumes"]
+            if mount["target"].startswith("/docker-entrypoint-initdb.d")
+        ]
+        # A single file, never the whole folder (the image's own init scripts must stay visible).
+        self.assertEqual(len(init_mounts), 1)
+        self.assertEqual(init_mounts[0]["target"], "/docker-entrypoint-initdb.d/01-create-app-role.sh")
+        self.assertTrue(init_mounts[0]["read_only"])
+        self.assertTrue(init_mounts[0]["source"].endswith("timescaledb/init/01-create-app-role.sh"))
+
+    def test_missing_migration_superuser_fails_without_reading_real_env(self):
+        env_path = self.project / "timescaledb" / ".env"
+        env_path.write_text(
+            DUMMY_ENV["timescaledb"].replace("ALEMBIC_DB_USER=dummy_admin\n", ""), encoding="utf-8"
+        )
+        result = subprocess.run(
+            ["docker", "compose", "-p", "compose-contract-test", "-f",
+             str(self.project / "docker-compose.yml"), "config", "--quiet"],
+            cwd=self.project,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": os.environ.get("HOME", "")},
+            text=True, capture_output=True, timeout=30, check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ALEMBIC_DB_USER", result.stderr)
 
     def test_healthchecks_use_working_container_loopback_hosts(self):
         services = self.render_config()["services"]

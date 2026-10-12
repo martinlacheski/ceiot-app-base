@@ -46,12 +46,19 @@ que tenés que elegir. Generá cada secreto con `openssl` y reemplazá el valor:
 
 | Archivo | Variable | Cómo generarla |
 | --- | --- | --- |
-| `timescaledb/.env` | `DB_PASSWORD` | `openssl rand -hex 24` |
+| `timescaledb/.env` | `DB_PASSWORD`, `ALEMBIC_DB_PASSWORD` | `openssl rand -hex 24` (una para cada una) |
 | `mqtt/.env` | `EMQX_PASSWORD`, `EMQX_BACKEND_PASSWORD` | `openssl rand -hex 32` (una para cada una) |
 | `backend/.env` | `JWT_SECRET_KEY` | `openssl rand -hex 32` |
 | `backend/.env` | `BOOTSTRAP_ADMIN_PASSWORD` | Elegida por vos: al menos 8 caracteres, con mayúscula, minúscula y número |
 | `seaweedfs/.env` | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `openssl rand -hex 12` y `openssl rand -hex 32` |
 | `pgadmin/.env` | `PGADMIN_DEFAULT_PASSWORD` | `openssl rand -hex 16` |
+
+`timescaledb/.env` define dos usuarios de la base: `DB_USER` (por defecto
+`iot_app`), con el que se conectan la API y mqtt-runtime, sin privilegios
+especiales para que Row Level Security filtre sus consultas, y
+`ALEMBIC_DB_USER` (por defecto `iot_app_admin`), el superusuario que aplica las
+migraciones y es dueño de todo. Ver
+[Roles de la base de datos](docs/roles-base-de-datos.md).
 
 Las claves de Google Maps (`VITE_GCP_API_KEY` en `frontend/.env` y
 `PUBLIC_GCP_MAPS_API_KEY` en `landing/.env`) son opcionales: sin una clave
@@ -91,7 +98,8 @@ El script:
    `mqtt/data` o `mqtt/log` pertenecen a otro usuario, avisa y sugiere
    `sudo chown -R 1000:1000 mqtt/data mqtt/log`.
 3. Arranca PostgreSQL, espera a que esté sano y aplica las migraciones
-   (`alembic upgrade head`) en un contenedor descartable del backend. En una
+   (`alembic upgrade head`) en un contenedor descartable del backend, como el
+   superusuario `ALEMBIC_DB_USER`. En una
    base vacía crean el esquema y los catálogos iniciales: los tipos de
    dispositivo ("Ambiental" y "1 Relé"), los sensores y las variables. Si la base ya está
    al día, no hacen nada.
@@ -255,7 +263,22 @@ Para que la landing en <http://localhost:4321> llame al contacto público, el op
 ## Base de datos en desarrollo
 
 El proyecto raíz crea un volumen con nombre para PostgreSQL si todavía no existe.
-Las credenciales de `timescaledb/.env` se aplican solo al crear ese volumen.
+Las credenciales de `timescaledb/.env` se aplican solo al crear ese volumen: el
+superusuario `ALEMBIC_DB_USER` es el usuario de la imagen y
+`timescaledb/init/01-create-app-role.sh` crea `DB_USER` sin `SUPERUSER` ni
+`BYPASSRLS`. Los permisos de `DB_USER` los otorga la migración `0029`.
+
+| Usuario | Lo usan | Privilegios |
+| --- | --- | --- |
+| `ALEMBIC_DB_USER` (`iot_app_admin`) | Alembic, trabajos de TimescaleDB, backups, pgAdmin | Superusuario, dueño de todos los objetos |
+| `DB_USER` (`iot_app`) | API y mqtt-runtime | Lectura y escritura en `public`; RLS filtra sus consultas |
+| `ai_readonly` (sin login) | Consultas SQL del asistente (`SET LOCAL ROLE`) | Solo las vistas de `ai_read` |
+
+En una instalación creada antes de esta separación (donde `DB_USER` era el
+superusuario), agregá `ALEMBIC_DB_USER` y `ALEMBIC_DB_PASSWORD` a
+`timescaledb/.env` y ejecutá `scripts/separar-roles-db.sh` (ver
+[Roles de la base de datos](docs/roles-base-de-datos.md)).
+
 El esquema se administra exclusivamente con Alembic: `scripts/levantar.sh`
 ejecuta `alembic upgrade head` antes de iniciar el backend. Si levantás el
 stack de otra forma, aplicá las migraciones primero:
