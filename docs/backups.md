@@ -16,18 +16,122 @@ scripts/verificar-backup.sh backups/<fecha>        # volver a verificar uno exis
 ```
 
 El código de salida es `0` con `✅ Backup verificado` y `1` con
-`❌ Backup inválido: <motivos>`, así que sirve también para un cron o un
-pipeline.
+`❌ Backup inválido: <motivos>`, así que sirve también para un pipeline. Para
+programarlo todos los días, ver [Backup automático](#backup-automático-cron).
 
 | Opción | Efecto |
 | --- | --- |
 | `--sin-verificar` | Genera el backup sin restaurarlo (verificalo después). |
 | `--sin-s3` | Excluye a propósito los objetos S3; la verificación lo informa como aviso. |
 | `--destino DIR` | Carpeta raíz de los backups (por defecto `backups/`). |
+| `--conservar N` | Backups verificados a conservar (por defecto 7, o `BACKUP_KEEP`; `0` desactiva la retención). Ver [Retención](#retención). |
+| `--solo-retencion` | Aplica la retención sin generar un backup. |
 
 El backup sólo **lee** la base real (pg_dump y consultas de conteo). La
 verificación no toca la base real ni el resto del stack: trabaja en un
 contenedor propio que se elimina siempre, también si falla o se interrumpe.
+
+Códigos de salida de `scripts/backup.sh`: `0` backup verificado (o generado,
+con `--sin-verificar`), `1` backup inválido o error, `2` uso incorrecto y `75`
+otra ejecución en curso (ver [Ejecuciones superpuestas](#ejecuciones-superpuestas)).
+
+## Backup automático (cron)
+
+El backup se programa en el **crontab del usuario del host** que levanta el
+stack, no en un contenedor: la verificación arranca un contenedor descartable
+y para eso necesita Docker, que el usuario del host ya tiene (un cron dentro
+de un contenedor necesitaría el socket de Docker).
+
+```bash
+scripts/instalar-backup-cron.sh instalar                              # todos los días a las 03:00, conserva 7
+scripts/instalar-backup-cron.sh instalar --hora 02:30 --conservar 14  # otra hora y otra retención
+scripts/instalar-backup-cron.sh estado                                # línea instalada y último resultado
+scripts/instalar-backup-cron.sh quitar                                # desprogramar
+```
+
+`instalar` agrega al crontab una sola línea, marcada con el comentario
+`# ceiot-app-base backup`, por ejemplo:
+
+```text
+0 3 * * * '/ruta/al/proyecto/scripts/backup-cron.sh' --conservar 7 # ceiot-app-base backup
+```
+
+- Volver a ejecutar `instalar` reemplaza esa línea (no la duplica); `quitar`
+  borra sólo esa línea. El resto del crontab no se toca, y si no se puede
+  leer el crontab actual no se escribe nada.
+- La hora es la del equipo (la zona horaria del sistema), no UTC.
+- Si `COMPOSE_PROJECT_NAME` está definida al instalar, se agrega a la línea
+  para que cron use el mismo proyecto de Docker Compose. Lo mismo con
+  `BACKUP_NOTIFY_EMAIL` (destinatario de los avisos):
+  `BACKUP_NOTIFY_EMAIL=ops@ejemplo.com scripts/instalar-backup-cron.sh instalar`.
+- `MAIL_TRANSPORT` no se define en la línea: el correo de aviso sale con la
+  configuración con la que corre el contenedor `backend`.
+- El usuario tiene que poder usar Docker sin `sudo` (grupo `docker`);
+  `instalar` avisa si no puede.
+
+### Qué hace cada ejecución
+
+cron ejecuta `scripts/backup-cron.sh`, que corre `scripts/backup.sh` (backup,
+verificación y retención) sin terminal, con el PATH mínimo de cron
+completado, y:
+
+| Archivo | Contenido |
+| --- | --- |
+| `backups/logs/backup-<fecha UTC>.log` | Toda la salida de la ejecución. Los logs de más de 30 días se borran (`BACKUP_LOG_DAYS`). |
+| `backups/ultimo-resultado.json` | Resultado de la última ejecución: `timestamp`, `status` (`ok`, `failed` o `skipped`), `exit_code`, `backup_dir`, `summary` (el veredicto de la verificación o la última línea de salida), `log` y `notification`. |
+
+`scripts/instalar-backup-cron.sh estado` muestra los dos. El wrapper no
+escribe nada en la salida estándar, así que cron no envía correos locales.
+
+### Avisos de falla por correo
+
+Si el backup falla (código distinto de `0`) o se omite (código `75`),
+`backup-cron.sh` envía un correo con el **mailer de la aplicación**: ejecuta
+`scripts/notificar-backup.py`, que corre un pequeño script dentro del
+contenedor `backend` (`docker compose exec -T backend python -`) con
+`app.core.email`. Así el correo usa el mismo transporte que la aplicación:
+
+- en desarrollo (`MAIL_TRANSPORT=mailpit`) llega a Mailpit, en
+  <http://localhost:8025>;
+- en producción sale por el SMTP configurado en `backend/.env`.
+
+Las credenciales de correo nunca salen del contenedor. El destinatario es
+`BACKUP_NOTIFY_EMAIL` si estaba definida al ejecutar `instalar` (queda en la
+línea del crontab) o, si no, el primer administrador activo de la aplicación. El asunto es
+`Backup programado: falló en <equipo> - <MAIL_FROM_NAME>` y el cuerpo incluye
+el resumen, la carpeta del backup, la ruta del log y sus últimas 40 líneas.
+
+Si el contenedor `backend` no está corriendo (o no hay destinatario, o el
+envío falla), el aviso no se puede enviar: queda registrado en el log y en el
+campo `notification` de `ultimo-resultado.json` como `not sent (...)`.
+Revisá `estado` de vez en cuando aunque no lleguen avisos.
+
+### Retención
+
+Después de un backup **verificado**, `scripts/backup.sh` borra backups viejos
+de la carpeta destino:
+
+- conserva los N backups verificados más recientes (`--conservar N`, por
+  defecto 7); el que se acaba de generar nunca se borra;
+- de los no verificados (verificación fallida, generados con
+  `--sin-verificar` o carpetas `.incompleto` que quedaron de una ejecución
+  interrumpida) conserva sólo el más reciente, para poder inspeccionarlo, y
+  sólo si hay al menos un backup verificado;
+- sólo considera carpetas con nombre `<fecha UTC>` o `<fecha UTC>.incompleto`:
+  `logs/`, `ultimo-resultado.json` o una carpeta con otro nombre (por ejemplo
+  una copia manual) no se tocan nunca.
+
+Si la verificación falla, o con `--sin-verificar`, no se borra nada.
+`--conservar 0` desactiva la retención. Para aplicarla sin hacer un backup:
+`scripts/backup.sh --solo-retencion --conservar 7`.
+
+### Ejecuciones superpuestas
+
+Sólo puede correr un backup a la vez por carpeta destino: `scripts/backup.sh`
+toma un lock (`flock`) sobre `backups/.lock`. Si otra ejecución lo tiene (por
+ejemplo, un backup manual a la hora programada), la segunda termina con código
+`75` sin tocar nada; desde cron queda como `skipped` y envía el aviso, porque
+también puede indicar un backup colgado.
 
 ## Qué contiene un backup
 

@@ -289,8 +289,24 @@ restaura sin errores, la base restaurada coincide exactamente con el manifiesto
 y cada objeto S3 conserva su sha256; si no, informa `❌ Backup inválido` con
 los motivos (código 1). El backup sólo lee la base real.
 
-El detalle de lo que se verifica, las opciones, las limitaciones y los pasos
-para restaurar en la base real están en [`docs/backups.md`](docs/backups.md).
+Para que corra solo todos los días, se programa en el crontab del usuario del
+host:
+
+```bash
+scripts/instalar-backup-cron.sh instalar --hora 03:00 --conservar 7   # programar
+scripts/instalar-backup-cron.sh estado                                # línea instalada y último resultado
+scripts/instalar-backup-cron.sh quitar                                # desprogramar
+```
+
+Cada ejecución deja su log en `backups/logs/` y el resultado en
+`backups/ultimo-resultado.json`, conserva los 7 backups verificados más
+recientes y, si falla, envía un aviso con el mailer de la aplicación (en
+desarrollo llega a Mailpit, <http://localhost:8025>) a `BACKUP_NOTIFY_EMAIL` o
+al primer administrador activo.
+
+El detalle de lo que se verifica, las opciones, la programación, la retención,
+las limitaciones y los pasos para restaurar en la base real están en
+[`docs/backups.md`](docs/backups.md).
 
 ## Detener los servicios
 

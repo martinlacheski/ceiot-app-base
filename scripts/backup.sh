@@ -18,15 +18,35 @@
 # Solo lee la base real: no la modifica. El resultado queda en
 # backups/<fecha UTC>/ (ignorado por git, permisos 700).
 #
+# Retención: después de un backup VERIFICADO borra los backups viejos de la
+# carpeta destino y conserva los N verificados más recientes (--conservar N,
+# por defecto 7 o la variable BACKUP_KEEP; 0 desactiva la retención). De los
+# backups no verificados (verificación fallida, sin verificar o .incompleto)
+# conserva sólo el más reciente, para poder inspeccionarlo. Sólo considera
+# carpetas con nombre <fecha UTC> o <fecha UTC>.incompleto; nunca toca otras.
+# Si la verificación falla, o con --sin-verificar, no se borra nada.
+#
+# Una sola ejecución a la vez por carpeta destino (flock sobre <destino>/.lock):
+# si ya hay otra en curso, termina con código 75 sin hacer nada.
+#
 # El nombre del proyecto es el de docker-compose.yml (iot-app-base), salvo que
-# se defina COMPOSE_PROJECT_NAME.
+# se defina COMPOSE_PROJECT_NAME. Funciona desde cron (no necesita terminal y
+# completa el PATH mínimo de cron).
 #
 # Uso:
-#   scripts/backup.sh                    # backup + verificación
-#   scripts/backup.sh --sin-verificar    # solo el backup
+#   scripts/backup.sh                    # backup + verificación + retención
+#   scripts/backup.sh --sin-verificar    # solo el backup (sin retención)
 #   scripts/backup.sh --sin-s3           # excluir a propósito los objetos S3
 #   scripts/backup.sh --destino DIR      # carpeta raíz (por defecto backups/)
+#   scripts/backup.sh --conservar N      # backups verificados a conservar
+#   scripts/backup.sh --solo-retencion   # aplicar la retención sin backup
+#
+# Códigos de salida: 0 backup verificado (o generado, con --sin-verificar),
+# 1 backup inválido o error, 2 uso incorrecto, 75 otra ejecución en curso.
 set -euo pipefail
+
+# cron runs with a minimal PATH (/usr/bin:/bin); docker may live elsewhere.
+export PATH="${PATH:+$PATH:}/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:/snap/bin"
 
 cd "$(dirname "$0")/.."
 repo_root="$(pwd)"
@@ -35,6 +55,8 @@ helper="$repo_root/scripts/backup_manifest.py"
 verify=true
 with_s3=true
 dest_root="backups"
+keep="${BACKUP_KEEP:-7}"
+retention_only=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --sin-verificar) verify=false ;;
@@ -42,17 +64,101 @@ while [ "$#" -gt 0 ]; do
     --destino)
       [ "$#" -ge 2 ] || { echo "Error: --destino necesita una carpeta." >&2; exit 2; }
       dest_root="$2"; shift ;;
+    --conservar)
+      [ "$#" -ge 2 ] || { echo "Error: --conservar necesita un número." >&2; exit 2; }
+      keep="$2"; shift ;;
+    --solo-retencion) retention_only=true ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     *) echo "Opción desconocida: $1" >&2; exit 2 ;;
   esac
   shift
 done
+if ! [[ "$keep" =~ ^[0-9]+$ ]]; then
+  echo "Error: --conservar (o BACKUP_KEEP) debe ser un número entero >= 0: $keep" >&2
+  exit 2
+fi
+keep=$((10#$keep))
 
 command -v python3 >/dev/null || { echo "Error: hace falta python3 en el host." >&2; exit 1; }
 
 started_at=$(date +%s)
 # Backups hold application data (password hashes included): owner-only.
 umask 077
+mkdir -p "$dest_root"
+
+# One run at a time per destination: a second one (cron overlapping a manual
+# run, or a slow run reaching the next schedule) exits 75 without touching
+# anything.
+if command -v flock >/dev/null; then
+  exec 9>"$dest_root/.lock"
+  if ! flock -n 9; then
+    echo "Otro backup está en curso (lock $dest_root/.lock ocupado); se omite esta ejecución." >&2
+    exit 75
+  fi
+else
+  echo "Aviso: no está flock (util-linux); no se puede evitar que dos backups se superpongan." >&2
+fi
+
+# Retention (see the header). $1 names the backup just created: never deleted.
+apply_retention() {
+  if [ "$keep" -eq 0 ]; then
+    echo "Retención desactivada (--conservar 0): no se borra ningún backup."
+    return 0
+  fi
+  python3 - "$dest_root" "$keep" "${1:-}" <<'PY'
+import json, os, re, shutil, sys
+
+root, keep, protect = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+pattern = re.compile(r"^\d{8}T\d{6}Z(\.incompleto)?$")
+real_root = os.path.realpath(root)
+
+
+def verified(path):
+    try:
+        with open(os.path.join(path, "verificacion.json"), encoding="utf-8") as handle:
+            return json.load(handle).get("ok") is True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+good, bad = [], []
+for name in os.listdir(root):
+    path = os.path.join(root, name)
+    if not pattern.match(name) or os.path.islink(path) or not os.path.isdir(path):
+        continue
+    if os.path.dirname(os.path.realpath(path)) != real_root:
+        continue
+    if not name.endswith(".incompleto") and verified(path):
+        good.append(name)
+    else:
+        bad.append(name)
+
+# Names are UTC timestamps: lexical order is chronological.
+good.sort(reverse=True)
+bad.sort(reverse=True)
+kept_good = good[:keep]
+doomed = [(name, "verificado, fuera de los %d más recientes" % keep) for name in good[keep:]]
+# Unverified ones are pruned only while a verified backup is kept; the newest
+# one stays for inspection.
+if kept_good:
+    doomed += [(name, "no verificado; se conserva sólo el más reciente") for name in bad[1:]]
+
+removed = 0
+for name, reason in doomed:
+    if name == protect:
+        continue
+    shutil.rmtree(os.path.join(root, name))
+    removed += 1
+    print("Retención: se borró %s (%s)." % (os.path.join(root, name), reason))
+print("Retención: %d backup(s) verificado(s) conservado(s) (máximo %d), %d borrado(s)."
+      % (len(kept_good), keep, removed))
+PY
+}
+
+if [ "$retention_only" = true ]; then
+  apply_retention ""
+  exit 0
+fi
 
 pg_container="$(docker compose ps -q --status running postgresql 2>/dev/null || true)"
 if [ -z "$pg_container" ]; then
@@ -176,6 +282,14 @@ echo "Backup generado en $final_dir ($(du -sh "$final_dir" | cut -f1), ${elapsed
 
 if [ "$verify" = true ]; then
   echo
-  "$repo_root/scripts/verificar-backup.sh" "$final_dir" && exit 0 || exit $?
+  set +e
+  "$repo_root/scripts/verificar-backup.sh" "$final_dir"
+  verify_status=$?
+  set -e
+  if [ "$verify_status" -eq 0 ]; then
+    # The backup is good: a retention problem is reported, never fatal.
+    apply_retention "$timestamp" || echo "Aviso: no se pudo aplicar la retención en $dest_root." >&2
+  fi
+  exit "$verify_status"
 fi
 echo "Verificalo con: scripts/verificar-backup.sh $final_dir"
