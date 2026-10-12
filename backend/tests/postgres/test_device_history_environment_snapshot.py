@@ -704,3 +704,159 @@ async def test_move_conflict_records_no_snapshot(
         assert await _snapshot_operations(admin_engine, history_rows.device_serial) == []
     finally:
         await admin_engine.dispose()
+
+
+async def _prune_short_retention_rows(admin_engine, serial, *, keep_departures=True):
+    """Simulate the 90-day lifecycle: sensorreading chunks dropped, routine operations pruned."""
+    async with admin_engine.begin() as connection:
+        await connection.execute(text("SELECT set_config('app.current_user_id', 'system_admin', true)"))
+        await connection.execute(text("DELETE FROM sensorreading WHERE device_serial = :serial"),
+                                 {"serial": serial})
+        kept = "AND operation_type::text NOT IN ('MOVE', 'UNPAIR')" if keep_departures else ""
+        await connection.execute(text(f"DELETE FROM deviceoperation WHERE device_serial = :serial {kept}"),
+                                 {"serial": serial})
+
+
+async def _history_as(rls_engine_factory, user, serial, **filters):
+    role_engine = rls_engine_factory(pool_size=1)
+    async with AsyncSession(role_engine, expire_on_commit=False) as session:
+        await session.execute(text("SELECT set_config('app.current_user_id', :uid, true)"),
+                              {"uid": "system_admin" if user.is_admin else str(user.id)})
+        service = DeviceHistoryService(session)
+        scope = await service.resolve_scope(user)
+        listed = await service.list_devices(user, only_former=False, search=serial, **filters)
+        has_history = await service.has_history(scope, serial)
+        telemetry = await service.list_telemetry(scope, serial=serial)
+    await role_engine.dispose()
+    return ({item["environment_id"]: item for item in listed["items"]}, has_history, telemetry["total"])
+
+
+def _history_user(user_id, *, admin=False):
+    return User(id=user_id, email=f"{user_id}@example.com", username=str(user_id),
+                password="unused", is_admin=admin)
+
+
+async def test_former_device_history_outlives_short_retention_through_telemetry(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    """Telemetry (1 year) keeps a former device listed after the 90-day prune.
+
+    readings_count counts the telemetry rows the caller can open in the telemetry tab;
+    first/last_seen span every retained source (telemetry, kept operations, health).
+    """
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    old_times = [now - timedelta(days=days) for days in (200, 150, 100)]
+    moved_at = now - timedelta(days=95)
+    new_time = now - timedelta(days=10)
+    serial = history_rows.device_serial
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    suffix = uuid.uuid4().hex
+    guest = User(email=f"history-guest-{suffix}@example.com", username=f"history-guest-{suffix}",
+                 password="unused")
+    relation = ScopedGuestRelation(
+        owner_user_id=history_rows.old_owner_id, guest_user_id=guest.id,
+        scope_type=ScopeType.ENVIRONMENT, scope_id=history_rows.old_environment_id,
+        access_starts_at=now - timedelta(days=120),
+    )
+    try:
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            session.add(guest)
+            await session.flush()
+            session.add(relation)
+            for instant in old_times:
+                session.add(Telemetry(time=instant, device_id=history_rows.device_id, device_serial=serial,
+                                      environment_id=history_rows.old_environment_id, values={}))
+                session.add(DeviceOperation(time=instant, environment_id=history_rows.old_environment_id,
+                                            operation_type=DeviceOperationType.SENSOR_DATA,
+                                            device_serial=serial, status=DeviceOperationStatus.SUCCESS))
+            session.add(DeviceOperation(time=moved_at, environment_id=history_rows.old_environment_id,
+                                        operation_type=DeviceOperationType.MOVE, device_serial=serial,
+                                        device_name="History snapshot device",
+                                        status=DeviceOperationStatus.SUCCESS))
+            await session.commit()
+            await SensorService(SensorRepository(session)).save_reading(
+                device_id=history_rows.device_id, device_serial=serial)
+            await session.execute(text("UPDATE device SET environment_id = :env WHERE id = :id"),
+                                  {"env": history_rows.new_environment_id, "id": history_rows.device_id})
+            await session.commit()
+            session.add(Telemetry(time=new_time, device_id=history_rows.device_id, device_serial=serial,
+                                  environment_id=history_rows.new_environment_id, values={}))
+            await session.commit()
+
+        await _prune_short_retention_rows(admin_engine, serial)
+
+        old_owner = _history_user(history_rows.old_owner_id)
+        listed, has_history, telemetry_total = await _history_as(rls_engine_factory, old_owner, serial)
+        assert list(listed) == [history_rows.old_environment_id]
+        entry = listed[history_rows.old_environment_id]
+        assert entry["is_former"] is True
+        assert entry["device_name"] == "History snapshot device"
+        assert entry["readings_count"] == telemetry_total == 3
+        assert entry["operations_count"] == 1
+        assert entry["first_seen"] == old_times[0]
+        assert entry["last_seen"] == moved_at
+        assert has_history is True
+
+        # Guests never open the telemetry tab (members only): they keep the departure
+        # operation recorded inside their access window and nothing older.
+        guest_listed, guest_has_history, _ = await _history_as(rls_engine_factory, guest, serial)
+        guest_entry = guest_listed[history_rows.old_environment_id]
+        assert (guest_entry["readings_count"], guest_entry["operations_count"]) == (0, 1)
+        assert guest_entry["first_seen"] == guest_entry["last_seen"] == moved_at
+        assert guest_has_history is True
+
+        stranger, stranger_has_history, stranger_total = await _history_as(
+            rls_engine_factory, _history_user(uuid.uuid4()), serial)
+        assert stranger == {} and stranger_has_history is False and stranger_total == 0
+
+        admin = _history_user(uuid.uuid4(), admin=True)
+        admin_listed, _, _ = await _history_as(rls_engine_factory, admin, serial)
+        assert admin_listed[history_rows.old_environment_id]["readings_count"] == 3
+        assert admin_listed[history_rows.new_environment_id]["readings_count"] == 1
+        assert admin_listed[history_rows.new_environment_id]["first_seen"] == new_time
+        filtered, _, _ = await _history_as(rls_engine_factory, admin, serial,
+                                           owner_id=history_rows.old_owner_id)
+        assert list(filtered) == [history_rows.old_environment_id]
+
+        # Once the departure snapshot and the telemetry are gone too, nothing is left.
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("DELETE FROM telemetry WHERE device_serial = :serial "
+                                          "AND environment_id = :env"),
+                                     {"serial": serial, "env": history_rows.old_environment_id})
+        await _prune_short_retention_rows(admin_engine, serial, keep_departures=False)
+        emptied, emptied_has_history, _ = await _history_as(rls_engine_factory, old_owner, serial)
+        assert emptied == {} and emptied_has_history is False
+    finally:
+        async with admin_engine.begin() as connection:
+            await connection.execute(text("DELETE FROM scoped_guest_relation WHERE id = :id"),
+                                     {"id": relation.id})
+            await connection.execute(text('DELETE FROM "user" WHERE id = :id'), {"id": guest.id})
+        await admin_engine.dispose()
+
+
+async def test_former_device_with_only_telemetry_left_is_listed_and_openable(
+    postgres_rls_config, rls_engine_factory, history_rows: HistoryRows,
+) -> None:
+    """A pre-0027 departure (no MOVE/UNPAIR snapshot) survives the prune via telemetry alone."""
+    instant = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(days=180)
+    serial = history_rows.device_serial
+    admin_engine = create_async_engine(postgres_rls_config.admin_url, pool_pre_ping=True)
+    try:
+        async with AsyncSession(admin_engine, expire_on_commit=False) as session:
+            session.add(Telemetry(time=instant, device_id=history_rows.device_id, device_serial=serial,
+                                  environment_id=history_rows.old_environment_id, values={}))
+            await session.commit()
+            await session.execute(text("UPDATE device SET environment_id = NULL WHERE id = :id"),
+                                  {"id": history_rows.device_id})
+            await session.commit()
+        await _prune_short_retention_rows(admin_engine, serial, keep_departures=False)
+
+        listed, has_history, telemetry_total = await _history_as(
+            rls_engine_factory, _history_user(history_rows.old_owner_id), serial)
+        entry = listed[history_rows.old_environment_id]
+        assert entry["is_former"] is True and entry["device_name"] is None
+        assert (entry["readings_count"], entry["operations_count"]) == (1, 0)
+        assert entry["first_seen"] == entry["last_seen"] == instant
+        assert has_history is True and telemetry_total == 1
+    finally:
+        await admin_engine.dispose()

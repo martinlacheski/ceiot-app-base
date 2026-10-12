@@ -11,7 +11,7 @@ from app.api.access.models import ScopeType, ScopedGuestRelation
 from app.api.auth.models import User
 from app.api.device.history.query_utils import (format_local, formatted_time,
     local_date_conditions, ordered, text_search)
-from app.api.device.history.serial import OPERATION_SERIAL, READING_SERIAL
+from app.api.device.history.serial import OPERATION_SERIAL, READING_SERIAL, TELEMETRY_SERIAL
 from app.api.device.models import Device
 from app.api.device.operations.models import DeviceOperation
 from app.api.environment.environment.models import Environment, EnvironmentUser
@@ -100,22 +100,47 @@ class DeviceHistoryService:
             ).group_by(ScopedGuestRelation.scope_id))).all()
         return HistoryScope(member_environment_ids=frozenset(members), guest_starts=dict(guests))
 
-    async def list_entries(self, scope, environment_id=None, serial=None, *, include_owner=False):
-        """One UNION ALL aggregate for both row types; metadata queries are batched."""
-        from sqlalchemy import literal
-        # literal() must be typed as a SQL expression, not cast from a Python string.
-        def branch(model, serial_column, kind, members_only):
+    def _evidence_branches(self, scope, environment_id=None, serial=None):
+        """One select per retained history source, all snapshot/RLS scoped.
+
+        Retention differs per source (docs/ciclo-de-vida-datos.md): telemetry lives a
+        year, departure snapshots (MOVE/UNPAIR) and other non-routine operations are
+        kept, while sensorreading and routine operations are dropped after 90 days.
+        Listing a (serial, environment) pair from any of them keeps a former device in
+        its establishment's history for as long as some evidence of it remains.
+        Telemetry goes through the public.telemetry view (environment snapshot + guest
+        window); it and sensorreading are members-only, like the telemetry tab.
+        """
+        def branch(model, serial_column, members_only):
             predicates = [serial_column.is_not(None), serial_column != "", model.environment_id.is_not(None),
                           scope.condition(model.environment_id, model.time, environment_id,
                                           members_only=members_only)]
             if serial:
                 predicates.append(serial_column == serial)
-            return select(serial_column.label("serial"), model.environment_id.label("environment_id"),
-                          func.count().label("total"), func.min(model.time).label("first_seen"),
-                          func.max(model.time).label("last_seen"), literal(kind).label("kind")).where(
-                              *predicates).group_by(serial_column, model.environment_id)
-        combined = union_all(branch(DeviceOperation, OPERATION_SERIAL, "operation", False),
-                             branch(SensorReading, READING_SERIAL, "reading", True))
+            return model, serial_column, predicates
+        return {"operation": branch(DeviceOperation, OPERATION_SERIAL, False),
+                "telemetry": branch(Telemetry, TELEMETRY_SERIAL, True),
+                "health": branch(SensorReading, READING_SERIAL, True)}
+
+    async def list_entries(self, scope, environment_id=None, serial=None, *, include_owner=False):
+        """One UNION ALL aggregate over every retained source; metadata queries are batched.
+
+        readings_count is the number of telemetry rows the caller can open in the
+        telemetry tab (exact raw count, not the hourly aggregate, which counts numeric
+        values per variable and has no serial). operations_count counts the retained
+        operations: routine SENSOR_DATA/KEEP_ACTIVE rows older than 90 days are pruned.
+        sensorreading (device health) only widens first/last_seen and existence.
+        """
+        from sqlalchemy import literal
+        # literal() must be typed as a SQL expression, not cast from a Python string.
+        selects = []
+        for kind, (model, serial_column, predicates) in self._evidence_branches(
+                scope, environment_id, serial).items():
+            selects.append(select(serial_column.label("serial"), model.environment_id.label("environment_id"),
+                                  func.count().label("total"), func.min(model.time).label("first_seen"),
+                                  func.max(model.time).label("last_seen"), literal(kind).label("kind")).where(
+                                      *predicates).group_by(serial_column, model.environment_id))
+        combined = union_all(*selects)
         rows = (await self.session.execute(combined)).all()
         entries = {}
         for row in rows:
@@ -123,7 +148,10 @@ class DeviceHistoryService:
             item = entries.setdefault(key, {"serial": row.serial, "environment_id": row.environment_id,
                                             "first_seen": None, "last_seen": None,
                                             "readings_count": 0, "operations_count": 0})
-            item["readings_count" if row.kind == "reading" else "operations_count"] = row.total
+            if row.kind == "telemetry":
+                item["readings_count"] = row.total
+            elif row.kind == "operation":
+                item["operations_count"] = row.total
             item["first_seen"] = min(filter(None, (item["first_seen"], row.first_seen)))
             item["last_seen"] = max(filter(None, (item["last_seen"], row.last_seen)))
         if not entries:
@@ -194,12 +222,11 @@ class DeviceHistoryService:
                                      sort_by, sort_order), page, per_page)
 
     async def has_history(self, scope, serial, environment_id=None):
-        if await self.list_entries(scope, environment_id, serial):
-            return True
-        telemetry = select(Telemetry.id).where(Telemetry.device_serial == serial,
-            scope.condition(Telemetry.environment_id, Telemetry.time, environment_id,
-                            members_only=True)).limit(1)
-        return (await self.session.execute(telemetry)).first() is not None
+        """True while any retained source still holds a visible row for the serial."""
+        for model, _, predicates in self._evidence_branches(scope, environment_id, serial).values():
+            if (await self.session.execute(select(model.time).where(*predicates).limit(1))).first():
+                return True
+        return False
 
     async def list_telemetry(self, scope, *, serial, environment_id=None,
                              search=None, date_from=None, date_to=None,

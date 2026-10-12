@@ -161,6 +161,57 @@ dueño (el rol de la aplicación, superusuario) y fija `app.current_user_id =
 'system_admin'` en su transacción. Un dueño sin BYPASSRLS no borraría nada,
 porque `deviceoperation` no tiene política de DELETE.
 
+## Qué conserva el historial de equipos anteriores
+
+El historial (`/api/devices/history/devices` y sus pestañas por serial) lista un
+par (serial, ambiente) mientras quede **alguna** evidencia visible para quien
+consulta, en cualquiera de estas fuentes:
+
+| Fuente | Cuánto dura | Qué aporta a la fila del historial |
+| --- | --- | --- |
+| `telemetry` (vía la vista `public.telemetry`) | 1 año | `readings_count`, fechas, existencia |
+| `deviceoperation` con historia (`MOVE`, `UNPAIR`, `FIRMWARE_UPDATE`, `ERROR`, etc.) | Siempre | `operations_count`, nombre al irse, fechas, existencia |
+| `deviceoperation` rutinarias (`SENSOR_DATA`, `KEEP_ACTIVE`) | 90 días | `operations_count`, fechas, existencia |
+| `sensorreading` (salud del equipo) | 90 días | Sólo fechas y existencia |
+
+- **`readings_count`** es la cantidad de filas de telemetría que el usuario puede
+  abrir en la pestaña de telemetría, contada exacta sobre las lecturas crudas.
+  No sale de `telemetry_hourly`: el resumen cuenta valores numéricos por
+  variable (no filas) y no guarda el serial.
+- **`operations_count`** cuenta las operaciones que quedan: después de 90 días
+  ya no incluye las rutinarias.
+- **`first_seen` / `last_seen`** son el mínimo y el máximo entre todas las
+  fuentes visibles. Con el tiempo `first_seen` avanza (hasta 1 año atrás por la
+  telemetría; antes, sólo por las operaciones que se conservan).
+- **Alcance**: la telemetría y `sensorreading` cuentan sólo para miembros del
+  ambiente (como la pestaña de telemetría); el invitado ve las operaciones desde
+  el inicio de su acceso. El administrador ve todo y puede filtrar por dueño.
+- Así, un equipo que se fue sigue en el historial de su establecimiento anterior
+  durante un año por su telemetría, y para siempre si dejó una operación con
+  historia (las salidas `MOVE`/`UNPAIR` se registran desde la migración `0027`).
+  Un equipo que se fue antes de `0027` y del que ya no queda telemetría ni
+  operaciones con historia desaparece del listado.
+- **Rendimiento**: el listado agrupa por (serial, ambiente) todas las filas de
+  telemetría visibles en una sola consulta (en desarrollo, ~4 ms para ~7.000
+  filas). Es lineal en las filas visibles, hasta un año por ambiente; si crece
+  demasiado, la salida es un resumen por (serial, ambiente) mantenido aparte, no
+  el agregado por hora.
+
+## Permisos sobre hypertables con RLS
+
+TimescaleDB otorga `USAGE` sobre el esquema `_timescaledb_internal` a `PUBLIC`, y
+cada chunk copia los permisos (`GRANT`) de su hypertable **pero no su RLS**. Por
+eso, cualquier permiso sobre una hypertable con RLS otorgado a un rol sin bypass
+expone las filas **sin filtrar** a través de sus chunks. La verificación lo
+comprobó: el rol de prueba leyó 6.951 filas de `sensorreading` directamente de
+`_timescaledb_internal._hyper_1_16_chunk` mientras la tabla padre le devolvía 0.
+
+Regla: **nunca otorgar permisos sobre hypertables con RLS a roles sin bypass.**
+Los datos se exponen mediante vistas que filtran (como `public.telemetry`,
+`public.telemetry_hourly` y el esquema `ai_read` del asistente). El rol de
+desarrollo `ceiot_rls_test` tiene esos permisos sólo porque lo prepara la suite
+de pruebas; no es un rol de la aplicación y no debe existir en producción.
+
 ## Reglas operativas
 
 - **Nunca refrescar el agregado con inicio `NULL`** (ni con un inicio anterior a
