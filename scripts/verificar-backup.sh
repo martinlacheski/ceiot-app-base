@@ -5,8 +5,10 @@
 # 2. Arranca un contenedor descartable ceiot-backup-verify-<aleatorio> con la
 #    misma imagen que el servicio postgresql (la del manifiesto si sigue
 #    disponible; si no, la de docker compose config), sin red ni puertos
-#    publicados y con los jobs de TimescaleDB desactivados (ninguna política
-#    de retención o compresión toca los datos durante la verificación).
+#    publicados, con memoria y CPU acotadas (BACKUP_VERIFY_MEMORY, por defecto
+#    1g; BACKUP_VERIFY_CPUS, por defecto 1) y con los jobs de TimescaleDB
+#    desactivados (ninguna política de retención o compresión toca los datos
+#    durante la verificación).
 # 3. Crea los roles del volcado (sin contraseñas), la base con la misma
 #    codificación y locale, las extensiones en la versión del manifiesto, y
 #    restaura con timescaledb_pre_restore() + pg_restore --exit-on-error +
@@ -36,6 +38,19 @@ if [ ! -d "$1" ]; then
   exit 2
 fi
 backup_dir="$(cd "$1" && pwd)"
+
+# Resource limits of the disposable container (docker run --memory / --cpus).
+# Restoring a ~20 MB dump with TimescaleDB uses about 160 MB.
+verify_memory="${BACKUP_VERIFY_MEMORY:-1g}"
+verify_cpus="${BACKUP_VERIFY_CPUS:-1}"
+if ! [[ "$verify_memory" =~ ^[1-9][0-9]*[bkmgBKMG]?$ ]]; then
+  echo "Error: BACKUP_VERIFY_MEMORY debe ser un tamaño como 1g o 512m (se recibió '$verify_memory')." >&2
+  exit 2
+fi
+if ! [[ "$verify_cpus" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! awk -v c="$verify_cpus" 'BEGIN { exit !(c > 0) }'; then
+  echo "Error: BACKUP_VERIFY_CPUS debe ser un número mayor que 0, como 1 o 0.5 (se recibió '$verify_cpus')." >&2
+  exit 2
+fi
 
 cd "$(dirname "$0")/.."
 helper="$(pwd)/scripts/backup_manifest.py"
@@ -76,6 +91,7 @@ setup_error=""
 # No network at all: trust authentication is only reachable through the
 # container's own unix socket. NO_TS_TUNE keeps the default memory settings.
 if ! docker run -d --name "$container" --network none --label ceiot.backup-verify=1 \
+  --memory "$verify_memory" --cpus "$verify_cpus" \
   -e POSTGRES_USER="$db_user" -e POSTGRES_DB=postgres -e POSTGRES_HOST_AUTH_METHOD=trust \
   -e NO_TS_TUNE=true -e TIMESCALEDB_TELEMETRY=off \
   "$image" postgres -c timescaledb.max_background_workers=0 >/dev/null; then

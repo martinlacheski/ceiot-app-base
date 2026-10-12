@@ -130,6 +130,11 @@ envío falla), el aviso no se puede enviar: queda registrado en el log y en el
 campo `notification` de `ultimo-resultado.json` como `not sent (...)`.
 Revisá `estado` de vez en cuando aunque no lleguen avisos.
 
+Los avisos son **sólo de falla**: si el cron deja de correr o el equipo está
+apagado, no llega nada y el silencio parece "todo bien". En producción conviene
+además un **resumen diario que se envíe siempre** (también cuando todo está
+bien), de modo que su ausencia sea en sí misma una alerta.
+
 ### Retención
 
 Después de un backup **verificado**, `scripts/backup.sh` borra backups viejos
@@ -219,7 +224,8 @@ fallas:
 2. **Restauración**: arranca `ceiot-backup-verify-<aleatorio>` con la misma
    imagen del servicio `postgresql` (la registrada en el manifiesto si todavía
    existe localmente; si no, la de `docker compose config`), sin red, sin
-   puertos publicados y con los jobs de TimescaleDB desactivados. Crea los
+   puertos publicados, con memoria y CPU acotadas y con los jobs de
+   TimescaleDB desactivados. Crea los
    roles de `roles.sql`, la base con la misma codificación y locale, las
    extensiones en la versión del manifiesto, y ejecuta
    `timescaledb_pre_restore()`, `pg_restore --exit-on-error` (conservando los
@@ -237,6 +243,48 @@ fallas:
    `--sin-s3`, que queda como aviso).
 
 En el stack de desarrollo la verificación completa tarda unos pocos segundos.
+
+### Versión fija de TimescaleDB
+
+`timescaledb/docker-compose.yml` usa una etiqueta fija
+(`timescale/timescaledb:2.30.1-pg16`), no `latest-pg16`: con una etiqueta
+móvil, un `docker compose pull` puede actualizar la base sin aviso y la
+verificación falla con *catalog version mismatch*, porque el catálogo de
+TimescaleDB de la base y el de la imagen ya no coinciden. La verificación
+prefiere el ID exacto de imagen registrado en el manifiesto (`source.image_id`)
+y, si ya no está en el equipo, la imagen fija del compose.
+
+Para actualizar TimescaleDB a propósito:
+
+1. Generá un backup verificado (`scripts/backup.sh`).
+2. Cambiá la etiqueta en `timescaledb/docker-compose.yml` a la versión nueva y
+   recreá el servicio: `docker compose pull postgresql && docker compose up -d
+   postgresql`.
+3. Actualizá la extensión en cada base, como superusuario y en una sesión
+   nueva: `docker compose exec postgresql psql -X -U <superusuario> -d <base>
+   -c "ALTER EXTENSION timescaledb UPDATE;"`.
+4. Comprobá la versión
+   (`SELECT extversion FROM pg_extension WHERE extname = 'timescaledb'`) y
+   generá un backup nuevo: tiene que terminar en "✅ Backup verificado".
+
+Los backups anteriores siguen verificándose con su propia imagen mientras
+esté en el equipo (`docker image ls timescale/timescaledb`); si se borró, bajala
+de nuevo con la etiqueta de su versión.
+
+### Recursos del contenedor de verificación
+
+El contenedor descartable corre con `--memory` y `--cpus` para que una
+verificación no deje sin memoria al resto del stack en un servidor chico. Los
+valores se configuran con variables de entorno:
+
+| Variable | Por defecto | Ejemplo |
+| --- | --- | --- |
+| `BACKUP_VERIFY_MEMORY` | `1g` | `BACKUP_VERIFY_MEMORY=512m scripts/backup.sh` |
+| `BACKUP_VERIFY_CPUS` | `1` | `BACKUP_VERIFY_CPUS=0.5 scripts/verificar-backup.sh backups/<fecha>` |
+
+Como referencia, restaurar un dump de ~20 MB con TimescaleDB usa alrededor de
+160 MB. Un valor inválido (por ejemplo `BACKUP_VERIFY_CPUS=0`) termina con
+código 2 antes de arrancar el contenedor.
 
 ## Restaurar en la base real
 
@@ -257,6 +305,9 @@ docker compose stop backend mqtt-runtime
 # 2. Roles (los que ya existen dan error "already exists"; se pueden omitir).
 #    El backup no trae contraseñas: definí las de los roles con LOGIN con
 #    ALTER ROLE ... PASSWORD si hace falta.
+#    roles.sql generado con PostgreSQL 16.10 o posterior empieza con \restrict:
+#    aplicalo con un psql de la misma versión menor o posterior (acá se usa el
+#    del propio contenedor, así que no hay problema).
 docker exec -i "$pg" psql -U "$user" -d postgres < "$backup/roles.sql"
 
 # 3. Base nueva con las extensiones en la versión del manifiesto.
@@ -309,4 +360,15 @@ otros. Cuando compruebes que todo funciona, podés borrar `iot_db_anterior`.
   componente, la CA y los certificados MQTT (`mqtt/pki/`, `mqtt/certs/`), los
   datos de EMQX (`mqtt/data/`) y de Redis (estado en vivo, se regenera).
 - `roles.sql` no tiene contraseñas a propósito; después de restaurar en un
-  servidor nuevo hay que definirlas.
+  servidor nuevo hay que definirlas. Desde PostgreSQL 16.10, `pg_dumpall` agrega
+  una línea `\restrict` al principio: en otro servidor, aplicalo con un `psql` de
+  la misma versión menor o posterior (uno más viejo falla con "invalid command").
+- **Los backups quedan en el mismo equipo** (`backups/`): si se pierde el disco
+  o el servidor, se pierden con él. En producción copialos fuera del equipo (por
+  ejemplo a un bucket S3 dedicado, con versionado y Object Lock para que no se
+  puedan borrar desde el servidor) y probá restaurar desde esa copia, no sólo
+  desde la local.
+- **Pérdida máxima de datos (RPO)**: con un backup diario se puede perder hasta
+  un día. Si hace falta menos, programalo más seguido o agregá archivado
+  continuo del WAL (por ejemplo WAL-G a S3), que permite restaurar a cualquier
+  momento con una pérdida de alrededor de un minuto.

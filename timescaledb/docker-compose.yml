@@ -1,6 +1,9 @@
 services:
   postgresql:
-    image: timescale/timescaledb:latest-pg16
+    # Fixed tag (not latest-pg16): backups are verified by restoring into this
+    # same TimescaleDB version, and a silent upgrade breaks the restore with
+    # "catalog version mismatch". Upgrade on purpose: see docs/backups.md.
+    image: timescale/timescaledb:2.30.1-pg16
     ports:
       - 127.0.0.1:${DB_PORT:?DB_PORT is required}:5432
     environment:
