@@ -65,34 +65,52 @@ Los cuatro son de tipo ambiental y pertenecen al establecimiento
 ### 1. Obtener el token de la API
 
 ```bash
-export CEIOT_PROVISIONING_USERNAME=<usuario administrador>
-python3 provisioning/login.py
+CEIOT_PROVISIONING_USERNAME=<usuario administrador> python3 provisioning/login.py # Por ejemplo usuario "admin"
 ```
 
+`CEIOT_PROVISIONING_USERNAME` es una variable de entorno del proceso, no de un
+archivo `.env`: el script no la busca en ningún `.env`, así que hay que pasarla
+al ejecutarlo (como arriba, solo para ese comando) o exportarla antes con
+`export CEIOT_PROVISIONING_USERNAME=<usuario administrador>`. Sin ella el
+script termina con `Error: Set CEIOT_PROVISIONING_USERNAME to the account
+username.` Es el nombre de usuario (por ejemplo `admin`), no el email.
+
 La contraseña se toma de `CEIOT_PROVISIONING_PASSWORD` si está definida; si no,
-se solicita de forma interactiva. El token queda en `provisioning/.env.local`
+se solicita de forma interactiva (recomendado: así no queda en el historial de
+la terminal). Ni el usuario ni la contraseña se guardan en ningún archivo. El token queda en `provisioning/.env.local`
 (permisos `0600`) junto con `CEIOT_API_BASE_URL`, derivada de `BACKEND_PORT`
 salvo que pase `--api-base-url <url>`. Cuando el token
 vence, `provision.py` lo indica (error 401): repita este paso.
 
 ### 2. Preparar el dispositivo
 
-Dispositivo con un serial existente o elegido:
+Por defecto el dispositivo se graba **sin asociarlo a ningún establecimiento**:
+queda dado de alta con su sensor y su certificado, y después el usuario que lo
+recibe lo vincula a su establecimiento desde la aplicación web (paso 5).
 
 ```bash
 python3 provisioning/provision.py prepare \
-  --serial IOT-DEM0-0004 --sensor bmp280 --name "Demo BMP280" \
-  --environment-of IOT-DEM0-0001
+  --serial IOT-DEM0-0005 --sensor dht22 --firmware-sensor auto \
+  --name "Demo DHT22 (2)"
 ```
 
-Para que el equipo detecte el sensor por sí mismo en lugar de fijarlo, agregue
-`--firmware-sensor auto` (ver el paso 3 de «El script»).
+- `--serial` fija el serial; sin él, el backend genera uno nuevo
+  (`IOT-XXXX-XXXX`) y lo muestra en la salida: anótelo, es lo que el usuario
+  ingresa para vincular el equipo.
+- `--firmware-sensor auto` hace que el equipo detecte el sensor por sí mismo en
+  lugar de fijarlo (ver el paso 3 de «El script»).
+- Con `--flash /dev/ttyUSB0` el script además compila y graba (paso 3).
 
-Dispositivo nuevo con serial generado por el backend (comportamiento de DVEM):
+Opcional: para dejarlo ya asociado (por ejemplo, como administrador), agregue
+`--environment-of <serial de un equipo de ese establecimiento>` o
+`--environment-id <uuid del establecimiento>`. Un dispositivo asociado así ya
+no puede vincularlo otro usuario.
+
+Dispositivo nuevo con serial generado por el backend y datos de fabricación
+(comportamiento de DVEM):
 
 ```bash
 python3 provisioning/provision.py prepare --sensor dht22 \
-  --environment-id <uuid del establecimiento> \
   --model ESP32-WROOM-32 --batch 2026-10-A
 ```
 
@@ -104,10 +122,11 @@ El script:
    - con `--serial`, reutiliza el dispositivo si existe o lo da de alta con
      `POST /api/devices`;
    - deja el tipo ambiental, el nombre indicado (`--name`; por defecto
-     `<SENSOR> <serial>` en altas nuevas) y lo asocia al establecimiento de
-     `--environment-id` o al del dispositivo indicado en `--environment-of`.
-     Un dispositivo que ya pertenece a otro establecimiento no se mueve
-     (se avisa; se mueve desde la aplicación web);
+     `<SENSOR> <serial>` en altas nuevas) y, solo si se indica, lo asocia al
+     establecimiento de `--environment-id` o al del dispositivo indicado en
+     `--environment-of`; sin esas opciones queda sin asociar, listo para que
+     lo vincule un usuario. Un dispositivo que ya pertenece a otro
+     establecimiento no se mueve (se avisa; se mueve desde la aplicación web);
    - deja **un solo sensor activo**, el de `--sensor` y con su clave
      (`dht11`, `dht22`, `bmp280` o `bme280`). Los sensores anteriores se
      desactivan, no se borran, para conservar el historial. La API de sensores
@@ -182,6 +201,33 @@ correcta» y en la fila **Sensor** el modelo en uso, con la indicación de si se
 detectó automáticamente o se eligió de forma manual. El detalle de la
 identidad (CN del certificado) está en la pestaña **MQTT** y el del chip
 detectado, en la pestaña **Dispositivo**.
+
+Antes, configure el Wi-Fi del equipo: `erase-flash` borra la red guardada, así
+que el equipo levanta el punto de acceso de configuración (ver
+[«Primeros pasos: conectar el equipo al Wi-Fi»](../esp32/README.md#primeros-pasos-conectar-el-equipo-al-wi-fi)).
+
+### 5. Vincular el dispositivo (usuario)
+
+Un dispositivo preparado sin establecimiento lo vincula el usuario que lo
+recibe, desde la aplicación web:
+
+1. Inicia sesión (o se registra y verifica su email).
+2. Crea su establecimiento, si todavía no tiene uno. Solo el **propietario**
+   de un establecimiento puede vincularle dispositivos.
+3. En **Dispositivos → Asociar dispositivo** (`/app/devices/pair`) ingresa el
+   serial (o lo escanea como código QR), elige el establecimiento y confirma.
+
+Desde ese momento el dispositivo y su telemetría aparecen en su
+establecimiento. Errores posibles:
+
+| Mensaje | Causa |
+| --- | --- |
+| «Formato de serial inválido» | El serial no tiene la forma `IOT-XXXX-XXXX`. |
+| «Dispositivo no encontrado» | El serial no está dado de alta (falta el paso 2). |
+| «Dispositivo ya está asociado a otro entorno» | Ya lo vinculó otro usuario o se preparó con `--environment-of` / `--environment-id`. |
+| «Solo el propietario del establecimiento puede asociar dispositivos» | El usuario es invitado, no propietario, del establecimiento elegido. |
+
+Para mostrar el serial como QR desde la terminal: `qrencode -t ANSIUTF8 IOT-DEM0-0005`.
 
 ## Qué hace el firmware con estos archivos
 
