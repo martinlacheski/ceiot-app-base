@@ -1,4 +1,4 @@
-# FastAPI Backend Base
+# Backend base con FastAPI
 
 Base sólida y modular para proyectos backend con FastAPI, SQLModel y Alembic.
 
@@ -56,8 +56,8 @@ La creación está serializada con un bloqueo transaccional de PostgreSQL y requ
 
 ## Base de Datos
 
-The database schema is managed exclusively by Alembic. Run `alembic upgrade head`
-before starting the backend against an empty database.
+El esquema de la base de datos lo administra exclusivamente Alembic. Ejecutá
+`alembic upgrade head` antes de iniciar el backend contra una base vacía.
 
 No vuelvas automáticamente a una imagen anterior del backend: esas imágenes no tienen estos controles de arranque. Ante una falla, detené la publicación y aplicá una corrección hacia adelante, o usá únicamente un fallback protegido y verificado por separado. Un rollback sólo del frontend puede seguir siendo válido.
 
@@ -137,7 +137,7 @@ tabla `document_chunk` es sólo para administradores (RLS); la recuperación pas
 `rag_search` (SECURITY DEFINER), que únicamente devuelve fragmentos de documentos activos y
 listos del proveedor/modelo vigente.
 
-## Testing
+## Pruebas
 
 Ejecutar la suite de pruebas:
 

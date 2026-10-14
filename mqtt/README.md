@@ -246,7 +246,7 @@ es manual:
   usuario existente (dashboard/API o `mqtt/data/mnesia`) antes de recrear el
   broker.
 
-## Troubleshooting
+## Solución de problemas
 
 - **`SSL: TLSV13_ALERT_CERTIFICATE_REQUIRED` / la conexión TLS se cierra sin
   handshake completo**: el dispositivo no está presentando un certificado de

@@ -39,9 +39,9 @@ CONFIG_MBEDTLS_DYNAMIC_FREE_CONFIG_DATA=y
 # chain and signatures are verified, but the certificate validity dates are
 # not compared with the system clock. That is what lets the device reach the
 # broker (and ask for the time over MQTT) when NTP and HTTP both failed.
-# See README.md, "Time synchronization".
+# See README.md, "Sincronización horaria".
 
-# DVEM change 50 adapted to this board (no PSRAM, see README "OTA updates"):
+# DVEM change 50 adapted to this board (no PSRAM, see README "Actualizaciones OTA"):
 # mbedTLS cannot move to PSRAM (CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC needs it) and
 # hardware AES stays on: the classic ESP32 AES accelerator has no DMA, so the
 # "esp-aes: Failed to allocate memory" DMA bounce buffer of the S3 does not

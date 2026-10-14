@@ -200,7 +200,7 @@ ceiot-app-base/
 | Landing | `cd landing && npm ci && npm test` |
 | Scripts de backup y roles | `python3 -m unittest discover -s scripts/tests` |
 | Aprovisionamiento | `python3 -m unittest discover -s provisioning/tests` |
-| Firmware (en el host) | ver [Host tests](esp32/README.md#host-tests) |
+| Firmware (en el host) | ver [Tests en el host](esp32/README.md#tests-en-el-host) |
 
 ---
 

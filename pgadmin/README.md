@@ -1,8 +1,9 @@
 # Herramientas de desarrollo: pgAdmin y RedisInsight
 
-Solo para desarrollo local. Ambas herramientas viven bajo el perfil `tools`: el
-`docker compose up` normal no las levanta. Publican puertos **solo en
-127.0.0.1** y no deben exponerse a otra red.
+Solo para desarrollo local. Ninguna de las dos tiene perfil de Compose:
+arrancan por defecto con el resto del stack (`scripts/levantar.sh` o
+`docker compose up`). Publican puertos **solo en 127.0.0.1** y no deben
+exponerse a otra red.
 
 ## Levantar y detener
 
@@ -17,7 +18,7 @@ docker compose stop pgadmin redisinsight   # para apagarlas
 | pgAdmin | http://127.0.0.1:15050 | `PGADMIN_PORT` (default 15050) |
 | RedisInsight | http://127.0.0.1:15540 | `REDISINSIGHT_PORT` (default 15540) |
 
-Las variables de puerto se leen del entorno del shell o de un `.env` en la raíz.
+Las variables de puerto se leen del entorno del shell o del `.env` de la raíz.
 
 ## pgAdmin
 
