@@ -121,6 +121,19 @@ if [ "$(db_var ALEMBIC_DB_USER)" = "$(db_var DB_USER)" ]; then
   exit 1
 fi
 
+# EMQX management API key: the broker registers it at startup and the backend
+# uses it to know which devices are connected right now (device status, OTA).
+# Only presence is checked; values are never printed.
+root_var() { grep -E "^[[:space:]]*$1=" .env | tail -n 1 | cut -d= -f2- | tr -d "\"' \r" || true; }
+missing_api=()
+for var in EMQX_API_KEY EMQX_API_SECRET; do
+  if [ -z "$(root_var "$var")" ]; then missing_api+=("$var"); fi
+done
+if [ "${#missing_api[@]}" -gt 0 ]; then
+  echo "Error: el .env de la raíz no define ${missing_api[*]} (API de administración de EMQX, presencia de dispositivos). Generalas con: openssl rand -hex 16 (clave) / openssl rand -hex 32 (secreto)." >&2
+  exit 1
+fi
+
 # Read only the provider name from backend/.env (never print other values).
 provider="openrouter"
 value="$(grep -E '^[[:space:]]*EMBEDDING_PROVIDER=' backend/.env | tail -n 1 | cut -d= -f2- | tr -d "\"' \r" || true)"
