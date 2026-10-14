@@ -9,7 +9,7 @@ equipo.
 | --- | --- |
 | `login.py` | Inicia sesión en el backend y guarda el token en `provisioning/.env.local`. |
 | `provision.py` | Alta o conciliación del dispositivo, certificado, archivos para el firmware y comandos de grabación. |
-| `profiles/local.json` | Broker del stack de desarrollo: `${LAN_BIND_IP}` y `${MQTT_LISTENER_TLS}` (de `mqtt/.env`), TLS activo. |
+| `profiles/local.json` | Broker del stack de desarrollo: `${LAN_BIND_IP}` (del `.env` de la raíz) y `${MQTT_LISTENER_TLS}` (de `mqtt/.env`), TLS activo. |
 | `profiles/production.example.json` | Plantilla para producción: `${MQTT_PUBLIC_HOST}` y `${MQTT_PUBLIC_PORT:-8883}`. |
 | `build/` | Carpeta de preparación por serial (se genera; no se versiona). |
 | `tests/` | Pruebas unitarias de los scripts (`python3 -m unittest discover -s provisioning/tests`). |
@@ -22,14 +22,15 @@ Nada de lo que contiene secretos se versiona: `provisioning/.env.local` (token),
 
 Los perfiles no tienen direcciones fijas: sus valores usan `${VARIABLE}` o
 `${VARIABLE:-valor_por_defecto}`. Cada variable se busca, en este orden, en el
-entorno del proceso, en `provisioning/.env.local`, en `mqtt/.env` y en
-`backend/.env`; si no aparece y no tiene valor por defecto, el script se
-detiene con un error que la nombra. Así, al cambiar `LAN_BIND_IP` o
+entorno del proceso, en `provisioning/.env.local`, en `mqtt/.env`, en
+`backend/.env` y en el `.env` de la raíz (valores compartidos; un archivo de
+servicio lo reemplaza, como en Docker Compose); si no aparece y no tiene
+valor por defecto, el script se detiene con un error que la nombra. Así, al cambiar `LAN_BIND_IP` o
 `MQTT_LISTENER_TLS` en el stack, los equipos que se aprovisionen después
 toman los valores nuevos sin editar el perfil.
 
 La URL del backend es `CEIOT_API_BASE_URL` si está definida; si no,
-`http://localhost:${BACKEND_PORT}` con `BACKEND_PORT` de `backend/.env`
+`http://localhost:${BACKEND_PORT}` con `BACKEND_PORT` del `.env` de la raíz
 (`8000` por defecto). `--api-base-url` tiene prioridad sobre ambas.
 
 ## Requisitos

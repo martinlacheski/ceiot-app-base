@@ -68,8 +68,8 @@ ejemplo `mqtt.miproyecto.com`) o la IP de esta máquina en la red local para
 dispositivos reales en desarrollo (por ejemplo `192.168.1.50`). Cada argumento
 con forma de IPv4 se agrega como SAN de tipo IP; el resto, como DNS. Puede
 combinar ambos: `./emitir-certificado-broker.sh mqtt.miproyecto.com 192.168.1.50`.
-Sin argumentos usa `LAN_BIND_IP` de `mqtt/.env`, si está definida (ver
-abajo).
+Sin argumentos usa `LAN_BIND_IP` del `.env` de la raíz (o de `mqtt/.env`, si la
+redefine), si está definida (ver abajo).
 
 Recree el contenedor para que tome el certificado nuevo:
 
@@ -89,17 +89,16 @@ volver a emitirlo cada vez que cambia esa IP.
    hostname -I | awk '{print $1}'
    ```
 
-2. Cárguela como `LAN_BIND_IP` en `mqtt/.env` y en `backend/.env` (el mismo
-   valor en los dos), y en `backend/.env` también la URL de descarga de
-   firmware:
+2. Cárguela como `LAN_BIND_IP` en el `.env` de la raíz. El broker y el
+   backend la toman de ahí, y el backend arma con ella la URL de descarga de
+   firmware (`http://192.168.1.100:<BACKEND_PORT>`):
 
    ```dotenv
    LAN_BIND_IP=192.168.1.100
-   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.100:8000
    ```
 
 3. Emita el certificado del broker. Sin argumentos, el script toma
-   `LAN_BIND_IP` de `mqtt/.env`:
+   `LAN_BIND_IP` del `.env` de la raíz:
 
    ```bash
    cd mqtt/pki
@@ -175,7 +174,8 @@ MAIL_TRANSPORT=mailpit docker compose up -d backend mqtt-runtime
 ```
 
 La API de administración de EMQX (presencia de dispositivos, `EMQX_API_KEY`
-/ `EMQX_API_SECRET`) no cambia: sigue siendo HTTP contra el dashboard/API
+/ `EMQX_API_SECRET` en el `.env` de la raíz, compartidas por el broker y el
+backend) no cambia: sigue siendo HTTP contra el dashboard/API
 (puerto 18083) y es independiente de la autenticación MQTT.
 
 ## Cómo está configurado el broker (EMQX)
@@ -392,8 +392,9 @@ Cada `ota/status` repite el `request_id` del comando y lleva
 `running_version` y `target_version`. Se sale con Ctrl+C (publica `offline`).
 
 **URL de descarga desde el host.** La URL del comando se arma con
-`FIRMWARE_DOWNLOAD_BASE_URL` (o `BACKEND_PUBLIC_BASE_URL`, o
-`BACKEND_HOST_URL`). Si apunta a una IP de la LAN que no es la del equipo, o a
+`FIRMWARE_DOWNLOAD_BASE_URL` (si no está definida,
+`http://<LAN_BIND_IP>:<BACKEND_PORT>` cuando hay `LAN_BIND_IP`, o
+`BACKEND_PUBLIC_BASE_URL`, o `BACKEND_HOST_URL`). Si apunta a una IP de la LAN que no es la del equipo, o a
 un host interno de Docker, el emulador no la alcanza: pasá
 `--ota-url-base http://localhost:8000` (reemplaza solo esquema y host; el
 token del path se conserva). Con la IP de la LAN correcta en `.env` no hace

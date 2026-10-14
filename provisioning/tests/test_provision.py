@@ -8,6 +8,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -45,6 +46,23 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {"BACKEND_PORT": "19000"}.get),
                          "http://localhost:19000")
         self.assertEqual(provision.expand_vars(provision.DEFAULT_API_BASE_URL, {}.get), "http://localhost:8000")
+
+    def test_stack_lookup_reads_the_root_env_after_the_service_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root, mqtt, backend = Path(tmp) / "root.env", Path(tmp) / "mqtt.env", Path(tmp) / "backend.env"
+            root.write_text("LAN_BIND_IP=192.168.1.10\nBACKEND_PORT=19000\n", encoding="utf-8")
+            mqtt.write_text("MQTT_LISTENER_TLS=18883\nLAN_BIND_IP=10.0.0.9\n", encoding="utf-8")
+            backend.write_text("", encoding="utf-8")
+            with mock.patch.object(provision, "STACK_ENV_FILES", (mqtt, backend, root)), \
+                    mock.patch.dict("os.environ", {}, clear=True):
+                lookup = provision.stack_lookup({})
+                # A service file overrides the shared root value, as in docker compose.
+                self.assertEqual(lookup("LAN_BIND_IP"), "10.0.0.9")
+                self.assertEqual(lookup("BACKEND_PORT"), "19000")
+                self.assertEqual(lookup("MQTT_LISTENER_TLS"), "18883")
+
+    def test_stack_env_files_end_with_the_root_env(self):
+        self.assertEqual(provision.STACK_ENV_FILES[-1], provision.REPO_ROOT / ".env")
 
     def test_native_types_are_normalized_to_strings(self):
         self.assertEqual(self.load({"mqtt_uri": " h ", "mqtt_port": 1883, "mqtt_use_tls": False}),

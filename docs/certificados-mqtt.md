@@ -18,13 +18,15 @@ completa de un ESP32 está en [`provisioning/README.md`](../provisioning/README.
 Desde la raíz del proyecto:
 
 ```bash
-# 1. Configuración del broker (completar los valores, ver "Antes de empezar")
+# 1. Configuración compartida y del broker (completar los valores, ver
+#    "Antes de empezar")
+cp .env.example .env
 cp mqtt/.env.example mqtt/.env
 
 # 2. CA del proyecto (una sola vez)
 mqtt/pki/crear-ca.sh
 
-# 3. Certificado del broker (toma LAN_BIND_IP de mqtt/.env si está definida)
+# 3. Certificado del broker (toma LAN_BIND_IP del .env de la raíz si está definida)
 mqtt/pki/emitir-certificado-broker.sh
 
 # 4. Levantar el stack (antes, crear los demás .env: ver docs/puesta-en-marcha.md, "Arranque")
@@ -66,7 +68,7 @@ dentro de Docker) exige certificado de cliente.
 | --- | --- | --- |
 | `MQTT_LISTENER_TLS` | Puerto TLS publicado en el host | `8883` (estándar; cámbielo solo si el puerto está ocupado en su máquina) |
 | `MQTT_LISTENER_TCP`, `MQTT_LISTENER_WS` | Puertos TCP y WebSocket publicados | `1883` y `8083` (estándar) |
-| `LAN_BIND_IP` | IP de esta máquina en la red local, para dispositivos reales | Opcional; el mismo valor en `backend/.env` |
+| `LAN_BIND_IP` | IP de esta máquina en la red local, para dispositivos reales | Opcional; en el `.env` de la raíz (la usan el broker y el backend) |
 | `EMQX_BACKEND_PASSWORD` | Contraseña del usuario `backend-services` | `openssl rand -hex 32` |
 | `EMQX_PASSWORD` | Contraseña del panel de EMQX | `openssl rand -hex 32` |
 
@@ -98,7 +100,8 @@ Nombres incluidos en el certificado (SAN):
 - Siempre: `emqx`, `localhost` y `127.0.0.1`. Alcanzan para el emulador y las
   herramientas locales.
 - Los argumentos que pase: cada IPv4 se agrega como IP; el resto, como DNS.
-- Sin argumentos: `LAN_BIND_IP` de `mqtt/.env`, si está definida y no es
+- Sin argumentos: `LAN_BIND_IP` del `.env` de la raíz (o de `mqtt/.env`, si
+  la redefine), si está definida y no es
   `127.0.0.1` ni `0.0.0.0`.
 
 Para dispositivos reales en la red local, el certificado debe incluir la IP a
@@ -106,8 +109,8 @@ la que se conectan:
 
 ```bash
 hostname -I | awk '{print $1}'         # averiguar la IP, p. ej. 192.168.1.100
-# cargar LAN_BIND_IP=192.168.1.100 en mqtt/.env y en backend/.env
-mqtt/pki/emitir-certificado-broker.sh  # toma LAN_BIND_IP de mqtt/.env
+# cargar LAN_BIND_IP=192.168.1.100 en el .env de la raíz
+mqtt/pki/emitir-certificado-broker.sh  # toma LAN_BIND_IP del .env de la raíz
 ```
 
 La salida muestra el SAN resultante, por ejemplo
@@ -200,7 +203,7 @@ hacen falta para cambiarlos.
 | `MQTT_PKI_BROKER_OUT_DIR` | `emitir-certificado-broker.sh` | `mqtt/certs` |
 | `MQTT_PKI_BROKER_DAYS` | `emitir-certificado-broker.sh` | `825` |
 | `MQTT_PKI_DEVICE_DAYS` | `emitir-certificado-dispositivo.sh` | `825` |
-| `LAN_BIND_IP` | `emitir-certificado-broker.sh` (leída de `mqtt/.env`) | Sin definir |
+| `LAN_BIND_IP` | `emitir-certificado-broker.sh` (leída del `.env` de la raíz; `mqtt/.env` la reemplaza) | Sin definir |
 
 ## Rotar o regenerar
 

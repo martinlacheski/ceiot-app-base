@@ -71,6 +71,8 @@ El runner descarta la configuración heredada, evita la lectura de archivos dote
 
 ## Cómo se construyen las URLs públicas
 
+Con Docker Compose, `BACKEND_HOST_URL`, `BACKEND_PORT`, `VITE_FRONTEND_URL` y `VITE_FRONTEND_PORT` se derivan de `PUBLIC_SCHEME`, `PUBLIC_HOST`, `BACKEND_PORT` y `FRONTEND_PORT` del `.env` de la raíz; definirlas en `backend/.env` reemplaza el valor derivado.
+
 ### Callback del backend
 
 1. Si `BACKEND_PUBLIC_BASE_URL` tiene un valor no vacío, se usa con precedencia y solamente se quita la barra final.

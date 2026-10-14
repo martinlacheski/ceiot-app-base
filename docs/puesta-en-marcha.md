@@ -27,10 +27,13 @@ máquina. Todos los comandos se ejecutan desde la raíz del repositorio.
 
 ### 2. Archivos de configuración
 
-Cada componente mantiene su configuración en su propio `.env`, que no se
-versiona. Creálos a partir de las plantillas:
+El `.env` de la raíz guarda los valores que comparten varios servicios (host
+público, puertos publicados, `LAN_BIND_IP`, claves de Google y clave de la API
+de EMQX); cada componente mantiene el resto de su configuración en su propio
+`.env`. Ninguno se versiona. Creálos a partir de las plantillas:
 
 ```bash
+cp .env.example .env
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 cp landing/.env.example landing/.env
@@ -41,20 +44,38 @@ cp seaweedfs/.env.example seaweedfs/.env   # módulo Documentos (S3)
 cp pgadmin/.env.example pgadmin/.env       # login de pgAdmin
 ```
 
-`scripts/levantar.sh` no crea estos archivos: si falta alguno de los cinco
+`scripts/levantar.sh` no crea estos archivos: si falta alguno de los seis
 obligatorios, se detiene e indica el `cp` correspondiente.
+
+En cada `.env.example`, las variables sin comentar son obligatorias y tenés que
+completarlas; las comentadas son opcionales. Dejá comentadas las opcionales que
+no uses: un valor vacío en el `.env` de un servicio reemplaza al valor
+compartido del `.env` de la raíz.
+
+Cada servicio arma sus URLs (API, login, landing, orígenes CORS, hosts
+confiables) con `PUBLIC_SCHEME`, `PUBLIC_HOST`, `BACKEND_PORT`,
+`FRONTEND_PORT` y `LANDING_PORT` del `.env` de la raíz, así cada puerto se
+escribe una sola vez. Un valor definido en el `.env` de un servicio (por
+ejemplo `VITE_API_URL` en `frontend/.env`) reemplaza al derivado. Si
+actualizás una instalación anterior, quitá de los `.env` de cada servicio las
+variables que pasaron a la raíz.
 
 Las plantillas usan los puertos estándar y marcan con `CAMBIAR_` los valores
 que tenés que elegir. Generá cada secreto con `openssl` y reemplazá el valor:
 
 | Archivo | Variable | Cómo generarla |
 | --- | --- | --- |
+| `.env` (raíz) | `EMQX_API_KEY`, `EMQX_API_SECRET` | `openssl rand -hex 16` y `openssl rand -hex 32` |
 | `timescaledb/.env` | `DB_PASSWORD`, `ALEMBIC_DB_PASSWORD` | `openssl rand -hex 24` (una para cada una) |
 | `mqtt/.env` | `EMQX_PASSWORD`, `EMQX_BACKEND_PASSWORD` | `openssl rand -hex 32` (una para cada una) |
 | `backend/.env` | `JWT_SECRET_KEY` | `openssl rand -hex 32` |
-| `backend/.env` | `BOOTSTRAP_ADMIN_PASSWORD` | Elegida por vos: al menos 8 caracteres, con mayúscula, minúscula y número |
+| `backend/.env` | `BOOTSTRAP_ADMIN_PASSWORD` | Al menos 8 caracteres, con mayúscula, minúscula y número: `echo "Aa1$(openssl rand -hex 8)"` (`openssl rand -hex` solo no incluye mayúsculas) |
 | `seaweedfs/.env` | `S3_ACCESS_KEY`, `S3_SECRET_KEY` | `openssl rand -hex 12` y `openssl rand -hex 32` |
 | `pgadmin/.env` | `PGADMIN_DEFAULT_PASSWORD` | `openssl rand -hex 16` |
+
+El broker registra `EMQX_API_KEY` y `EMQX_API_SECRET` como clave de su API, y
+el backend la usa para saber qué dispositivos están conectados:
+`scripts/levantar.sh` se detiene si falta alguna de las dos.
 
 `timescaledb/.env` define dos usuarios de la base: `DB_USER` (por defecto
 `iot_app`), con el que se conectan la API y mqtt-runtime, sin privilegios
@@ -63,9 +84,18 @@ especiales para que Row Level Security filtre sus consultas, y
 migraciones y es dueño de todo. Ver
 [Roles de la base de datos](roles-base-de-datos.md).
 
-Las claves de Google Maps (`VITE_GCP_API_KEY` en `frontend/.env` y
-`PUBLIC_GCP_MAPS_API_KEY` en `landing/.env`) son opcionales: sin una clave
-válida la aplicación funciona, pero los mapas no cargan.
+Las claves de Google del `.env` de la raíz son opcionales: sin ellas la
+aplicación funciona, pero los mapas no cargan y no se geocodifican direcciones.
+Se usan dos claves distintas:
+
+- `GOOGLE_MAPS_API_KEY`: clave de **navegador** (Maps JavaScript API y Places),
+  restringida por sitio web a `localhost:4321` y `localhost:5173`. La usan el
+  frontend y la landing; `VITE_GCP_API_KEY` en `frontend/.env` o
+  `PUBLIC_GCP_MAPS_API_KEY` en `landing/.env` la reemplazan para ese servicio.
+- `GCP_API_KEY`: clave de **servidor** (Geocoding API), sin restricción por
+  sitio web. La usa el backend. Si queda vacía, el backend usa
+  `GOOGLE_MAPS_API_KEY`, que falla cuando esa clave está restringida por sitio
+  web.
 
 `backend/.env` trae `MAIL_TRANSPORT=mailpit`: los correos quedan en Mailpit y
 nunca se entregan. Para entrega real, ver
@@ -121,7 +151,8 @@ la landing durante la compilación.
 Con la base vacía, el backend crea el primer administrador a partir de
 `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL` y
 `BOOTSTRAP_ADMIN_PASSWORD` de `backend/.env`; si falta alguno, el backend no
-arranca. Ingresá en <http://localhost:5173> con ese usuario y cambiá la
+arranca. Ingresá en <http://localhost:5173> con el nombre de usuario (por
+defecto `admin`), no con el correo, y cambiá la
 contraseña desde el perfil. El backend nunca modifica administradores
 existentes, así que después del primer arranque esas variables ya no se usan.
 
@@ -144,17 +175,17 @@ ambientes.
 
 | Servicio | URL o puerto en tu máquina | Variable | Destino dentro de Docker |
 | --- | --- | --- | --- |
-| Frontend | <http://localhost:5173> | `VITE_FRONTEND_PORT` (`frontend/.env`) | `frontend:80` |
-| Landing | <http://localhost:4321> | `LANDING_PORT` (`landing/.env`) | `landing:80` |
-| API del backend | <http://localhost:8000/api> | `BACKEND_PORT` (`backend/.env`) | `backend:8000` |
+| Frontend | <http://localhost:5173> | `FRONTEND_PORT` (`.env` de la raíz) | `frontend:80` |
+| Landing | <http://localhost:4321> | `LANDING_PORT` (`.env` de la raíz) | `landing:80` |
+| API del backend | <http://localhost:8000/api> | `BACKEND_PORT` (`.env` de la raíz) | `backend:8000` |
 | PostgreSQL | `5432` | `DB_PORT` (`timescaledb/.env`) | `postgresql:5432` |
 | MQTT TCP | `1883` | `MQTT_LISTENER_TCP` (`mqtt/.env`) | `emqx:1883` |
 | MQTT TLS (mTLS) | `8883` | `MQTT_LISTENER_TLS` (`mqtt/.env`) | `emqx:8883` |
 | MQTT WebSocket | `8083` | `MQTT_LISTENER_WS` (`mqtt/.env`) | `emqx:8083` |
-| Panel de EMQX | <http://localhost:28183> | `EMQX_DASHBOARD_PORT` (`mqtt/.env`, opcional) | `emqx:18083` |
-| Mailpit | <http://localhost:8025> | `MAILPIT_UI_PORT` | `mailpit:8025` |
-| pgAdmin | <http://localhost:15050> (login en `pgadmin/.env`) | `PGADMIN_PORT` | `pgadmin:80` |
-| RedisInsight | <http://localhost:15540> | `REDISINSIGHT_PORT` | `redisinsight:5540` |
+| Panel de EMQX | <http://localhost:18083> | `EMQX_DASHBOARD_PORT` (`mqtt/.env`) | `emqx:18083` |
+| Mailpit | <http://localhost:8025> | `MAILPIT_UI_PORT` (`.env` de la raíz) | `mailpit:8025` |
+| pgAdmin | <http://localhost:15050> (login en `pgadmin/.env`) | `PGADMIN_PORT` (`.env` de la raíz) | `pgadmin:80` |
+| RedisInsight | <http://localhost:15540> | `REDISINSIGHT_PORT` (`.env` de la raíz) | `redisinsight:5540` |
 
 Para comprobar el estado del backend, usá <http://localhost:8000/health>. La
 documentación interactiva de la API está en <http://localhost:8000/api/docs>
@@ -163,14 +194,14 @@ alcanzan dentro de la red de Docker.
 
 Si un puerto ya está ocupado en tu máquina, cambiá la variable de la tabla:
 
-- Para los servicios con archivo indicado, editá ese `.env`. Si cambiás
-  `BACKEND_PORT`, `VITE_FRONTEND_PORT` o `LANDING_PORT`, actualizá también las
-  URLs que los usan (`VITE_*` en `frontend/.env`, `PUBLIC_*` en `landing/.env`,
-  `BACKEND_CORS_ORIGINS` y `VITE_FRONTEND_PORT` en `backend/.env`) y
-  reconstruí con `scripts/levantar.sh --build`.
-- `MAILPIT_UI_PORT`, `PGADMIN_PORT` y `REDISINSIGHT_PORT` se leen de las
-  variables de entorno de la shell o de un archivo `.env` en la raíz del
-  repositorio (ignorado por Git), por ejemplo `PGADMIN_PORT=25050`.
+- Editá el `.env` indicado en la tabla. `BACKEND_PORT`, `FRONTEND_PORT` y
+  `LANDING_PORT` se cambian solo en el `.env` de la raíz: las URLs del
+  frontend, de la landing y del backend (CORS incluido) se derivan de ellos.
+  Después reconstruí con `scripts/levantar.sh --build`, porque las URLs quedan
+  fijas en las imágenes del frontend y de la landing.
+- `MAILPIT_UI_PORT` (por defecto `8025`), `PGADMIN_PORT` (`15050`) y
+  `REDISINSIGHT_PORT` (`15540`) se leen del `.env` de la raíz, por ejemplo
+  `PGADMIN_PORT=25050`.
 
 Los contenedores se conectan a `postgresql:5432` y `emqx:1883`; los puertos
 publicados se usan solamente para conectarte desde tu máquina. Compose arma las
@@ -180,7 +211,9 @@ el puerto publicado en tu máquina.
 
 `frontend/.env` alimenta la imagen de Docker. `npm run dev` fuera de Docker no
 lo lee: Vite toma las variables del `.env` de la raíz del repositorio
-(`envDir: ".."` en `frontend/vite.config.ts`).
+(`envDir: ".."` en `frontend/vite.config.ts`). Para ese caso, agregá ahí las
+`VITE_*` que necesites (por ejemplo `VITE_API_URL=http://localhost:8000/api`);
+tené en cuenta que también reemplazan a las URLs que arma Docker.
 
 Que los puertos MQTT estén publicados y el contenedor esté saludable no confirma
 la autenticación de los clientes, la validez de la cadena de confianza TLS ni el
@@ -205,22 +238,18 @@ pgAdmin y Redis siguen disponibles solo en `127.0.0.1`.
 Pasos:
 
 1. Definí la IP de la máquina en la red local (por ejemplo `192.168.1.50`) en
-   `mqtt/.env` y en `backend/.env`:
+   el `.env` de la raíz:
 
    ```dotenv
    LAN_BIND_IP=192.168.1.50
    ```
 
-2. En `backend/.env`, indicá la base de la URL de descarga que recibirán los
-   dispositivos, con el puerto publicado del backend, y agregá esa IP a los
-   hosts confiables:
+   Con ese valor el backend acepta esa IP como host y la usa como base de la
+   URL de descarga que reciben los dispositivos
+   (`http://192.168.1.50:<BACKEND_PORT>`). Para otra base, definí
+   `FIRMWARE_DOWNLOAD_BASE_URL` en `backend/.env`.
 
-   ```dotenv
-   FIRMWARE_DOWNLOAD_BASE_URL=http://192.168.1.50:8000
-   BACKEND_TRUSTED_HOSTS=["localhost","127.0.0.1","backend","192.168.1.50"]
-   ```
-
-3. Reemití el certificado del broker para que incluya esa IP (los
+2. Reemití el certificado del broker para que incluya esa IP (los
    dispositivos validan el certificado contra la dirección a la que se
    conectan) y recreá `emqx`:
 
@@ -228,10 +257,10 @@ Pasos:
    mqtt/pki/emitir-certificado-broker.sh
    ```
 
-   Sin argumentos toma `LAN_BIND_IP` de `mqtt/.env`. El paso a paso completo
+   Sin argumentos toma `LAN_BIND_IP` del `.env` de la raíz. El paso a paso completo
    está en [`mqtt/README.md`](../mqtt/README.md) (sección "Con la IP de la red local").
 
-4. Recreá los servicios para aplicar los cambios:
+3. Recreá los servicios para aplicar los cambios:
 
    ```bash
    MAIL_TRANSPORT=mailpit docker compose up -d emqx backend mqtt-runtime
@@ -244,7 +273,7 @@ La descarga por HTTP sin cifrar se acepta solo en desarrollo: la orden de
 actualización llega por MQTT con TLS mutuo e incluye el SHA-256 y el tamaño de
 la imagen, que el dispositivo verifica antes de instalarla. En producción, la
 URL de descarga debe ser HTTPS. Si la IP de la máquina cambia, repetí los
-pasos 1 a 4.
+pasos 1 a 3.
 
 ## Captura local de correos con Mailpit
 
@@ -261,7 +290,7 @@ docker compose --profile local-mail up -d
 
 La UI queda disponible sólo en <http://127.0.0.1:8025> (`MAILPIT_UI_PORT`). El puerto SMTP `1025` no se publica en el host y Mailpit no tiene relay ni reenvío configurado. Activar el perfil por sí solo no cambia el backend: `MAIL_TRANSPORT=mailpit` hace que use exclusivamente `mailpit:1025`; `MAIL_TRANSPORT=smtp` (valor predeterminado del backend si la variable falta) conserva la entrega real configurada.
 
-Para que la landing en <http://localhost:4321> llame al contacto público, el operador debe incluir ese origen exacto en `BACKEND_CORS_ORIGINS` (la plantilla ya lo incluye) y mantener `BACKEND_TRUSTED_HOSTS` acorde a los hosts reales. Esas listas no se reemplazan automáticamente. El límite actual del contacto vive en memoria de cada proceso y la IP reenviada no se considera confiable sin una política de proxy; no alcanza por sí solo como protección para exponer el endpoint en producción.
+Para que la landing en <http://localhost:4321> llame al contacto público, el backend ya permite ese origen: lo arma con `PUBLIC_SCHEME`, `PUBLIC_HOST` y `LANDING_PORT` del `.env` de la raíz (`LANDING_URL` en `backend/.env` lo reemplaza). `BACKEND_CORS_ORIGINS` y `BACKEND_TRUSTED_HOSTS` solo agregan orígenes y hosts adicionales. El límite actual del contacto vive en memoria de cada proceso y la IP reenviada no se considera confiable sin una política de proxy; no alcanza por sí solo como protección para exponer el endpoint en producción.
 
 ## Base de datos en desarrollo
 

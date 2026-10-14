@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Levanta el stack de desarrollo completo (también en un clon nuevo).
 #
-# - Verifica antes de arrancar: versión de Docker Compose, archivos .env de
-#   cada componente (nunca los crea ni los copia) y certificados del broker.
+# - Verifica antes de arrancar: versión de Docker Compose, el .env de la raíz
+#   (valores compartidos: host, puertos, LAN_BIND_IP), los .env de cada
+#   componente (nunca los crea ni los copia) y certificados del broker.
 # - Crea las carpetas de datos montadas (mqtt/data, mqtt/log, redis/data,
 #   seaweedfs/data) y avisa si las de EMQX no pertenecen al uid 1000.
 # - Aplica las migraciones de Alembic antes de levantar el resto: arranca
@@ -59,23 +60,24 @@ if [ "$(printf '%s\n%s\n' "$min_compose" "$compose_version" | sort -V | head -n 
   exit 1
 fi
 
-# Every component keeps its own .env; they are never created automatically
-# because they hold secrets the operator must choose.
+# The root .env holds the values shared by several services (host, ports,
+# LAN IP) and every component keeps its own .env; they are never created
+# automatically because they hold values the operator must choose.
 missing_env=()
-for component in backend frontend landing timescaledb mqtt; do
-  if [ ! -f "$component/.env" ]; then missing_env+=("$component"); fi
+for env_file in .env backend/.env frontend/.env landing/.env timescaledb/.env mqtt/.env; do
+  if [ ! -f "$env_file" ]; then missing_env+=("$env_file"); fi
 done
 if [ "${#missing_env[@]}" -gt 0 ]; then
   echo "Error: faltan archivos de configuración. Crealos a partir de las plantillas y completá los valores (ver docs/puesta-en-marcha.md, sección \"Arranque\"):" >&2
-  for component in "${missing_env[@]}"; do
-    echo "  cp $component/.env.example $component/.env" >&2
+  for env_file in "${missing_env[@]}"; do
+    echo "  cp ${env_file%.env}.env.example $env_file" >&2
   done
   exit 1
 fi
 
 # The templates mark every value the operator must choose with CAMBIAR_ (only
 # file names are printed, never values).
-for env_file in backend/.env frontend/.env landing/.env timescaledb/.env mqtt/.env seaweedfs/.env pgadmin/.env; do
+for env_file in .env backend/.env frontend/.env landing/.env timescaledb/.env mqtt/.env seaweedfs/.env pgadmin/.env; do
   if [ -f "$env_file" ] && grep -q 'CAMBIAR_' "$env_file"; then
     echo "Aviso: $env_file todavía tiene valores de ejemplo (CAMBIAR_...). Reemplazalos antes de usar el stack fuera de tu máquina." >&2
   fi

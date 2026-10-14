@@ -181,8 +181,8 @@ broker settings from the web UI rebuilds and restarts the MQTT client
 These compiled-in defaults only apply when nothing else is configured. A board
 flashed with a `provisioning.json` (see "Device certificates") takes the broker
 host, port and TLS flag from it on the first boot, so the usual path is to let
-`provisioning/provision.py` write the stack values there (`LAN_BIND_IP` and
-`MQTT_LISTENER_TLS`, `8883` in the standard configuration; see
+`provisioning/provision.py` write the stack values there (`LAN_BIND_IP` from the
+root `.env` and `MQTT_LISTENER_TLS` from `mqtt/.env`, `8883` in the standard configuration; see
 `esp32/cert/provisioning.json.example`). Without that file, change them on the
 MQTT page or in `mqtt_config_logic.h`, for example when the stack publishes the
 broker TLS listener on a port other than the standard `8883`.
@@ -199,7 +199,7 @@ following `backend/docs/mqtt-time-sync.md`:
    over plain HTTP (5 s timeout), retried every 60 s while unsynchronized.
    `{backend}` is the "URL del backend" of the MQTT page (NVS `storage` /
    `backend_url`); empty means `http://<MQTT broker host>:8000`, the standard
-   `BACKEND_PORT` docker compose publishes for the backend (`LAN_BIND_IP` must expose it to
+   `BACKEND_PORT` (root `.env`) docker compose publishes for the backend (`LAN_BIND_IP` must expose it to
    the LAN, as for the firmware downloads).
 3. **MQTT**: the client starts once the clock is valid, **or** once NTP timed
    out and HTTP was tried, so it is never blocked forever. While the clock is

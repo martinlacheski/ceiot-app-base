@@ -108,10 +108,12 @@ Necesitás Docker con Compose 2.24 o superior, `bash` y `openssl`.
    cd ceiot-app-base
    ```
 
-2. **Creá los archivos de configuración** y completá los valores marcados con
-   `CAMBIAR_` ([qué poner en cada uno](docs/puesta-en-marcha.md#2-archivos-de-configuración)):
+2. **Creá los archivos de configuración** (el `.env` de la raíz con los valores
+   compartidos y el `.env` de cada componente) y completá los valores marcados
+   con `CAMBIAR_` ([qué poner en cada uno](docs/puesta-en-marcha.md#2-archivos-de-configuración)):
 
    ```bash
+   cp .env.example .env
    for c in backend frontend landing timescaledb mqtt; do cp $c/.env.example $c/.env; done
    ```
 

@@ -10,7 +10,8 @@ set -euo pipefail
 # Cada argumento que sea una IPv4 se agrega como IP; el resto, como DNS.
 #
 # Uso: ./emitir-certificado-broker.sh [host-o-ip ...]
-#   Sin argumentos usa LAN_BIND_IP de mqtt/.env (si está definida).
+#   Sin argumentos usa LAN_BIND_IP del .env de la raíz (o de mqtt/.env, que
+#   tiene prioridad), si está definida.
 #   Ej.: ./emitir-certificado-broker.sh 192.168.1.50
 #        ./emitir-certificado-broker.sh mqtt.ejemplo.com 192.168.1.50
 
@@ -34,13 +35,22 @@ SAN="DNS:emqx,DNS:localhost,IP:127.0.0.1"
 IPV4_RE='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
 
 EXTRA_HOSTS=("$@")
-# Sin argumentos, toma la IP de red local de mqtt/.env (LAN_BIND_IP), si está
+# Sin argumentos, toma la IP de red local (LAN_BIND_IP) del .env de la raíz,
+# o de mqtt/.env si la redefine (mismo orden que docker compose), si está
 # definida y no es la de loopback. Solo se lee esa variable.
-ENV_FILE="$SCRIPT_DIR/../.env"
-if [[ ${#EXTRA_HOSTS[@]} -eq 0 && -f "$ENV_FILE" ]]; then
-  LAN_IP="$(grep -E '^[[:space:]]*LAN_BIND_IP=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- | tr -d "\"' \r")"
+if [[ ${#EXTRA_HOSTS[@]} -eq 0 ]]; then
+  LAN_IP=""
+  LAN_IP_SOURCE=""
+  for ENV_FILE in "$SCRIPT_DIR/../../.env" "$SCRIPT_DIR/../.env"; do
+    [[ -f "$ENV_FILE" ]] || continue
+    VALUE="$(grep -E '^[[:space:]]*LAN_BIND_IP=' "$ENV_FILE" | tail -n 1 | cut -d= -f2- | tr -d "\"' \r" || true)"
+    if grep -qE '^[[:space:]]*LAN_BIND_IP=' "$ENV_FILE"; then
+      LAN_IP="$VALUE"
+      LAN_IP_SOURCE="$(cd "$(dirname "$ENV_FILE")" && pwd)/.env"
+    fi
+  done
   if [[ -n "$LAN_IP" && "$LAN_IP" != "127.0.0.1" && "$LAN_IP" != "0.0.0.0" ]]; then
-    echo "Usando LAN_BIND_IP de mqtt/.env: $LAN_IP"
+    echo "Usando LAN_BIND_IP de $LAN_IP_SOURCE: $LAN_IP"
     EXTRA_HOSTS=("$LAN_IP")
   fi
 fi

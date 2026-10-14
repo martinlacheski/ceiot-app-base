@@ -51,11 +51,13 @@ DEFAULT_PKI_DIR = REPO_ROOT / "mqtt" / "pki"
 FIRMWARE_DIR = REPO_ROOT / "esp32"
 DEFAULT_FIRMWARE_CERT_DIR = FIRMWARE_DIR / "cert"
 # The backend is reached from this machine; its published port comes from
-# backend/.env (BACKEND_PORT) unless CEIOT_API_BASE_URL overrides it.
+# the root .env (BACKEND_PORT) unless CEIOT_API_BASE_URL overrides it.
 DEFAULT_API_BASE_URL = "http://localhost:${BACKEND_PORT:-8000}"
 # Stack env files read (only the variables a profile or default references)
-# after the process environment and provisioning/.env.local.
-STACK_ENV_FILES = (REPO_ROOT / "mqtt" / ".env", REPO_ROOT / "backend" / ".env")
+# after the process environment and provisioning/.env.local. The root .env
+# (shared values such as LAN_BIND_IP and BACKEND_PORT) comes last so a service
+# file overrides it, as in docker compose.
+STACK_ENV_FILES = (REPO_ROOT / "mqtt" / ".env", REPO_ROOT / "backend" / ".env", REPO_ROOT / ".env")
 VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 IDF_ACTIVATE = "~/.espressif/tools/activate_idf_v6.1.sh"
 
@@ -98,7 +100,7 @@ def resolve_setting(name: str, env_file_values: dict[str, str], default: str | N
 
 
 def stack_lookup(env_file_values: dict[str, str]):
-    """Variable lookup: process env, provisioning/.env.local, mqtt/.env, backend/.env."""
+    """Variable lookup: process env, provisioning/.env.local, mqtt/.env, backend/.env, root .env."""
     sources = [env_file_values] + [parse_env_file(path) for path in STACK_ENV_FILES]
 
     def lookup(name: str) -> str | None:
@@ -122,7 +124,8 @@ def expand_vars(value: str, lookup) -> str:
         if default is not None:
             return default
         raise ProvisioningError(
-            f"Variable {name} is not set (environment, provisioning/.env.local, mqtt/.env or backend/.env)."
+            f"Variable {name} is not set (environment, provisioning/.env.local, mqtt/.env, backend/.env "
+            "or the root .env)."
         )
 
     return VAR_RE.sub(replace, value)
