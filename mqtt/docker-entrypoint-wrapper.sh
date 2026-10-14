@@ -23,7 +23,7 @@ chmod 600 "$BOOT_FILE"
 export EMQX_AUTHENTICATION__1__BOOTSTRAP_FILE="$BOOT_FILE"
 
 # Optional management API key used by the backend for device presence
-# (EMQX_API_KEY / EMQX_API_SECRET in mqtt/.env, same values as backend/.env).
+# (EMQX_API_KEY / EMQX_API_SECRET in the root .env, shared with the backend).
 # Bootstrapped on every start, so it survives an empty database instead of
 # having to be recreated by hand in the dashboard. Same container-local path.
 if [ -n "${EMQX_API_KEY:-}" ] && [ -n "${EMQX_API_SECRET:-}" ]; then

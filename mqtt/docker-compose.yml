@@ -11,9 +11,10 @@ services:
     ports:
       - 127.0.0.1:${MQTT_LISTENER_TCP:?MQTT_LISTENER_TCP is required}:1883
       # mTLS device listener: always on loopback (emulator, local tools) and,
-      # with LAN_BIND_IP, also on the LAN IP for real devices (unset, that
-      # second binding falls back to the unused loopback 127.0.0.2). Only this
-      # port: the plaintext 1883, WS and the dashboard stay on loopback.
+      # with LAN_BIND_IP (root .env), also on the LAN IP for real devices
+      # (unset, that second binding falls back to the unused loopback
+      # 127.0.0.2). Only this port: the plaintext 1883, WS and the dashboard
+      # stay on loopback.
       - 127.0.0.1:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
       - ${LAN_BIND_IP:-127.0.0.2}:${MQTT_LISTENER_TLS:?MQTT_LISTENER_TLS is required}:8883
       - 127.0.0.1:${MQTT_LISTENER_WS:?MQTT_LISTENER_WS is required}:8083
@@ -38,6 +39,10 @@ services:
       # Consumed by docker-entrypoint-wrapper.sh to render the built-in-database
       # bootstrap CSV for the shared "backend-services" user (see mqtt/acl.conf).
       EMQX_BACKEND_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}
+      # Optional management API key (root .env, shared with the backend);
+      # the wrapper bootstraps it only when both values are set.
+      EMQX_API_KEY: ${EMQX_API_KEY:-}
+      EMQX_API_SECRET: ${EMQX_API_SECRET:-}
       # mTLS on the device-facing listener: the client cert is mandatory and
       # its CN becomes the MQTT username (used by mqtt/acl.conf as ${username}).
       EMQX_LISTENERS__SSL__DEFAULT__BIND: 0.0.0.0:8883

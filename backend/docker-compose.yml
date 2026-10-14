@@ -1,3 +1,16 @@
+# Addresses derived from the root .env (shared by every service), passed to
+# backend and mqtt-runtime with the names Settings expects. Each default
+# references the same variable first, so a value in backend/.env still wins.
+x-shared-network-env: &shared-network-env
+  BACKEND_PORT: ${BACKEND_PORT:?BACKEND_PORT is required (set it in the root .env)}
+  BACKEND_HOST_URL: ${BACKEND_HOST_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}}
+  VITE_FRONTEND_URL: ${VITE_FRONTEND_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}}
+  VITE_FRONTEND_PORT: ${VITE_FRONTEND_PORT:-${FRONTEND_PORT:?FRONTEND_PORT is required (set it in the root .env)}}
+  LANDING_URL: ${LANDING_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}:${LANDING_PORT:?LANDING_PORT is required (set it in the root .env)}}
+  LAN_BIND_IP: ${LAN_BIND_IP:-}
+  EMQX_API_KEY: ${EMQX_API_KEY:-}
+  EMQX_API_SECRET: ${EMQX_API_SECRET:-}
+
 services:
   backend:
     image: ceiot/backend:dev
@@ -11,6 +24,7 @@ services:
       - path: ../seaweedfs/.env
         required: false
     environment:
+      <<: *shared-network-env
       MQTT_CLIENT_ID: Backend-Admin
       # EMQX built-in-database user shared by backend + mqtt-runtime (see
       # mqtt/acl.conf); the password is sourced from mqtt/.env so both the
@@ -36,12 +50,12 @@ services:
         ${ALEMBIC_DB_PASSWORD:?ALEMBIC_DB_PASSWORD is required (set it in timescaledb/.env)}@postgresql:5432/${DB_DATABASE:?}"
       DB_APP_ROLE: ${DB_USER:?}
     ports:
-      # Always on loopback (frontend and tools on localhost). LAN_BIND_IP adds
-      # the same port on the LAN IP so real devices can download firmware
-      # images; unset, that second binding falls back to the unused loopback
-      # 127.0.0.2. Applies to this port and the MQTT mTLS port only.
-      - 127.0.0.1:${BACKEND_PORT:?BACKEND_PORT is required}:8000
-      - ${LAN_BIND_IP:-127.0.0.2}:${BACKEND_PORT:?BACKEND_PORT is required}:8000
+      # Always on loopback (frontend and tools on localhost). LAN_BIND_IP (root
+      # .env) adds the same port on the LAN IP so real devices can download
+      # firmware images; unset, that second binding falls back to the unused
+      # loopback 127.0.0.2. Applies to this port and the MQTT mTLS port only.
+      - 127.0.0.1:${BACKEND_PORT:?BACKEND_PORT is required (set it in the root .env)}:8000
+      - ${LAN_BIND_IP:-127.0.0.2}:${BACKEND_PORT:?BACKEND_PORT is required (set it in the root .env)}:8000
     depends_on:
       postgresql:
         condition: service_healthy
@@ -78,6 +92,7 @@ services:
       - path: ../seaweedfs/.env
         required: false
     environment:
+      <<: *shared-network-env
       MQTT_CLIENT_ID: Backend-Runtime
       EMQX_USER: backend-services
       EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}

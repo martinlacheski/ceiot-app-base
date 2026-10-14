@@ -10,34 +10,31 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPONENTS = ("backend", "embeddings", "frontend", "landing", "mailpit", "mqtt", "pgadmin", "redis", "redisinsight", "seaweedfs", "timescaledb")
 
+# Values shared by several services live in the root .env; every service
+# derives its URLs from them.
+ROOT_ENV = """\
+PUBLIC_SCHEME=http
+PUBLIC_HOST=localhost
+BACKEND_PORT=18001
+FRONTEND_PORT=15174
+LANDING_PORT=14322
+LAN_BIND_IP=
+GOOGLE_MAPS_API_KEY=dummy-map-key
+"""
+
 DUMMY_ENV = {
     "backend": """\
-BACKEND_PORT=18001
-BACKEND_HOST_URL=http://localhost
 ENVIRONMENT=DEV
 EMQX_HOST=emqx
 EMQX_PORT=1883
-VITE_FRONTEND_URL=http://localhost
-VITE_FRONTEND_PORT=15174
-BACKEND_CORS_ORIGINS=[\"http://localhost:15174\",\"http://localhost:14322\"]
-BACKEND_TRUSTED_HOSTS=[\"localhost\"]
 MAIL_TRANSPORT=mailpit
 SAFE_BACKEND_SENTINEL=backend-fixture
 """,
     "frontend": """\
-VITE_FRONTEND_PORT=15174
-VITE_API_URL=http://localhost:18001/api
-VITE_APP_LOGIN_URL=http://localhost:15174
-VITE_LANDING_URL=http://localhost:14322
-VITE_GCP_API_KEY=dummy-map-key
 VITE_TOKEN_REFRESH=15
 VITE_SESSION_TIMEOUT=30
 """,
     "landing": """\
-LANDING_PORT=14322
-PUBLIC_APP_LOGIN_URL=http://localhost:15174
-PUBLIC_API_BASE_URL=http://localhost:18001/api
-PUBLIC_GCP_MAPS_API_KEY=dummy-map-key
 PUBLIC_MAP_LOCATIONS_URL=/map-locations.json
 """,
     "embeddings": "",
@@ -79,6 +76,7 @@ class ComposeConfigTest(unittest.TestCase):
         self.project = Path(self.temp_dir.name)
 
         shutil.copy2(REPO_ROOT / "docker-compose.yml", self.project / "docker-compose.yml")
+        (self.project / ".env").write_text(ROOT_ENV, encoding="utf-8")
         for component in COMPONENTS:
             destination = self.project / component
             destination.mkdir()
@@ -125,11 +123,19 @@ class ComposeConfigTest(unittest.TestCase):
         )
         return json.loads(result.stdout)
 
+    def write_env(self, component, text):
+        path = self.project / component / ".env" if component else self.project / ".env"
+        path.write_text(text, encoding="utf-8")
+
     @staticmethod
-    def published_port(service, target):
-        matches = [port for port in service["ports"] if port["target"] == target]
+    def published_port(service, target, host_ip="127.0.0.1"):
+        matches = [
+            port
+            for port in service["ports"]
+            if port["target"] == target and port.get("host_ip") == host_ip
+        ]
         if len(matches) != 1:
-            raise AssertionError(f"expected one publication for container port {target}")
+            raise AssertionError(f"expected one publication for container port {target} on {host_ip}")
         return matches[0]
 
     def test_root_include_renders_default_services_on_one_private_network(self):
@@ -383,7 +389,10 @@ class ComposeConfigTest(unittest.TestCase):
             port = self.published_port(services["emqx"], target)
             self.assertEqual(port["host_ip"], "127.0.0.1")
             self.assertEqual(str(port["published"]), published)
-        self.assertEqual(len(services["emqx"]["ports"]), 4)
+        # The fifth publication is the mTLS port on LAN_BIND_IP (unset: 127.0.0.2).
+        self.assertEqual(len(services["emqx"]["ports"]), 5)
+        self.assertEqual(str(self.published_port(services["emqx"], 8883, "127.0.0.2")["published"]), "18884")
+        self.assertEqual(str(self.published_port(services["backend"], 8000, "127.0.0.2")["published"]), "18001")
 
     def test_database_urls_always_target_internal_dns_and_backend_waits_for_health(self):
         config = self.render_config()
@@ -472,13 +481,13 @@ class ComposeConfigTest(unittest.TestCase):
 
         frontend_args = services["frontend"]["build"]["args"]
         self.assertEqual(frontend_args["VITE_API_URL"], "http://localhost:18001/api")
-        self.assertEqual(frontend_args["VITE_APP_LOGIN_URL"], "http://localhost:15174")
+        self.assertEqual(frontend_args["VITE_APP_LOGIN_URL"], "http://localhost:15174/auth/login")
         self.assertEqual(frontend_args["VITE_LANDING_URL"], "http://localhost:14322")
         self.assertFalse(any(key.startswith("VITE_MP_") for key in frontend_args))
 
         landing_args = services["landing"]["build"]["args"]
         self.assertEqual(landing_args["PUBLIC_API_BASE_URL"], "http://localhost:18001/api")
-        self.assertEqual(landing_args["PUBLIC_APP_LOGIN_URL"], "http://localhost:15174")
+        self.assertEqual(landing_args["PUBLIC_APP_LOGIN_URL"], "http://localhost:15174/auth/login")
 
         emqx_mount_targets = {
             mount["target"] for mount in services["emqx"]["volumes"]
@@ -503,14 +512,72 @@ class ComposeConfigTest(unittest.TestCase):
         landing_args = self.render_config()["services"]["landing"]["build"]["args"]
         self.assertEqual(landing_args["PUBLIC_MAP_LOCATIONS_URL"], "")
 
-    def test_missing_required_build_url_fails_without_reading_real_env(self):
-        frontend_env = self.project / "frontend" / ".env"
-        frontend_env.write_text(
-            DUMMY_ENV["frontend"].replace(
-                "VITE_API_URL=http://localhost:18001/api\n", ""
-            ),
-            encoding="utf-8",
+    def test_shared_values_derive_every_service_url(self):
+        services = self.render_config()["services"]
+        frontend_args = services["frontend"]["build"]["args"]
+        self.assertEqual(frontend_args["VITE_GCP_API_KEY"], "dummy-map-key")
+        landing_args = services["landing"]["build"]["args"]
+        self.assertEqual(landing_args["PUBLIC_GCP_MAPS_API_KEY"], "dummy-map-key")
+
+        for name in ("backend", "mqtt-runtime"):
+            environment = services[name]["environment"]
+            self.assertEqual(environment["BACKEND_PORT"], "18001", name)
+            self.assertEqual(environment["BACKEND_HOST_URL"], "http://localhost", name)
+            self.assertEqual(environment["VITE_FRONTEND_URL"], "http://localhost", name)
+            self.assertEqual(environment["VITE_FRONTEND_PORT"], "15174", name)
+            self.assertEqual(environment["LANDING_URL"], "http://localhost:14322", name)
+            self.assertEqual(environment["LAN_BIND_IP"], "", name)
+            self.assertEqual(environment["EMQX_API_KEY"], "", name)
+
+    def test_a_shared_port_is_written_once(self):
+        self.write_env("", ROOT_ENV.replace("BACKEND_PORT=18001", "BACKEND_PORT=19000")
+                       .replace("PUBLIC_HOST=localhost", "PUBLIC_HOST=iot.example.test")
+                       .replace("PUBLIC_SCHEME=http", "PUBLIC_SCHEME=https"))
+        services = self.render_config()["services"]
+        self.assertEqual(str(self.published_port(services["backend"], 8000)["published"]), "19000")
+        self.assertEqual(
+            services["frontend"]["build"]["args"]["VITE_API_URL"], "https://iot.example.test:19000/api"
         )
+        self.assertEqual(
+            services["landing"]["build"]["args"]["PUBLIC_API_BASE_URL"], "https://iot.example.test:19000/api"
+        )
+        backend = services["backend"]["environment"]
+        self.assertEqual(backend["BACKEND_PORT"], "19000")
+        self.assertEqual(backend["BACKEND_HOST_URL"], "https://iot.example.test")
+        self.assertEqual(backend["LANDING_URL"], "https://iot.example.test:14322")
+
+    def test_service_env_files_override_the_derived_values(self):
+        self.write_env("frontend", DUMMY_ENV["frontend"] + "VITE_API_URL=https://api.example.test/api\n"
+                       "VITE_FRONTEND_PORT=25174\nVITE_GCP_API_KEY=frontend-key\n")
+        self.write_env("landing", DUMMY_ENV["landing"] + "PUBLIC_API_BASE_URL=https://api.example.test/api\n")
+        self.write_env("backend", DUMMY_ENV["backend"] + "BACKEND_HOST_URL=https://api.example.test\n"
+                       "LANDING_URL=https://www.example.test\n")
+        services = self.render_config()["services"]
+        frontend = services["frontend"]
+        self.assertEqual(frontend["build"]["args"]["VITE_API_URL"], "https://api.example.test/api")
+        self.assertEqual(frontend["build"]["args"]["VITE_GCP_API_KEY"], "frontend-key")
+        self.assertEqual(str(self.published_port(frontend, 80)["published"]), "25174")
+        self.assertEqual(
+            services["landing"]["build"]["args"]["PUBLIC_API_BASE_URL"], "https://api.example.test/api"
+        )
+        backend = services["backend"]["environment"]
+        self.assertEqual(backend["BACKEND_HOST_URL"], "https://api.example.test")
+        self.assertEqual(backend["LANDING_URL"], "https://www.example.test")
+
+    def test_lan_ip_and_emqx_api_key_come_from_the_root_env(self):
+        self.write_env("", ROOT_ENV.replace("LAN_BIND_IP=", "LAN_BIND_IP=192.168.1.50")
+                       + "EMQX_API_KEY=dummy-key\nEMQX_API_SECRET=dummy-secret\n")
+        services = self.render_config()["services"]
+        self.assertEqual(str(self.published_port(services["backend"], 8000, "192.168.1.50")["published"]), "18001")
+        self.assertEqual(str(self.published_port(services["emqx"], 8883, "192.168.1.50")["published"]), "18884")
+        for name in ("backend", "mqtt-runtime", "emqx"):
+            environment = services[name]["environment"]
+            self.assertEqual(environment["EMQX_API_KEY"], "dummy-key", name)
+            self.assertEqual(environment["EMQX_API_SECRET"], "dummy-secret", name)
+        self.assertEqual(services["backend"]["environment"]["LAN_BIND_IP"], "192.168.1.50")
+
+    def test_missing_shared_port_fails_without_reading_real_env(self):
+        self.write_env("", ROOT_ENV.replace("BACKEND_PORT=18001\n", ""))
         result = subprocess.run(
             [
                 "docker",
@@ -533,7 +600,7 @@ class ComposeConfigTest(unittest.TestCase):
             check=False,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("VITE_API_URL", result.stderr)
+        self.assertIn("BACKEND_PORT", result.stderr)
 
 
 if __name__ == "__main__":

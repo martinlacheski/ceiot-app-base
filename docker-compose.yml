@@ -1,9 +1,13 @@
 name: iot-app-base
 
+# Interpolation: the root .env (values shared by several services) is read
+# first and each service .env after it, so a service file overrides a shared
+# value. Every service derives its URLs from the shared ports and host.
 include:
   - path: backend/docker-compose.yml
     project_directory: backend
     env_file:
+      - .env
       - backend/.env
       - timescaledb/.env
       - mqtt/.env
@@ -12,16 +16,19 @@ include:
   - path: frontend/docker-compose.yml
     project_directory: frontend
     env_file:
+      - .env
       - frontend/.env
   - path: landing/docker-compose.yml
     project_directory: landing
     env_file:
+      - .env
       - landing/.env
   - path: mailpit/docker-compose.yml
     project_directory: mailpit
   - path: mqtt/docker-compose.yml
     project_directory: mqtt
     env_file:
+      - .env
       - mqtt/.env
   - path: pgadmin/docker-compose.yml
     project_directory: pgadmin

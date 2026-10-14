@@ -7,14 +7,16 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:?}
-        VITE_APP_LOGIN_URL: ${VITE_APP_LOGIN_URL:?}
-        VITE_LANDING_URL: ${VITE_LANDING_URL:?}
-        VITE_GCP_API_KEY: ${VITE_GCP_API_KEY:-}
+        # Derived from the root .env (PUBLIC_SCHEME, PUBLIC_HOST, *_PORT,
+        # GOOGLE_MAPS_API_KEY); a value in frontend/.env overrides each one.
+        VITE_API_URL: ${VITE_API_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}:${BACKEND_PORT:?BACKEND_PORT is required (set it in the root .env)}/api}
+        VITE_APP_LOGIN_URL: ${VITE_APP_LOGIN_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}:${FRONTEND_PORT:?FRONTEND_PORT is required (set it in the root .env)}/auth/login}
+        VITE_LANDING_URL: ${VITE_LANDING_URL:-${PUBLIC_SCHEME:-http}://${PUBLIC_HOST:-localhost}:${LANDING_PORT:?LANDING_PORT is required (set it in the root .env)}}
+        VITE_GCP_API_KEY: ${VITE_GCP_API_KEY:-${GOOGLE_MAPS_API_KEY:-}}
         VITE_TOKEN_REFRESH: ${VITE_TOKEN_REFRESH:?}
         VITE_SESSION_TIMEOUT: ${VITE_SESSION_TIMEOUT:?}
     ports:
-      - 127.0.0.1:${VITE_FRONTEND_PORT:?VITE_FRONTEND_PORT is required}:80
+      - 127.0.0.1:${VITE_FRONTEND_PORT:-${FRONTEND_PORT:?FRONTEND_PORT is required (set it in the root .env)}}:80
     healthcheck:
       test: [CMD, wget, --quiet, --tries=1, --spider, http://127.0.0.1/]
       interval: 10s
