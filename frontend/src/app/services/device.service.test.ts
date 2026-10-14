@@ -320,13 +320,13 @@ describe("deviceService.pair", () => {
     await deviceService.pair({
       serial: "IOT-1234-5678",
       environmentId: "env-1",
-      description: "Agua caliente",
+      description: "Monitoreo del invernadero",
     });
 
     expect(appApi.post).toHaveBeenCalledWith("/devices/pair", {
       serial: "IOT-1234-5678",
       environmentId: "env-1",
-      description: "Agua caliente",
+      description: "Monitoreo del invernadero",
     });
   });
 });

@@ -54,7 +54,7 @@ const pairDeviceSchema = z.object({
   description: z
     .string()
     .trim()
-    .min(1, "El nombre del servicio es requerido"),
+    .min(1, "La descripción es requerida"),
 });
 
 type PairDeviceFormInput = z.input<typeof pairDeviceSchema>;
@@ -374,10 +374,10 @@ export default function PairDevicePage() {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Nombre del servicio</FormLabel>
+                    <FormLabel>Descripción</FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Ej: Agua caliente, Café, Lavado"
+                        placeholder="Ej.: Monitoreo del invernadero"
                         {...field}
                       />
                     </FormControl>

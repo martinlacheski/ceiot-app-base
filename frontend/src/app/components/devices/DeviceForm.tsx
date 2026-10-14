@@ -54,7 +54,7 @@ const buildDeviceSchema = (isEditing: boolean) =>
       ),
     name: z.string().optional(),
     description: isEditing
-      ? z.string().min(1, "El nombre del servicio es requerido")
+      ? z.string().min(1, "La descripción es requerida")
       : z.string().optional(),
     deviceTypeId: z.string().min(1, "El tipo de dispositivo es requerido"),
     model: z.string().optional(),

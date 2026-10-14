@@ -105,8 +105,8 @@ describe("PairDevicePage", () => {
     );
     await user.type(screen.getByPlaceholderText("IOT-XXXX-XXXX"), "IOT-1234-5678");
     await user.type(
-      screen.getByPlaceholderText("Ej: Agua caliente, Café, Lavado"),
-      "Agua caliente",
+      screen.getByPlaceholderText("Ej.: Monitoreo del invernadero"),
+      "Monitoreo del invernadero",
     );
 
     expect(screen.queryByLabelText(/importe/i)).not.toBeInTheDocument();
@@ -126,7 +126,7 @@ describe("PairDevicePage", () => {
         {
           serial: "IOT-1234-5678",
           environmentId: "env-1",
-          description: "Agua caliente",
+          description: "Monitoreo del invernadero",
         },
         expect.any(Object),
       );
@@ -151,7 +151,7 @@ describe("PairDevicePage", () => {
     await user.click(submitButton);
 
     expect(
-      await screen.findByText("El nombre del servicio es requerido"),
+      await screen.findByText("La descripción es requerida"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Debe seleccionar un establecimiento"),
