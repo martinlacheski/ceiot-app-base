@@ -377,6 +377,9 @@ def test_http_configured_callback_redirects_with_bounded_next_and_mocked_account
             calls.append(("tokens", user is fake_user))
             return {"refresh_token": "offline-refresh-token"}
 
+        async def record_login(self, user_id):
+            calls.append(("login", user_id))
+
     monkeypatch.setattr(
         auth_router,
         "settings",
@@ -414,6 +417,7 @@ def test_http_configured_callback_redirects_with_bounded_next_and_mocked_account
             },
         ),
         ("tokens", True),
+        ("login", "offline-user"),
     ]
 
 
