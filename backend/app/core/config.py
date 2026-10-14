@@ -1,10 +1,31 @@
 from typing import Literal
+from urllib.parse import urlsplit
 
-from pydantic import EmailStr, SecretStr, model_validator
+from pydantic import EmailStr, SecretStr, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
 )
+
+
+# Hosts the API always answers to: local tools, the healthcheck and other
+# containers on the compose network.
+LOCAL_TRUSTED_HOSTS = ("localhost", "127.0.0.1", "backend")
+DEFAULT_PORTS = {"http": "80", "https": "443"}
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(item for item in items if item))
+
+
+def _origin(url: str, port: int | str | None) -> str:
+    """`url` plus `port`, unless the URL already has one or it is the scheme default."""
+    base = url.strip().rstrip("/")
+    parsed = urlsplit(base)
+    port = str(port or "").strip()
+    if not port or parsed.port is not None or DEFAULT_PORTS.get(parsed.scheme) == port:
+        return base
+    return f"{base}:{port}"
 
 
 class Settings(BaseSettings):
@@ -18,8 +39,14 @@ class Settings(BaseSettings):
     # Base of the firmware download URL sent to devices in `ota/command`
     # (`{base}/api/firmware/download/{token}`). Must be reachable from the
     # devices (e.g. http://<LAN IP>:<BACKEND_PORT> in development). Falls back
-    # to BACKEND_PUBLIC_BASE_URL, then BACKEND_HOST_URL.
+    # to http(s)://LAN_BIND_IP:BACKEND_PORT when LAN_BIND_IP is set, then to
+    # BACKEND_PUBLIC_BASE_URL, then BACKEND_HOST_URL.
     FIRMWARE_DOWNLOAD_BASE_URL: str | None = None
+    # LAN IP the backend and the MQTT mTLS port are also published on (root
+    # .env); real devices reach the API through it.
+    LAN_BIND_IP: str | None = None
+    # Public landing origin (scheme://host:port), allowed by CORS.
+    LANDING_URL: str | None = None
 
     # Base de datos
     DATABASE_URL: str
@@ -33,7 +60,8 @@ class Settings(BaseSettings):
     BOOTSTRAP_ADMIN_EMAIL: str | None = None
     BOOTSTRAP_ADMIN_PASSWORD: SecretStr | None = None
 
-    # CORS
+    # CORS and trusted hosts. Derived from the frontend, landing and backend
+    # addresses (see derive_network_settings); these lists only add extras.
     BACKEND_CORS_ORIGINS: list[str] = []
     BACKEND_TRUSTED_HOSTS: list[str] = []
 
@@ -121,6 +149,51 @@ class Settings(BaseSettings):
     # Frontend Settings
     VITE_FRONTEND_URL: str
     VITE_FRONTEND_PORT: int
+
+    @field_validator(
+        "BACKEND_PUBLIC_BASE_URL",
+        "FIRMWARE_DOWNLOAD_BASE_URL",
+        "LAN_BIND_IP",
+        "LANDING_URL",
+        "EMQX_API_KEY",
+        "EMQX_API_SECRET",
+        mode="before",
+    )
+    @classmethod
+    def empty_means_unset(cls, value):
+        # Compose passes `${VAR:-}` as an empty string when VAR is absent.
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @model_validator(mode="after")
+    def derive_network_settings(self):
+        frontend = _origin(self.VITE_FRONTEND_URL, self.VITE_FRONTEND_PORT)
+        landing = [self.LANDING_URL] if self.LANDING_URL else []
+        self.BACKEND_CORS_ORIGINS = _dedupe(
+            [origin.strip().rstrip("/") for origin in [frontend, *landing, *self.BACKEND_CORS_ORIGINS]]
+        )
+
+        backend_hosts = [
+            urlsplit(url.strip()).hostname or ""
+            for url in (self.BACKEND_HOST_URL, self.BACKEND_PUBLIC_BASE_URL)
+            if url
+        ]
+        self.BACKEND_TRUSTED_HOSTS = _dedupe(
+            [
+                *LOCAL_TRUSTED_HOSTS,
+                *backend_hosts,
+                self.LAN_BIND_IP or "",
+                *(host.strip() for host in self.BACKEND_TRUSTED_HOSTS),
+            ]
+        )
+
+        if not self.FIRMWARE_DOWNLOAD_BASE_URL and self.LAN_BIND_IP:
+            scheme = urlsplit(self.BACKEND_HOST_URL).scheme or "http"
+            self.FIRMWARE_DOWNLOAD_BASE_URL = _origin(
+                f"{scheme}://{self.LAN_BIND_IP.strip()}", self.BACKEND_PORT
+            )
+        return self
 
     # Social Auth Settings (Optional)
     GOOGLE_OAUTH_ENABLED: bool = False

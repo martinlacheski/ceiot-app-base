@@ -46,9 +46,11 @@ app = FastAPI(
     swagger_ui_parameters={"persistAuthorization": True},
 )
 
+# Both lists are derived in Settings (frontend/landing origins, backend and LAN
+# hosts) plus the extras from BACKEND_CORS_ORIGINS / BACKEND_TRUSTED_HOSTS.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,8 +58,7 @@ app.add_middleware(
 
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.BACKEND_TRUSTED_HOSTS
-    or ["localhost"],
+    allowed_hosts=settings.BACKEND_TRUSTED_HOSTS,
 )
 
 app.include_router(api_router, prefix="/api")
