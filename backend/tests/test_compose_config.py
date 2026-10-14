@@ -25,8 +25,6 @@ GOOGLE_MAPS_API_KEY=dummy-map-key
 DUMMY_ENV = {
     "backend": """\
 ENVIRONMENT=DEV
-EMQX_HOST=emqx
-EMQX_PORT=1883
 MAIL_TRANSPORT=mailpit
 SAFE_BACKEND_SENTINEL=backend-fixture
 """,
@@ -239,6 +237,29 @@ class ComposeConfigTest(unittest.TestCase):
             self.assertEqual(service["environment"]["REDIS_URL"], "redis://redis:6379/0")
             self.assertIn("redis", service["depends_on"])
 
+    def test_emqx_internal_addresses_are_fixed_by_compose(self):
+        services = self.render_config()["services"]
+
+        # Internal Docker DNS and container ports: not user configuration, so
+        # backend/.env does not need them (the fixture above omits them).
+        for name in ("backend", "mqtt-runtime"):
+            environment = services[name]["environment"]
+            self.assertEqual(environment["EMQX_HOST"], "emqx", name)
+            self.assertEqual(environment["EMQX_PORT"], "1883", name)
+            self.assertEqual(environment["EMQX_API_BASE_URL"], "http://emqx:18083", name)
+
+    def test_backend_geocoding_key_defaults_to_the_shared_google_maps_key(self):
+        services = self.render_config()["services"]
+
+        # location/service.py geocodes with GCP_API_KEY; the root .env holds the
+        # single Google Maps key unless backend/.env overrides it.
+        for name in ("backend", "mqtt-runtime"):
+            self.assertEqual(services[name]["environment"]["GCP_API_KEY"], "dummy-map-key", name)
+
+        self.write_env("backend", DUMMY_ENV["backend"] + "GCP_API_KEY=server-only-key\n")
+        services = self.render_config()["services"]
+        self.assertEqual(services["backend"]["environment"]["GCP_API_KEY"], "server-only-key")
+
     def test_seaweedfs_is_internal_only_persistent_and_optional_for_the_backend(self):
         services = self.render_config()["services"]
         seaweedfs = services["seaweedfs"]
@@ -384,7 +405,7 @@ class ComposeConfigTest(unittest.TestCase):
             self.assertEqual(port["host_ip"], "127.0.0.1")
             self.assertEqual(str(port["published"]), published)
 
-        mqtt_ports = {1883: "11884", 8883: "18884", 8083: "18084", 18083: "28183"}
+        mqtt_ports = {1883: "11884", 8883: "18884", 8083: "18084", 18083: "18083"}
         for target, published in mqtt_ports.items():
             port = self.published_port(services["emqx"], target)
             self.assertEqual(port["host_ip"], "127.0.0.1")

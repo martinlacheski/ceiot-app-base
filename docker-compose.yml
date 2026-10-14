@@ -25,6 +25,8 @@ include:
       - landing/.env
   - path: mailpit/docker-compose.yml
     project_directory: mailpit
+    env_file:
+      - .env
   - path: mqtt/docker-compose.yml
     project_directory: mqtt
     env_file:
@@ -33,11 +35,14 @@ include:
   - path: pgadmin/docker-compose.yml
     project_directory: pgadmin
     env_file:
+      - .env
       - timescaledb/.env
   - path: redis/docker-compose.yml
     project_directory: redis
   - path: redisinsight/docker-compose.yml
     project_directory: redisinsight
+    env_file:
+      - .env
   - path: seaweedfs/docker-compose.yml
     project_directory: seaweedfs
   - path: timescaledb/docker-compose.yml

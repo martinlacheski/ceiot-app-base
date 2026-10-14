@@ -10,6 +10,18 @@ x-shared-network-env: &shared-network-env
   LAN_BIND_IP: ${LAN_BIND_IP:-}
   EMQX_API_KEY: ${EMQX_API_KEY:-}
   EMQX_API_SECRET: ${EMQX_API_SECRET:-}
+  # Server-side geocoding (location/service.py). Defaults to the shared Google
+  # Maps key; set GCP_API_KEY in backend/.env when the browser key is
+  # restricted by HTTP referrer (such a key is rejected server-side).
+  GCP_API_KEY: ${GCP_API_KEY:-${GOOGLE_MAPS_API_KEY:-}}
+
+# Internal Docker addresses of the broker (service DNS name and container
+# ports). They never change with the published host ports, so they are fixed
+# here instead of being user configuration in backend/.env.
+x-internal-emqx-env: &internal-emqx-env
+  EMQX_HOST: emqx
+  EMQX_PORT: 1883
+  EMQX_API_BASE_URL: http://emqx:18083
 
 services:
   backend:
@@ -24,7 +36,7 @@ services:
       - path: ../seaweedfs/.env
         required: false
     environment:
-      <<: *shared-network-env
+      <<: [*shared-network-env, *internal-emqx-env]
       MQTT_CLIENT_ID: Backend-Admin
       # EMQX built-in-database user shared by backend + mqtt-runtime (see
       # mqtt/acl.conf); the password is sourced from mqtt/.env so both the
@@ -92,7 +104,7 @@ services:
       - path: ../seaweedfs/.env
         required: false
     environment:
-      <<: *shared-network-env
+      <<: [*shared-network-env, *internal-emqx-env]
       MQTT_CLIENT_ID: Backend-Runtime
       EMQX_USER: backend-services
       EMQX_PASSWORD: ${EMQX_BACKEND_PASSWORD:?EMQX_BACKEND_PASSWORD is required (set it in mqtt/.env)}

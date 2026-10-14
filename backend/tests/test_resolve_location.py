@@ -6,6 +6,13 @@ from app.api.location.models import LocationCountry, LocationState, LocationCity
 
 import uuid
 
+@pytest.fixture(autouse=True)
+def gcp_api_key(monkeypatch):
+    # The service reads the key from the process environment; never depend on
+    # the developer's real key (or its absence).
+    monkeypatch.setenv("GCP_API_KEY", "test-geocoding-key")
+
+
 @pytest.fixture
 def mock_repo():
     repo = MagicMock(spec=LocationRepository)
