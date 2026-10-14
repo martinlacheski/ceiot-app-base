@@ -36,7 +36,6 @@ _SYNTHETIC_ENV = {
     "ENVIRONMENT": "TEST",
     "MAX_UPLOAD_MB": "1",
     "MQTT_CLIENT_ID": "oauth-offline-tests",
-    "MQTT_TOPIC_DEVICE_SUB": "offline/devices",
     "EMQX_HOST": "mqtt.invalid",
     "EMQX_PORT": "1883",
     "EMQX_USER": "offline-mqtt-user",

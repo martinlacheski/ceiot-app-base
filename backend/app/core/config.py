@@ -72,7 +72,6 @@ class Settings(BaseSettings):
 
     # MQTT
     MQTT_CLIENT_ID: str
-    MQTT_TOPIC_DEVICE_SUB: str
     EMQX_HOST: str
     EMQX_PORT: int
     EMQX_USER: str

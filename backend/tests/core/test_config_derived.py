@@ -31,7 +31,6 @@ def make_settings(**overrides) -> Settings:
         "ENVIRONMENT": "DEV",
         "MAX_UPLOAD_MB": 3,
         "MQTT_CLIENT_ID": "test",
-        "MQTT_TOPIC_DEVICE_SUB": "iot/devices/#",
         "EMQX_HOST": "emqx",
         "EMQX_PORT": 1883,
         "EMQX_USER": "backend-services",
